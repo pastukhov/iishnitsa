@@ -191,6 +191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const cacheKey = targetUrl;
     let sessionId = proxySessionCache.get(cacheKey);
+    const isNotification = method.startsWith("notifications/");
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -201,12 +202,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       headers["Mcp-Session-Id"] = sessionId;
     }
 
-    const jsonRpcRequest = {
+    const jsonRpcRequest: Record<string, any> = {
       jsonrpc: "2.0",
-      id: id ?? Date.now(),
       method,
       params,
     };
+
+    if (!isNotification) {
+      jsonRpcRequest.id = id ?? Date.now();
+    }
 
     try {
       const response = await fetch(targetUrl, {
@@ -220,6 +224,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (newSessionId) {
         proxySessionCache.set(cacheKey, newSessionId);
         console.log(`MCP Proxy: Session ID received for ${targetUrl}: ${newSessionId.substring(0, 20)}...`);
+      }
+
+      if (response.status === 204 || isNotification) {
+        res.json({
+          jsonrpc: "2.0",
+          result: null,
+          _proxySessionId: newSessionId || sessionId || null,
+        });
+        return;
       }
 
       const responseText = await response.text();
