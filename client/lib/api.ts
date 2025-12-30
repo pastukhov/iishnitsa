@@ -29,9 +29,10 @@ export async function sendChatMessage(
     }
   });
 
-  const url = new URL("/chat/completions", normalizeBaseUrl(endpoint.baseUrl));
+  const baseUrl = normalizeBaseUrl(endpoint.baseUrl);
+  const url = `${baseUrl}/chat/completions`;
 
-  const response = await fetch(url.toString(), {
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -95,7 +96,7 @@ function normalizeBaseUrl(baseUrl: string): string {
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     url = "https://" + url;
   }
-  if (url.endsWith("/")) {
+  while (url.endsWith("/")) {
     url = url.slice(0, -1);
   }
   if (!url.endsWith("/v1")) {
@@ -129,9 +130,10 @@ export async function testConnection(endpoint: EndpointConfig): Promise<{
   models?: string[];
 }> {
   try {
-    const url = new URL("/models", normalizeBaseUrl(endpoint.baseUrl));
+    const baseUrl = normalizeBaseUrl(endpoint.baseUrl);
+    const url = `${baseUrl}/models`;
 
-    const response = await fetch(url.toString(), {
+    const response = await fetch(url, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${endpoint.apiKey}`,
