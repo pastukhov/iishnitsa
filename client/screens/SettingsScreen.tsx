@@ -402,13 +402,14 @@ export default function SettingsScreen() {
                         name={mcpTestResult.success ? "check-circle" : "error"}
                         size={16}
                         color={mcpTestResult.success ? theme.success : theme.error}
+                        style={{ marginTop: 2 }}
                       />
                       <ThemedText
                         style={[
                           styles.mcpTestResultText,
                           { color: mcpTestResult.success ? theme.success : theme.error },
                         ]}
-                        numberOfLines={2}
+                        selectable
                       >
                         {mcpTestResult.message}
                       </ThemedText>
@@ -598,7 +599,7 @@ const styles = StyleSheet.create({
   },
   mcpTestResult: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     padding: Spacing.sm,
     borderRadius: BorderRadius.sm,
     marginBottom: Spacing.sm,
