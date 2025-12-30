@@ -22,7 +22,7 @@ export interface MCPToolResult {
 
 interface MCPRequest {
   jsonrpc: "2.0";
-  id: string | number;
+  id?: string | number;
   method: string;
   params?: Record<string, any>;
 }
@@ -41,6 +41,8 @@ interface MCPResponse {
 export class MCPClient {
   private serverUrl: string;
   private serverName: string;
+  private initialized: boolean = false;
+  private initData: { protocolVersion: string; serverInfo: any; capabilities: any } | null = null;
 
   constructor(server: MCPServer) {
     this.serverUrl = server.url;
@@ -81,7 +83,31 @@ export class MCPClient {
     }
   }
 
+  private async sendNotification(method: string, params?: Record<string, any>): Promise<void> {
+    const request: MCPRequest = {
+      jsonrpc: "2.0",
+      method,
+      params,
+    };
+
+    try {
+      await fetch(this.serverUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(request),
+      });
+    } catch (error: any) {
+      console.warn(`MCP notification to ${this.serverName} failed:`, error);
+    }
+  }
+
   async initialize(): Promise<{ protocolVersion: string; serverInfo: any; capabilities: any }> {
+    if (this.initialized && this.initData) {
+      return this.initData;
+    }
+
     const result = await this.sendRequest("initialize", {
       protocolVersion: "2024-11-05",
       capabilities: {},
@@ -91,9 +117,15 @@ export class MCPClient {
       },
     });
     
-    await this.sendRequest("notifications/initialized");
+    await this.sendNotification("notifications/initialized");
     
+    this.initialized = true;
+    this.initData = result;
     return result;
+  }
+
+  isInitialized(): boolean {
+    return this.initialized;
   }
 
   async listTools(): Promise<MCPTool[]> {
@@ -133,6 +165,26 @@ export class MCPClient {
   }
 }
 
+const clientCache = new Map<string, MCPClient>();
+
+function getOrCreateClient(server: MCPServer): MCPClient {
+  const existingClient = clientCache.get(server.id);
+  if (existingClient) {
+    return existingClient;
+  }
+  const newClient = new MCPClient(server);
+  clientCache.set(server.id, newClient);
+  return newClient;
+}
+
+export function clearClientCache(serverId?: string): void {
+  if (serverId) {
+    clientCache.delete(serverId);
+  } else {
+    clientCache.clear();
+  }
+}
+
 export async function getToolsFromServers(servers: MCPServer[]): Promise<{
   tools: Array<MCPTool & { serverName: string; serverId: string }>;
   errors: Array<{ serverName: string; error: string }>;
@@ -144,7 +196,7 @@ export async function getToolsFromServers(servers: MCPServer[]): Promise<{
   await Promise.all(
     enabledServers.map(async (server) => {
       try {
-        const client = new MCPClient(server);
+        const client = getOrCreateClient(server);
         await client.initialize();
         const serverTools = await client.listTools();
 
@@ -156,6 +208,7 @@ export async function getToolsFromServers(servers: MCPServer[]): Promise<{
           });
         });
       } catch (error: any) {
+        clientCache.delete(server.id);
         errors.push({
           serverName: server.name,
           error: error.message || "Failed to connect",
@@ -172,7 +225,7 @@ export async function executeToolCall(
   toolName: string,
   args: Record<string, any>
 ): Promise<MCPToolResult> {
-  const client = new MCPClient(server);
+  const client = getOrCreateClient(server);
   await client.initialize();
   return await client.callTool(toolName, args);
 }

@@ -223,15 +223,28 @@ async function processConversation(
     };
     messages.push(assistantMessage);
 
+    const toolNames = toolCalls.map((tc) => {
+      const { toolName } = parseToolCallName(tc.function.name);
+      return toolName;
+    });
+    const statusMessage = toolNames.length === 1
+      ? `[Using tool: ${toolNames[0]}...]`
+      : `[Using tools: ${toolNames.join(", ")}...]`;
+    
+    onChunk(statusMessage);
+
     for (const toolCall of toolCalls) {
       const { serverId, toolName } = parseToolCallName(toolCall.function.name);
       const server = mcpServers.find((s) => s.id === serverId);
+      const toolInfo = mcpToolsMap.get(toolCall.function.name);
 
       let result: string;
-      if (server) {
+      if (!toolInfo) {
+        result = `Error: Unknown tool "${toolCall.function.name}"`;
+      } else if (!server) {
+        result = `Error: Server not found for tool ${toolCall.function.name}`;
+      } else {
         try {
-          onChunk(`${fullContent}\n\n[Calling tool: ${toolName}...]`);
-          
           let args: Record<string, any> = {};
           try {
             args = JSON.parse(toolCall.function.arguments);
@@ -243,8 +256,6 @@ async function processConversation(
         } catch (error: any) {
           result = `Error executing tool: ${error.message}`;
         }
-      } else {
-        result = `Error: Server not found for tool ${toolCall.function.name}`;
       }
 
       const toolResultMessage: ChatCompletionMessage = {
