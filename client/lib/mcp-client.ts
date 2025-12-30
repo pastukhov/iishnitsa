@@ -43,13 +43,14 @@ export class MCPClient {
   private serverName: string;
   private initialized: boolean = false;
   private initData: { protocolVersion: string; serverInfo: any; capabilities: any } | null = null;
+  private sessionId: string | null = null;
 
   constructor(server: MCPServer) {
     this.serverUrl = server.url;
     this.serverName = server.name;
   }
 
-  private async sendRequest(method: string, params?: Record<string, any>): Promise<any> {
+  private async sendRequest(method: string, params?: Record<string, any>, isInitialize: boolean = false): Promise<any> {
     const request: MCPRequest = {
       jsonrpc: "2.0",
       id: Date.now(),
@@ -57,18 +58,29 @@ export class MCPClient {
       params,
     };
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/event-stream",
+    };
+
+    if (this.sessionId && !isInitialize) {
+      headers["Mcp-Session-Id"] = this.sessionId;
+    }
+
     try {
       const response = await fetch(this.serverUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json, text/event-stream",
-        },
+        headers,
         body: JSON.stringify(request),
       });
 
       if (!response.ok) {
         throw new Error(`MCP server returned ${response.status}: ${await response.text()}`);
+      }
+
+      const newSessionId = response.headers.get("Mcp-Session-Id");
+      if (newSessionId) {
+        this.sessionId = newSessionId;
       }
 
       const jsonResponse: MCPResponse = await response.json();
@@ -91,13 +103,19 @@ export class MCPClient {
       params,
     };
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/event-stream",
+    };
+
+    if (this.sessionId) {
+      headers["Mcp-Session-Id"] = this.sessionId;
+    }
+
     try {
       await fetch(this.serverUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json, text/event-stream",
-        },
+        headers,
         body: JSON.stringify(request),
       });
     } catch (error: any) {
@@ -106,10 +124,12 @@ export class MCPClient {
   }
 
   async initialize(): Promise<{ protocolVersion: string; serverInfo: any; capabilities: any }> {
-    if (this.initialized && this.initData) {
+    if (this.initialized && this.initData && this.sessionId) {
       return this.initData;
     }
 
+    this.sessionId = null;
+    
     const result = await this.sendRequest("initialize", {
       protocolVersion: "2024-11-05",
       capabilities: {},
@@ -117,7 +137,7 @@ export class MCPClient {
         name: "AI Agent Mobile",
         version: "1.0.0",
       },
-    });
+    }, true);
     
     await this.sendNotification("notifications/initialized");
     
@@ -127,7 +147,7 @@ export class MCPClient {
   }
 
   isInitialized(): boolean {
-    return this.initialized;
+    return this.initialized && this.sessionId !== null;
   }
 
   async listTools(): Promise<MCPTool[]> {
