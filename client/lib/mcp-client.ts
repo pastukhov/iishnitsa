@@ -75,23 +75,37 @@ export class MCPClient {
       });
 
       if (!response.ok) {
-        throw new Error(`MCP server returned ${response.status}: ${await response.text()}`);
+        const errorText = await response.text();
+        console.error(`MCP ${method} failed with status ${response.status}:`, errorText);
+        throw new Error(`MCP server returned ${response.status}: ${errorText}`);
       }
 
-      const newSessionId = response.headers.get("Mcp-Session-Id");
+      const newSessionId = response.headers.get("Mcp-Session-Id") || 
+                           response.headers.get("mcp-session-id");
       if (newSessionId) {
         this.sessionId = newSessionId;
+        console.log(`MCP session ID received: ${newSessionId.substring(0, 20)}...`);
       }
 
-      const jsonResponse: MCPResponse = await response.json();
+      const responseText = await response.text();
+      if (!responseText) {
+        return null;
+      }
+
+      const jsonResponse: MCPResponse = JSON.parse(responseText);
 
       if (jsonResponse.error) {
         throw new Error(`MCP error: ${jsonResponse.error.message}`);
       }
 
+      if (isInitialize && !this.sessionId && jsonResponse.result?.meta?.sessionId) {
+        this.sessionId = jsonResponse.result.meta.sessionId;
+        console.log(`MCP session ID from body: ${this.sessionId?.substring(0, 20)}...`);
+      }
+
       return jsonResponse.result;
     } catch (error: any) {
-      console.error(`MCP request to ${this.serverName} failed:`, error);
+      console.error(`MCP request to ${this.serverName} failed:`, error.message || error);
       throw error;
     }
   }
