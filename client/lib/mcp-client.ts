@@ -1,4 +1,5 @@
 import { MCPServer } from "@/lib/store";
+import { getApiUrl } from "@/lib/query-client";
 
 export interface MCPTool {
   name: string;
@@ -43,14 +44,63 @@ export class MCPClient {
   private serverName: string;
   private initialized: boolean = false;
   private initData: { protocolVersion: string; serverInfo: any; capabilities: any } | null = null;
-  private sessionId: string | null = null;
+  private useProxy: boolean = false;
 
   constructor(server: MCPServer) {
     this.serverUrl = server.url;
     this.serverName = server.name;
+    const apiUrl = getApiUrl();
+    this.useProxy = !this.serverUrl.startsWith(apiUrl);
+    console.log(`MCP Client for ${server.name}: useProxy=${this.useProxy}`);
   }
 
   private async sendRequest(method: string, params?: Record<string, any>, isInitialize: boolean = false): Promise<any> {
+    try {
+      if (this.useProxy) {
+        return await this.sendViaProxy(method, params);
+      }
+      return await this.sendDirect(method, params);
+    } catch (error: any) {
+      console.error(`MCP request to ${this.serverName} failed:`, error.message || error);
+      throw error;
+    }
+  }
+
+  private async sendViaProxy(method: string, params?: Record<string, any>): Promise<any> {
+    const proxyUrl = new URL("/api/mcp-proxy", getApiUrl()).toString();
+    
+    const response = await fetch(proxyUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        targetUrl: this.serverUrl,
+        method,
+        params,
+        id: Date.now(),
+      }),
+    });
+
+    const jsonResponse = await response.json();
+
+    if (!response.ok) {
+      console.error(`MCP Proxy ${method} failed:`, jsonResponse);
+      throw new Error(jsonResponse.error || `Proxy error: ${response.status}`);
+    }
+
+    if (jsonResponse.error) {
+      throw new Error(`MCP error: ${jsonResponse.error.message}`);
+    }
+
+    if (jsonResponse._proxySessionId) {
+      console.log(`MCP session via proxy: ${jsonResponse._proxySessionId.substring(0, 20)}...`);
+    }
+
+    return jsonResponse.result;
+  }
+
+  private async sendDirect(method: string, params?: Record<string, any>): Promise<any> {
     const request: MCPRequest = {
       jsonrpc: "2.0",
       id: Date.now(),
@@ -63,86 +113,61 @@ export class MCPClient {
       "Accept": "application/json, text/event-stream",
     };
 
-    if (this.sessionId && !isInitialize) {
-      headers["Mcp-Session-Id"] = this.sessionId;
+    const response = await fetch(this.serverUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`MCP ${method} failed with status ${response.status}:`, errorText);
+      throw new Error(`MCP server returned ${response.status}: ${errorText}`);
     }
 
-    try {
-      const response = await fetch(this.serverUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(request),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`MCP ${method} failed with status ${response.status}:`, errorText);
-        throw new Error(`MCP server returned ${response.status}: ${errorText}`);
-      }
-
-      const newSessionId = response.headers.get("Mcp-Session-Id") || 
-                           response.headers.get("mcp-session-id");
-      if (newSessionId) {
-        this.sessionId = newSessionId;
-        console.log(`MCP session ID received: ${newSessionId.substring(0, 20)}...`);
-      }
-
-      const responseText = await response.text();
-      if (!responseText) {
-        return null;
-      }
-
-      const jsonResponse: MCPResponse = JSON.parse(responseText);
-
-      if (jsonResponse.error) {
-        throw new Error(`MCP error: ${jsonResponse.error.message}`);
-      }
-
-      if (isInitialize && !this.sessionId && jsonResponse.result?.meta?.sessionId) {
-        this.sessionId = jsonResponse.result.meta.sessionId;
-        console.log(`MCP session ID from body: ${this.sessionId?.substring(0, 20)}...`);
-      }
-
-      return jsonResponse.result;
-    } catch (error: any) {
-      console.error(`MCP request to ${this.serverName} failed:`, error.message || error);
-      throw error;
+    const responseText = await response.text();
+    if (!responseText) {
+      return null;
     }
+
+    const jsonResponse: MCPResponse = JSON.parse(responseText);
+
+    if (jsonResponse.error) {
+      throw new Error(`MCP error: ${jsonResponse.error.message}`);
+    }
+
+    return jsonResponse.result;
   }
 
   private async sendNotification(method: string, params?: Record<string, any>): Promise<void> {
-    const request: MCPRequest = {
-      jsonrpc: "2.0",
-      method,
-      params,
-    };
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "Accept": "application/json, text/event-stream",
-    };
-
-    if (this.sessionId) {
-      headers["Mcp-Session-Id"] = this.sessionId;
-    }
-
     try {
-      await fetch(this.serverUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(request),
-      });
+      if (this.useProxy) {
+        await this.sendViaProxy(method, params);
+      } else {
+        const request: MCPRequest = {
+          jsonrpc: "2.0",
+          method,
+          params,
+        };
+
+        await fetch(this.serverUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+          },
+          body: JSON.stringify(request),
+        });
+      }
     } catch (error: any) {
       console.warn(`MCP notification to ${this.serverName} failed:`, error);
     }
   }
 
   async initialize(): Promise<{ protocolVersion: string; serverInfo: any; capabilities: any }> {
-    if (this.initialized && this.initData && this.sessionId) {
+    if (this.initialized && this.initData) {
       return this.initData;
     }
-
-    this.sessionId = null;
     
     const result = await this.sendRequest("initialize", {
       protocolVersion: "2024-11-05",
@@ -161,7 +186,7 @@ export class MCPClient {
   }
 
   isInitialized(): boolean {
-    return this.initialized && this.sessionId !== null;
+    return this.initialized;
   }
 
   async listTools(): Promise<MCPTool[]> {

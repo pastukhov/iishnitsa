@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "node:http";
 
 const mcpSessions = new Map<string, { created: Date }>();
+const proxySessionCache = new Map<string, string>();
 
 function generateSessionId(): string {
   return `mcp-session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -178,6 +179,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
       activeSessions: mcpSessions.size,
       tools: mockTools.map((t) => t.name),
     });
+  });
+
+  app.post("/api/mcp-proxy", async (req: Request, res: Response) => {
+    const { targetUrl, method, params, id } = req.body;
+
+    if (!targetUrl) {
+      res.status(400).json({ error: "targetUrl is required" });
+      return;
+    }
+
+    const cacheKey = targetUrl;
+    let sessionId = proxySessionCache.get(cacheKey);
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/event-stream",
+    };
+
+    if (sessionId && method !== "initialize") {
+      headers["Mcp-Session-Id"] = sessionId;
+    }
+
+    const jsonRpcRequest = {
+      jsonrpc: "2.0",
+      id: id ?? Date.now(),
+      method,
+      params,
+    };
+
+    try {
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(jsonRpcRequest),
+      });
+
+      const newSessionId = response.headers.get("Mcp-Session-Id") ||
+                           response.headers.get("mcp-session-id");
+      if (newSessionId) {
+        proxySessionCache.set(cacheKey, newSessionId);
+        console.log(`MCP Proxy: Session ID received for ${targetUrl}: ${newSessionId.substring(0, 20)}...`);
+      }
+
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        console.error(`MCP Proxy error for ${targetUrl}:`, response.status, responseText);
+        res.status(response.status).json({
+          error: `MCP server returned ${response.status}`,
+          details: responseText,
+          sessionId: newSessionId || sessionId || null,
+        });
+        return;
+      }
+
+      const jsonResponse = responseText ? JSON.parse(responseText) : null;
+
+      res.json({
+        ...jsonResponse,
+        _proxySessionId: newSessionId || sessionId || null,
+      });
+    } catch (error: any) {
+      console.error(`MCP Proxy fetch error for ${targetUrl}:`, error.message);
+      res.status(500).json({
+        error: "Failed to connect to MCP server",
+        details: error.message,
+      });
+    }
   });
 
   const httpServer = createServer(app);
