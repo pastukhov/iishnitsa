@@ -173,7 +173,8 @@ export default function ChatScreen() {
         (chunk) => {
           updateLastAssistantMessage(chunk);
         },
-        settings.mcpEnabled ? settings.mcpServers.filter((s) => s.enabled) : []
+        settings.mcpServers,
+        settings.mcpEnabled
       );
     } catch (error: any) {
       updateLastAssistantMessage(

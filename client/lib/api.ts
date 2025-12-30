@@ -1,22 +1,56 @@
 import { Message, EndpointConfig, MCPServer } from "@/lib/store";
+import {
+  getToolsFromServers,
+  executeToolCall,
+  mcpToolsToOpenAIFunctions,
+  parseToolCallName,
+  MCPTool,
+  MCPToolResult,
+} from "@/lib/mcp-client";
 
 interface ChatCompletionMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
+  role: "user" | "assistant" | "system" | "tool";
+  content: string | null;
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
+  tool_call_id?: string;
+}
+
+interface OpenAIFunction {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: any;
+  };
+}
+
+interface ToolCallInfo {
+  serverId: string;
+  toolName: string;
+  args: Record<string, any>;
+  callId: string;
 }
 
 export async function sendChatMessage(
   messages: Message[],
   endpoint: EndpointConfig,
   onChunk: (content: string) => void,
-  mcpServers: MCPServer[] = []
+  mcpServers: MCPServer[] = [],
+  mcpEnabled: boolean = false
 ): Promise<void> {
   const chatMessages: ChatCompletionMessage[] = [];
 
   if (endpoint.systemPrompt) {
     chatMessages.push({
       role: "system",
-      content: buildSystemPrompt(endpoint.systemPrompt, mcpServers),
+      content: endpoint.systemPrompt,
     });
   }
 
@@ -29,8 +63,68 @@ export async function sendChatMessage(
     }
   });
 
+  let tools: OpenAIFunction[] = [];
+  let mcpToolsMap: Map<string, MCPTool & { serverName: string; serverId: string }> = new Map();
+
+  if (mcpEnabled && mcpServers.length > 0) {
+    const enabledServers = mcpServers.filter((s) => s.enabled);
+    if (enabledServers.length > 0) {
+      try {
+        const { tools: fetchedTools, errors } = await getToolsFromServers(enabledServers);
+        
+        if (errors.length > 0) {
+          console.warn("MCP server errors:", errors);
+        }
+
+        if (fetchedTools.length > 0) {
+          tools = mcpToolsToOpenAIFunctions(fetchedTools);
+          fetchedTools.forEach((tool) => {
+            mcpToolsMap.set(`${tool.serverId}__${tool.name}`, tool);
+          });
+        }
+      } catch (error) {
+        console.error("Failed to fetch MCP tools:", error);
+      }
+    }
+  }
+
+  await processConversation(
+    chatMessages,
+    endpoint,
+    onChunk,
+    tools,
+    mcpToolsMap,
+    mcpServers
+  );
+}
+
+async function processConversation(
+  messages: ChatCompletionMessage[],
+  endpoint: EndpointConfig,
+  onChunk: (content: string) => void,
+  tools: OpenAIFunction[],
+  mcpToolsMap: Map<string, MCPTool & { serverName: string; serverId: string }>,
+  mcpServers: MCPServer[],
+  depth: number = 0
+): Promise<void> {
+  const maxDepth = 10;
+  if (depth >= maxDepth) {
+    throw new Error("Maximum tool call depth exceeded");
+  }
+
   const baseUrl = normalizeBaseUrl(endpoint.baseUrl);
   const url = `${baseUrl}/chat/completions`;
+
+  const requestBody: any = {
+    model: endpoint.model,
+    messages: messages,
+    stream: true,
+  };
+
+  if (tools.length > 0) {
+    requestBody.tools = tools;
+    requestBody.tool_choice = "auto";
+  }
 
   const response = await fetch(url, {
     method: "POST",
@@ -38,11 +132,7 @@ export async function sendChatMessage(
       "Content-Type": "application/json",
       Authorization: `Bearer ${endpoint.apiKey}`,
     },
-    body: JSON.stringify({
-      model: endpoint.model,
-      messages: chatMessages,
-      stream: true,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
@@ -64,6 +154,15 @@ export async function sendChatMessage(
 
   const decoder = new TextDecoder();
   let fullContent = "";
+  let toolCalls: Array<{
+    id: string;
+    type: "function";
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }> = [];
+  let currentToolCallIndex = -1;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -79,16 +178,111 @@ export async function sendChatMessage(
 
         try {
           const json = JSON.parse(data);
-          const content = json.choices?.[0]?.delta?.content;
-          if (content) {
-            fullContent += content;
+          const delta = json.choices?.[0]?.delta;
+
+          if (delta?.content) {
+            fullContent += delta.content;
             onChunk(fullContent);
+          }
+
+          if (delta?.tool_calls) {
+            for (const toolCall of delta.tool_calls) {
+              const index = toolCall.index ?? 0;
+
+              if (index > currentToolCallIndex) {
+                currentToolCallIndex = index;
+                toolCalls.push({
+                  id: toolCall.id || `call_${Date.now()}_${index}`,
+                  type: "function",
+                  function: {
+                    name: toolCall.function?.name || "",
+                    arguments: toolCall.function?.arguments || "",
+                  },
+                });
+              } else if (toolCalls[index]) {
+                if (toolCall.function?.name) {
+                  toolCalls[index].function.name += toolCall.function.name;
+                }
+                if (toolCall.function?.arguments) {
+                  toolCalls[index].function.arguments += toolCall.function.arguments;
+                }
+              }
+            }
           }
         } catch {
         }
       }
     }
   }
+
+  if (toolCalls.length > 0) {
+    const assistantMessage: ChatCompletionMessage = {
+      role: "assistant",
+      content: fullContent || null,
+      tool_calls: toolCalls,
+    };
+    messages.push(assistantMessage);
+
+    for (const toolCall of toolCalls) {
+      const { serverId, toolName } = parseToolCallName(toolCall.function.name);
+      const server = mcpServers.find((s) => s.id === serverId);
+
+      let result: string;
+      if (server) {
+        try {
+          onChunk(`${fullContent}\n\n[Calling tool: ${toolName}...]`);
+          
+          let args: Record<string, any> = {};
+          try {
+            args = JSON.parse(toolCall.function.arguments);
+          } catch {
+          }
+
+          const toolResult = await executeToolCall(server, toolName, args);
+          result = formatToolResult(toolResult);
+        } catch (error: any) {
+          result = `Error executing tool: ${error.message}`;
+        }
+      } else {
+        result = `Error: Server not found for tool ${toolCall.function.name}`;
+      }
+
+      const toolResultMessage: ChatCompletionMessage = {
+        role: "tool",
+        content: result,
+        tool_call_id: toolCall.id,
+      };
+      messages.push(toolResultMessage);
+    }
+
+    await processConversation(
+      messages,
+      endpoint,
+      onChunk,
+      tools,
+      mcpToolsMap,
+      mcpServers,
+      depth + 1
+    );
+  }
+}
+
+function formatToolResult(result: MCPToolResult): string {
+  if (!result.content || result.content.length === 0) {
+    return "No result";
+  }
+
+  return result.content
+    .map((item) => {
+      if (item.type === "text" && item.text) {
+        return item.text;
+      }
+      if (item.type === "image" && item.data) {
+        return `[Image: ${item.mimeType || "image/png"}]`;
+      }
+      return JSON.stringify(item);
+    })
+    .join("\n");
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -105,23 +299,6 @@ function normalizeBaseUrl(baseUrl: string): string {
     }
   }
   return url;
-}
-
-function buildSystemPrompt(basePrompt: string, mcpServers: MCPServer[]): string {
-  if (mcpServers.length === 0) {
-    return basePrompt;
-  }
-
-  const mcpInfo = mcpServers
-    .map((server) => `- ${server.name}: ${server.url}`)
-    .join("\n");
-
-  return `${basePrompt}
-
-You have access to the following MCP servers for enhanced capabilities:
-${mcpInfo}
-
-When you need to use external tools or data, mention which MCP server you would use.`;
 }
 
 export async function testConnection(endpoint: EndpointConfig): Promise<{
@@ -155,6 +332,34 @@ export async function testConnection(endpoint: EndpointConfig): Promise<{
       success: true,
       message: `Connected! Found ${models.length} models.`,
       models,
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      message: `Connection error: ${error.message}`,
+    };
+  }
+}
+
+export async function testMCPServer(server: MCPServer): Promise<{
+  success: boolean;
+  message: string;
+  tools?: string[];
+}> {
+  try {
+    const { tools, errors } = await getToolsFromServers([{ ...server, enabled: true }]);
+    
+    if (errors.length > 0) {
+      return {
+        success: false,
+        message: errors[0].error,
+      };
+    }
+
+    return {
+      success: true,
+      message: `Connected! Found ${tools.length} tools.`,
+      tools: tools.map((t) => t.name),
     };
   } catch (error: any) {
     return {

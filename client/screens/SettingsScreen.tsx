@@ -19,7 +19,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useChatStore } from "@/lib/store";
-import { testConnection } from "@/lib/api";
+import { testConnection, testMCPServer } from "@/lib/api";
 
 function SectionHeader({ title }: { title: string }) {
   const { theme } = useTheme();
@@ -148,6 +148,12 @@ export default function SettingsScreen() {
   const [newMCPName, setNewMCPName] = useState("");
   const [newMCPUrl, setNewMCPUrl] = useState("");
   const [showAddMCP, setShowAddMCP] = useState(false);
+  const [testingMCPId, setTestingMCPId] = useState<string | null>(null);
+  const [mcpTestResult, setMcpTestResult] = useState<{
+    serverId: string;
+    success: boolean;
+    message: string;
+  } | null>(null);
 
   const handleTestConnection = async () => {
     if (Platform.OS !== "web") {
@@ -208,6 +214,30 @@ export default function SettingsScreen() {
         },
       ]
     );
+  };
+
+  const handleTestMCPServer = async (server: typeof settings.mcpServers[0]) => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setTestingMCPId(server.id);
+    setMcpTestResult(null);
+
+    const result = await testMCPServer(server);
+    setMcpTestResult({
+      serverId: server.id,
+      success: result.success,
+      message: result.message,
+    });
+    setTestingMCPId(null);
+
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(
+        result.success
+          ? Haptics.NotificationFeedbackType.Success
+          : Haptics.NotificationFeedbackType.Error
+      );
+    }
   };
 
   return (
@@ -318,32 +348,72 @@ export default function SettingsScreen() {
               <View style={[styles.divider, { backgroundColor: theme.outlineVariant }]} />
 
               {settings.mcpServers.map((server) => (
-                <View key={server.id} style={styles.mcpServerRow}>
-                  <Pressable
-                    onPress={() => toggleMCPServer(server.id)}
-                    style={styles.mcpServerInfo}
-                  >
-                    <MaterialIcons
-                      name={server.enabled ? "check-box" : "check-box-outline-blank"}
-                      size={24}
-                      color={server.enabled ? theme.primary : theme.textSecondary}
-                    />
-                    <View style={styles.mcpServerText}>
-                      <ThemedText style={styles.mcpServerName}>{server.name}</ThemedText>
+                <View key={server.id}>
+                  <View style={styles.mcpServerRow}>
+                    <Pressable
+                      onPress={() => toggleMCPServer(server.id)}
+                      style={styles.mcpServerInfo}
+                    >
+                      <MaterialIcons
+                        name={server.enabled ? "check-box" : "check-box-outline-blank"}
+                        size={24}
+                        color={server.enabled ? theme.primary : theme.textSecondary}
+                      />
+                      <View style={styles.mcpServerText}>
+                        <ThemedText style={styles.mcpServerName}>{server.name}</ThemedText>
+                        <ThemedText
+                          style={[styles.mcpServerUrl, { color: theme.textSecondary }]}
+                          numberOfLines={1}
+                        >
+                          {server.url}
+                        </ThemedText>
+                      </View>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => handleTestMCPServer(server)}
+                      disabled={testingMCPId === server.id}
+                      style={({ pressed }) => [styles.testMcpButton, { opacity: pressed ? 0.6 : 1 }]}
+                    >
+                      {testingMCPId === server.id ? (
+                        <ActivityIndicator size="small" color={theme.primary} />
+                      ) : (
+                        <MaterialIcons name="wifi" size={18} color={theme.primary} />
+                      )}
+                    </Pressable>
+                    <Pressable
+                      onPress={() => handleRemoveMCPServer(server.id, server.name)}
+                      style={({ pressed }) => [styles.removeButton, { opacity: pressed ? 0.6 : 1 }]}
+                    >
+                      <MaterialIcons name="delete-outline" size={20} color={theme.error} />
+                    </Pressable>
+                  </View>
+                  {mcpTestResult?.serverId === server.id && (
+                    <View
+                      style={[
+                        styles.mcpTestResult,
+                        {
+                          backgroundColor: mcpTestResult.success
+                            ? theme.successContainer
+                            : theme.errorContainer,
+                        },
+                      ]}
+                    >
+                      <MaterialIcons
+                        name={mcpTestResult.success ? "check-circle" : "error"}
+                        size={16}
+                        color={mcpTestResult.success ? theme.success : theme.error}
+                      />
                       <ThemedText
-                        style={[styles.mcpServerUrl, { color: theme.textSecondary }]}
-                        numberOfLines={1}
+                        style={[
+                          styles.mcpTestResultText,
+                          { color: mcpTestResult.success ? theme.success : theme.error },
+                        ]}
+                        numberOfLines={2}
                       >
-                        {server.url}
+                        {mcpTestResult.message}
                       </ThemedText>
                     </View>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => handleRemoveMCPServer(server.id, server.name)}
-                    style={({ pressed }) => [styles.removeButton, { opacity: pressed ? 0.6 : 1 }]}
-                  >
-                    <MaterialIcons name="delete-outline" size={20} color={theme.error} />
-                  </Pressable>
+                  )}
                 </View>
               ))}
 
@@ -521,6 +591,23 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     padding: Spacing.sm,
+  },
+  testMcpButton: {
+    padding: Spacing.sm,
+    marginRight: Spacing.xs,
+  },
+  mcpTestResult: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.sm,
+    marginLeft: Spacing["3xl"],
+    gap: Spacing.xs,
+  },
+  mcpTestResultText: {
+    ...Typography.bodySmall,
+    flex: 1,
   },
   addMCPForm: {
     marginTop: Spacing.md,
