@@ -1,76 +1,111 @@
-# AI Agent - Mobile Chat App
+# AI Agent - Desktop & Mobile Chat App
 
 ## Overview
-AI Agent is a mobile application for Android (and iOS/Web) that allows users to chat with AI models through any OpenAI-compatible API endpoint. The app supports Model Context Protocol (MCP) for enhanced AI capabilities.
+AI Agent is a cross-platform application that allows users to chat with AI models through any OpenAI-compatible API endpoint. The app supports Model Context Protocol (MCP) for enhanced AI capabilities with tool calling.
+
+## Platforms
+- **Electron Desktop App** - Standalone desktop application (Windows, macOS, Linux)
+- **Expo Mobile App** - Mobile application (Android, iOS, Web)
 
 ## Features
 - **Custom Endpoint Support**: Connect to any OpenAI-compatible API (OpenAI, Anthropic, local LLMs, etc.)
-- **MCP Support**: Configure Model Context Protocol servers for extended AI capabilities
-- **Chat History**: Manage multiple chat conversations with drawer navigation
+- **Full MCP Support**: Configure Model Context Protocol servers with real tool calling
+- **Chat History**: Manage multiple chat conversations
 - **Streaming Responses**: Real-time streaming of AI responses
-- **Material Design 3**: Modern Android-style UI with light/dark theme support
+- **Dark/Light Theme**: Follows system preference
 
-## Tech Stack
-- **Frontend**: Expo/React Native with TypeScript
-- **State Management**: Zustand with AsyncStorage persistence
-- **Navigation**: React Navigation (Drawer + Stack)
-- **Styling**: Material Design 3 color system
+---
 
-## Project Structure
+## Electron Desktop App
+
+### Project Structure
+```
+electron/
+├── main.ts                 # Electron main process
+└── preload.ts              # Preload script for IPC
+src/
+├── main.tsx                # React entry point
+├── App.tsx                 # Main app component
+├── components/
+│   ├── Sidebar.tsx         # Chat list and navigation
+│   ├── ChatView.tsx        # Chat interface
+│   └── SettingsView.tsx    # Settings panel
+├── lib/
+│   ├── store.ts            # Zustand store
+│   ├── api.ts              # OpenAI API client
+│   └── mcp-client.ts       # MCP client (direct HTTP, no CORS)
+└── styles/
+    ├── global.css          # Global styles
+    ├── App.css             # App layout styles
+    ├── Sidebar.css         # Sidebar styles
+    ├── ChatView.css        # Chat styles
+    └── SettingsView.css    # Settings styles
+```
+
+### Running Electron App (Development)
+```bash
+./scripts/electron-dev.sh
+```
+
+### Building Electron App
+```bash
+./scripts/electron-build.sh
+```
+
+### Key Benefits
+- **No CORS restrictions** - Direct HTTP calls to MCP servers
+- **No server required** - All logic runs in the app
+- **Native performance** - Electron with React
+- **Persistent storage** - Uses electron-store
+
+---
+
+## Expo Mobile App
+
+### Project Structure
 ```
 client/
 ├── App.tsx                 # Main app entry point
 ├── components/             # Reusable UI components
-│   ├── ErrorBoundary.tsx   # Error boundary wrapper
-│   ├── ErrorFallback.tsx   # Error screen UI
-│   ├── ThemedText.tsx      # Themed text component
-│   └── ThemedView.tsx      # Themed view component
-├── constants/
-│   └── theme.ts            # Material Design 3 colors, typography, spacing
-├── hooks/
-│   ├── useTheme.ts         # Theme hook
-│   └── useScreenOptions.ts # Navigation options hook
 ├── lib/
-│   ├── store.ts            # Zustand store with chat/settings state
-│   ├── api.ts              # OpenAI API client with streaming
-│   └── query-client.ts     # React Query client
-├── navigation/
-│   ├── RootStackNavigator.tsx  # Root stack navigator
-│   └── DrawerNavigator.tsx     # Drawer with chat history
-└── screens/
-    ├── ChatScreen.tsx      # Main chat interface
-    └── SettingsScreen.tsx  # Endpoint and MCP configuration
+│   ├── store.ts            # Zustand store
+│   ├── api.ts              # OpenAI API client
+│   └── mcp-client.ts       # MCP client with proxy support
+├── navigation/             # React Navigation setup
+└── screens/                # Screen components
 server/
 ├── index.ts                # Express server entry
-└── routes.ts               # API routes
+├── routes.ts               # API routes & MCP proxy
 ```
+
+### Running Mobile App
+```bash
+npm run server:dev   # Start Express backend
+npm run expo:dev     # Start Expo development server
+```
+
+### MCP Proxy
+The mobile app uses `/api/mcp-proxy` on the backend to bypass CORS restrictions for external MCP servers.
+
+---
 
 ## Configuration
 
 ### API Endpoint
-Users configure their OpenAI-compatible endpoint in Settings:
 - **Base URL**: API endpoint URL (e.g., https://api.openai.com/v1)
 - **API Key**: Authentication key
 - **Model**: Model name (e.g., gpt-4o-mini)
 - **System Prompt**: Custom system prompt for the AI
 
 ### MCP Servers
-Users can add MCP servers for enhanced capabilities:
 - Enable/disable MCP support globally
 - Add multiple MCP servers with name and URL
 - Toggle individual servers on/off
+- Full tool calling with JSON-RPC 2.0 protocol
 
-## Running the App
-```bash
-npm run server:dev   # Start Express backend
-npm run expo:dev     # Start Expo development server
-```
-
-## User Preferences
-- Theme follows system preference (light/dark)
-- All data stored locally using AsyncStorage
-- Long-press messages to copy to clipboard
-- Long-press chat items in drawer to delete
+---
 
 ## Recent Changes
+- 2024-12-30: Added standalone Electron desktop app
+- 2024-12-30: Fixed MCP proxy for external servers
 - 2024-12-30: Initial MVP with chat, settings, and MCP support

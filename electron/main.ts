@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, shell } from "electron";
 import path from "path";
 import Store from "electron-store";
 
-const store = new Store();
+const store = new Store() as any;
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -76,16 +76,7 @@ ipcMain.handle("fetch:request", async (_, url: string, options: RequestInit) => 
       headers[key] = value;
     });
     
-    const contentType = response.headers.get("content-type") || "";
-    let body: any;
-    
-    if (contentType.includes("text/event-stream")) {
-      body = await response.text();
-    } else if (contentType.includes("application/json")) {
-      body = await response.json();
-    } else {
-      body = await response.text();
-    }
+    const body = await response.text();
     
     return {
       ok: response.ok,

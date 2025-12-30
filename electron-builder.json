@@ -1,13 +1,19 @@
 {
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.aiagent.desktop",
   "productName": "AI Agent",
   "directories": {
-    "output": "release"
+    "output": "release",
+    "buildResources": "build"
   },
   "files": [
     "dist/**/*",
-    "electron-dist/**/*"
+    "electron-dist/**/*",
+    "package.json"
   ],
+  "extraMetadata": {
+    "main": "electron-dist/main.js"
+  },
   "mac": {
     "category": "public.app-category.productivity",
     "target": ["dmg", "zip"]

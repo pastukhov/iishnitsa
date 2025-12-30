@@ -57,7 +57,11 @@ async function mcpRequest(
     throw new Error(`MCP error: ${response.statusText}`);
   }
 
-  const data = response.body;
+  if (!response.body) {
+    return null;
+  }
+
+  const data = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
   if (data.error) {
     throw new Error(`MCP error: ${data.error.message || JSON.stringify(data.error)}`);
   }
