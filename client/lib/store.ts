@@ -1,0 +1,296 @@
+import { create } from "zustand";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+export interface Message {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: string;
+}
+
+export interface Chat {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EndpointConfig {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+}
+
+export interface MCPServer {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+}
+
+export interface Settings {
+  endpoint: EndpointConfig;
+  mcpServers: MCPServer[];
+  mcpEnabled: boolean;
+  theme: "light" | "dark" | "system";
+}
+
+interface ChatStore {
+  chats: Chat[];
+  currentChatId: string | null;
+  settings: Settings;
+  isLoading: boolean;
+  isStreaming: boolean;
+  
+  loadFromStorage: () => Promise<void>;
+  createNewChat: () => void;
+  selectChat: (chatId: string) => void;
+  deleteChat: (chatId: string) => void;
+  addMessage: (message: Omit<Message, "id" | "timestamp">) => void;
+  updateLastAssistantMessage: (content: string) => void;
+  getCurrentChat: () => Chat | null;
+  updateSettings: (settings: Partial<Settings>) => void;
+  updateEndpoint: (endpoint: Partial<EndpointConfig>) => void;
+  addMCPServer: (server: Omit<MCPServer, "id">) => void;
+  removeMCPServer: (id: string) => void;
+  toggleMCPServer: (id: string) => void;
+  setIsStreaming: (isStreaming: boolean) => void;
+  clearCurrentChat: () => void;
+}
+
+const STORAGE_KEYS = {
+  CHATS: "@ai_agent_chats",
+  CURRENT_CHAT: "@ai_agent_current_chat",
+  SETTINGS: "@ai_agent_settings",
+};
+
+const defaultSettings: Settings = {
+  endpoint: {
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "",
+    model: "gpt-4o-mini",
+    systemPrompt: "You are a helpful AI assistant.",
+  },
+  mcpServers: [],
+  mcpEnabled: false,
+  theme: "system",
+};
+
+const generateId = () => {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+};
+
+const createNewChatObject = (): Chat => ({
+  id: generateId(),
+  title: "New Chat",
+  messages: [],
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+});
+
+export const useChatStore = create<ChatStore>((set, get) => ({
+  chats: [],
+  currentChatId: null,
+  settings: defaultSettings,
+  isLoading: false,
+  isStreaming: false,
+
+  loadFromStorage: async () => {
+    try {
+      const [chatsJson, currentChatJson, settingsJson] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.CHATS),
+        AsyncStorage.getItem(STORAGE_KEYS.CURRENT_CHAT),
+        AsyncStorage.getItem(STORAGE_KEYS.SETTINGS),
+      ]);
+
+      const chats = chatsJson ? JSON.parse(chatsJson) : [];
+      const currentChatId = currentChatJson || null;
+      const settings = settingsJson
+        ? { ...defaultSettings, ...JSON.parse(settingsJson) }
+        : defaultSettings;
+
+      set({ chats, currentChatId, settings });
+
+      if (chats.length === 0) {
+        get().createNewChat();
+      } else if (!currentChatId || !chats.find((c: Chat) => c.id === currentChatId)) {
+        set({ currentChatId: chats[0]?.id || null });
+      }
+    } catch (error) {
+      console.error("Failed to load from storage:", error);
+      get().createNewChat();
+    }
+  },
+
+  createNewChat: () => {
+    const newChat = createNewChatObject();
+    set((state) => {
+      const newChats = [newChat, ...state.chats];
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(newChats));
+      AsyncStorage.setItem(STORAGE_KEYS.CURRENT_CHAT, newChat.id);
+      return { chats: newChats, currentChatId: newChat.id };
+    });
+  },
+
+  selectChat: (chatId: string) => {
+    set({ currentChatId: chatId });
+    AsyncStorage.setItem(STORAGE_KEYS.CURRENT_CHAT, chatId);
+  },
+
+  deleteChat: (chatId: string) => {
+    set((state) => {
+      const newChats = state.chats.filter((c) => c.id !== chatId);
+      let newCurrentChatId = state.currentChatId;
+
+      if (state.currentChatId === chatId) {
+        newCurrentChatId = newChats[0]?.id || null;
+        if (!newCurrentChatId) {
+          const newChat = createNewChatObject();
+          newChats.push(newChat);
+          newCurrentChatId = newChat.id;
+        }
+      }
+
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(newChats));
+      if (newCurrentChatId) {
+        AsyncStorage.setItem(STORAGE_KEYS.CURRENT_CHAT, newCurrentChatId);
+      }
+
+      return { chats: newChats, currentChatId: newCurrentChatId };
+    });
+  },
+
+  addMessage: (message) => {
+    const newMessage: Message = {
+      ...message,
+      id: generateId(),
+      timestamp: new Date().toISOString(),
+    };
+
+    set((state) => {
+      const updatedChats = state.chats.map((chat) => {
+        if (chat.id === state.currentChatId) {
+          const updatedMessages = [...chat.messages, newMessage];
+          const title =
+            chat.messages.length === 0 && message.role === "user"
+              ? message.content.slice(0, 50) + (message.content.length > 50 ? "..." : "")
+              : chat.title;
+          return {
+            ...chat,
+            messages: updatedMessages,
+            title,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return chat;
+      });
+
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(updatedChats));
+      return { chats: updatedChats };
+    });
+  },
+
+  updateLastAssistantMessage: (content: string) => {
+    set((state) => {
+      const updatedChats = state.chats.map((chat) => {
+        if (chat.id === state.currentChatId) {
+          const messages = [...chat.messages];
+          const lastMessage = messages[messages.length - 1];
+          if (lastMessage && lastMessage.role === "assistant") {
+            messages[messages.length - 1] = { ...lastMessage, content };
+          }
+          return { ...chat, messages, updatedAt: new Date().toISOString() };
+        }
+        return chat;
+      });
+
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(updatedChats));
+      return { chats: updatedChats };
+    });
+  },
+
+  getCurrentChat: () => {
+    const state = get();
+    return state.chats.find((c) => c.id === state.currentChatId) || null;
+  },
+
+  updateSettings: (newSettings) => {
+    set((state) => {
+      const settings = { ...state.settings, ...newSettings };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  updateEndpoint: (endpoint) => {
+    set((state) => {
+      const settings = {
+        ...state.settings,
+        endpoint: { ...state.settings.endpoint, ...endpoint },
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  addMCPServer: (server) => {
+    const newServer: MCPServer = { ...server, id: generateId() };
+    set((state) => {
+      const settings = {
+        ...state.settings,
+        mcpServers: [...state.settings.mcpServers, newServer],
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  removeMCPServer: (id) => {
+    set((state) => {
+      const settings = {
+        ...state.settings,
+        mcpServers: state.settings.mcpServers.filter((s) => s.id !== id),
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  toggleMCPServer: (id) => {
+    set((state) => {
+      const settings = {
+        ...state.settings,
+        mcpServers: state.settings.mcpServers.map((s) =>
+          s.id === id ? { ...s, enabled: !s.enabled } : s
+        ),
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  setIsStreaming: (isStreaming) => {
+    set({ isStreaming });
+  },
+
+  clearCurrentChat: () => {
+    set((state) => {
+      const updatedChats = state.chats.map((chat) => {
+        if (chat.id === state.currentChatId) {
+          return {
+            ...chat,
+            messages: [],
+            title: "New Chat",
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return chat;
+      });
+
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(updatedChats));
+      return { chats: updatedChats };
+    });
+  },
+}));

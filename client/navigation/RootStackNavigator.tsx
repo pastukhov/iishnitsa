@@ -1,32 +1,38 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import MainTabNavigator from "@/navigation/MainTabNavigator";
-import ModalScreen from "@/screens/ModalScreen";
+import DrawerNavigator from "@/navigation/DrawerNavigator";
+import SettingsScreen from "@/screens/SettingsScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
+import { useTheme } from "@/hooks/useTheme";
 
 export type RootStackParamList = {
   Main: undefined;
-  Modal: undefined;
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootStackNavigator() {
-  const screenOptions = useScreenOptions();
+  const screenOptions = useScreenOptions({ transparent: false });
+  const { theme } = useTheme();
 
   return (
     <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen
         name="Main"
-        component={MainTabNavigator}
+        component={DrawerNavigator}
         options={{ headerShown: false }}
       />
       <Stack.Screen
-        name="Modal"
-        component={ModalScreen}
+        name="Settings"
+        component={SettingsScreen}
         options={{
           presentation: "modal",
-          headerTitle: "Modal",
+          headerTitle: "Settings",
+          headerStyle: {
+            backgroundColor: theme.backgroundRoot,
+          },
+          headerTintColor: theme.text,
         }}
       />
     </Stack.Navigator>
