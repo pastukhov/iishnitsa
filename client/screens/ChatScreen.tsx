@@ -14,6 +14,8 @@ import { useNavigation, DrawerActions } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
+import * as Linking from "expo-linking";
+import Markdown from "react-native-markdown-display";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -38,6 +40,40 @@ function MessageBubble({
     }
   };
 
+  const markdownStyles = {
+    body: {
+      color: isUser ? theme.userBubbleText : theme.aiBubbleText,
+      fontSize: Typography.body.fontSize,
+      lineHeight: 22,
+    },
+    link: { color: theme.primary },
+    paragraph: { marginTop: 0, marginBottom: 8 },
+    bullet_list: { marginVertical: 8 },
+    ordered_list: { marginVertical: 8 },
+    list_item: { marginVertical: 2 },
+    code_inline: {
+      backgroundColor: theme.surfaceVariant,
+      borderRadius: 4,
+      paddingHorizontal: 4,
+      paddingVertical: 2,
+      color: theme.text,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    },
+    fence: {
+      backgroundColor: theme.surfaceVariant,
+      borderRadius: 8,
+      padding: 8,
+      color: theme.text,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    },
+    blockquote: {
+      borderLeftColor: theme.outlineVariant,
+      borderLeftWidth: 3,
+      paddingLeft: 8,
+      color: theme.textSecondary,
+    },
+  };
+
   return (
     <Pressable
       onLongPress={handleCopy}
@@ -56,14 +92,26 @@ function MessageBubble({
         </View>
       )}
       <View style={styles.messageContent}>
-        <ThemedText
-          style={[
-            styles.messageText,
-            { color: isUser ? theme.userBubbleText : theme.aiBubbleText },
-          ]}
-        >
-          {message.content}
-        </ThemedText>
+        {isUser ? (
+          <ThemedText
+            style={[
+              styles.messageText,
+              { color: isUser ? theme.userBubbleText : theme.aiBubbleText },
+            ]}
+          >
+            {message.content}
+          </ThemedText>
+        ) : (
+          <Markdown
+            style={markdownStyles}
+            onLinkPress={(url) => {
+              Linking.openURL(url);
+              return true;
+            }}
+          >
+            {message.content}
+          </Markdown>
+        )}
       </View>
     </Pressable>
   );
