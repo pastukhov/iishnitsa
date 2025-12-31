@@ -31,7 +31,7 @@ jobs:
           else
             BASE_VERSION=${LAST_TAG#v}
           fi
-          BUMP_TYPE=$(npx -y conventional-recommended-bump -p angular)
+          BUMP_TYPE=$(npx -y -p conventional-recommended-bump -p conventional-changelog-angular conventional-recommended-bump -p angular)
           NEXT_VERSION=$(node -e "const base=process.env.BASE_VERSION; const bump=process.env.BUMP_TYPE || 'patch'; const parts=base.split('.').map((n)=>parseInt(n,10)); if (parts.length !== 3 || parts.some((n)=>Number.isNaN(n))) { throw new Error('Invalid base version: ' + base); } let [major, minor, patch] = parts; if (bump === 'major') { major += 1; minor = 0; patch = 0; } else if (bump === 'minor') { minor += 1; patch = 0; } else { patch += 1; } console.log([major, minor, patch].join('.'));")
           echo "NEXT_VERSION=$NEXT_VERSION" >> $GITHUB_ENV
           echo "NEXT_TAG=v$NEXT_VERSION" >> $GITHUB_ENV
