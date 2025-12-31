@@ -12,28 +12,48 @@ jobs:
     permissions:
       contents: write
     env:
+      # Expo access token must be defined as a repository secret called EXPO_TOKEN
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
+      # Checkout the repository code
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Install the requested Node.js version and enable npm caching
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
+      # Install project dependencies using npm
       - name: Install dependencies
         run: npm ci
 
+      # Trigger an EAS build for Android in non‑interactive mode.
+      # The --json flag produces structured output which we save in build.json.
+      # A short Node.js script extracts the build identifier and appends it to
+      # $GITHUB_ENV so that it can be referenced in later steps if needed.
       - name: Trigger EAS build
         run: |
           npx eas build --platform android --profile preview --non-interactive --json > build.json
-          node -e "const fs=require('fs');const data=JSON.parse(fs.readFileSync('build.json','utf8'));const build=Array.isArray(data)?data[0]:data;console.log('BUILD_ID='+(build.id||build.buildId));" >> $GITHUB_ENV
+          node -e "const fs = require('fs'); const data = JSON.parse(fs.readFileSync('build.json', 'utf8')); const build = Array.isArray(data) ? data[0] : data; console.log(`BUILD_ID=${build.id || build.buildId}`);" >> $GITHUB_ENV
 
+      # Install jq for JSON parsing; apt-get update is required for package lists.
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      # Download the generated APK. Parse the build URL from build.json using jq
+      # and fetch the artifact with curl. The output file will be named iishnitsa.apk.
       - name: Download APK
-        run: npx eas build:download --platform android --id $BUILD_ID --output iishnitsa.apk
+        run: |
+          BUILD_URL=$(jq -r 'if type == "object" then .artifacts.buildUrl else .[0].artifacts.buildUrl end' build.json)
+          echo "Build URL: $BUILD_URL"
+          curl -L "$BUILD_URL" -o iishnitsa.apk
 
+      # Publish the APK as a GitHub release. The release-action will create or
+      # update the tag `apk-latest` and attach the APK file. Use allowUpdates to
+      # overwrite previous artifacts and makeLatest to mark this release as the latest.
       - name: Publish release
         uses: ncipollo/release-action@v1
         with:
