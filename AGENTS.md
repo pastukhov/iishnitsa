@@ -16,6 +16,10 @@
 - `npm run check:types`: TypeScript typecheck across the project.
 - `npm run check:format` / `npm run format`: Prettier formatting checks and fixes.
 
+## MCP Tooling
+- Expo MCP tools are available for documentation lookups and EAS workflow guidance.
+- Keep EAS profiles in `eas.json` and default to `preview` for APK builds unless noted otherwise.
+
 ## Coding Style & Naming Conventions
 - TypeScript/JavaScript with double quotes and 2-space indentation (enforced by Prettier).
 - Prefer descriptive, explicit names for components and hooks (e.g., `ChatView`, `useStore`).

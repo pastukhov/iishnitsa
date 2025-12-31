@@ -27,8 +27,15 @@ npm run expo:dev
 ## Основные команды
 - `npm run expo:dev` — запуск Expo dev-сервера.
 - `npm run expo:static:build` — сборка статического Expo-бандла.
+- `npm install eas-cli` — установка EAS CLI (разово, для сборок APK).
+- `./node_modules/.bin/eas login` — авторизация EAS CLI (разово).
+- `./node_modules/.bin/eas build --platform android --profile preview` — сборка APK через EAS.
 - `npm run lint` / `npm run lint:fix` — линтинг и автоисправления.
 - `npm run check:types` — проверка типов TypeScript.
+
+## EAS и MCP
+- Профили сборки задаются в `eas.json`; актуальный для APK — `preview`.
+- Для автоматизации доступны Expo MCP-инструменты (документация и EAS workflow-помощник).
 
 ## Настройка
 - Параметры API и MCP задаются в разделе Settings внутри приложения.
