@@ -60,6 +60,11 @@ jobs:
           echo "Build URL: $BUILD_URL"
           curl -L "$BUILD_URL" -o "iishnitsa-${BUILD_VERSION}.apk"
 
+      - name: Generate release notes
+        run: |
+          git fetch --tags --force
+          npx -y -p conventional-changelog-cli -p conventional-changelog-angular conventional-changelog -p angular -r 1 > release-notes.md
+
       # Publish the APK as a GitHub release. The release-action will create or
       # update the tag `apk-latest` and attach the APK file. Use allowUpdates to
       # overwrite previous artifacts and makeLatest to mark this release as the latest.
@@ -70,6 +75,7 @@ jobs:
           name: APK ${{ github.ref_name }}
           artifacts: iishnitsa-${{ env.BUILD_VERSION }}.apk
           artifactContentType: application/vnd.android.package-archive
+          bodyFile: release-notes.md
           allowUpdates: false
           replacesArtifacts: false
           makeLatest: true
