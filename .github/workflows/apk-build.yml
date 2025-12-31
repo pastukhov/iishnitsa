@@ -2,9 +2,8 @@ name: Build APK
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    tags:
+      - "v*"
 
 jobs:
   build-apk:
@@ -18,6 +17,8 @@ jobs:
       # Checkout the repository code
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Install the requested Node.js version and enable npm caching
       - name: Setup Node
@@ -29,6 +30,13 @@ jobs:
       # Install project dependencies using npm
       - name: Install dependencies
         run: npm ci
+
+      - name: Set build version
+        run: echo "BUILD_VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
+      - name: Apply version from tag
+        run: |
+          node -e "const fs=require('fs'); const path='app.json'; const data=JSON.parse(fs.readFileSync(path,'utf8')); data.expo.version=process.env.BUILD_VERSION; fs.writeFileSync(path, JSON.stringify(data, null, 2) + '\n');"
 
       # Trigger an EAS build for Android in non‑interactive mode.
       # The --json flag produces structured output which we save in build.json.
@@ -49,7 +57,7 @@ jobs:
         run: |
           BUILD_URL=$(jq -r 'if type == "object" then .artifacts.buildUrl else .[0].artifacts.buildUrl end' build.json)
           echo "Build URL: $BUILD_URL"
-          curl -L "$BUILD_URL" -o iishnitsa.apk
+          curl -L "$BUILD_URL" -o "iishnitsa-${BUILD_VERSION}.apk"
 
       # Publish the APK as a GitHub release. The release-action will create or
       # update the tag `apk-latest` and attach the APK file. Use allowUpdates to
@@ -57,10 +65,10 @@ jobs:
       - name: Publish release
         uses: ncipollo/release-action@v1
         with:
-          tag: apk-latest
-          name: APK Latest
-          artifacts: iishnitsa.apk
+          tag: ${{ github.ref_name }}
+          name: APK ${{ github.ref_name }}
+          artifacts: iishnitsa-${{ env.BUILD_VERSION }}.apk
           artifactContentType: application/vnd.android.package-archive
-          allowUpdates: true
-          replacesArtifacts: true
+          allowUpdates: false
+          replacesArtifacts: false
           makeLatest: true

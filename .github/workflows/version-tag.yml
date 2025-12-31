@@ -1,0 +1,51 @@
+name: Tag Release Version
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  tag-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Compute next version
+        run: |
+          git fetch --tags --force
+          LAST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1)
+          if [ -z "$LAST_TAG" ]; then
+            BASE_VERSION=$(node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('app.json','utf8')); process.stdout.write(data.expo.version)")
+          else
+            BASE_VERSION=${LAST_TAG#v}
+          fi
+          BUMP_TYPE=$(npx -y conventional-recommended-bump -p angular)
+          NEXT_VERSION=$(node -e "const base=process.env.BASE_VERSION; const bump=process.env.BUMP_TYPE || 'patch'; const parts=base.split('.').map((n)=>parseInt(n,10)); if (parts.length !== 3 || parts.some((n)=>Number.isNaN(n))) { throw new Error('Invalid base version: ' + base); } let [major, minor, patch] = parts; if (bump === 'major') { major += 1; minor = 0; patch = 0; } else if (bump === 'minor') { minor += 1; patch = 0; } else { patch += 1; } console.log([major, minor, patch].join('.'));")
+          echo "NEXT_VERSION=$NEXT_VERSION" >> $GITHUB_ENV
+          echo "NEXT_TAG=v$NEXT_VERSION" >> $GITHUB_ENV
+        env:
+          BASE_VERSION: ${{ env.BASE_VERSION }}
+          BUMP_TYPE: ${{ env.BUMP_TYPE }}
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git rev-parse "$NEXT_TAG" >/dev/null 2>&1; then
+            echo "Tag $NEXT_TAG already exists. Skipping."
+            exit 0
+          fi
+          git tag "$NEXT_TAG"
+          git push origin "$NEXT_TAG"
