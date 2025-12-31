@@ -19,8 +19,9 @@ jobs:
 
       - name: Lint commits
         run: |
+          npx -y -p @commitlint/cli@latest -p @commitlint/config-conventional@latest commitlint --version
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            npx -y @commitlint/cli@latest --config commitlint.config.cjs --from "${{ github.event.pull_request.base.sha }}" --to "${{ github.event.pull_request.head.sha }}"
+            npx -y -p @commitlint/cli@latest -p @commitlint/config-conventional@latest commitlint --config commitlint.config.cjs --from "${{ github.event.pull_request.base.sha }}" --to "${{ github.event.pull_request.head.sha }}"
           else
-            npx -y @commitlint/cli@latest --config commitlint.config.cjs --from "${{ github.event.before }}" --to "${{ github.sha }}"
+            npx -y -p @commitlint/cli@latest -p @commitlint/config-conventional@latest commitlint --config commitlint.config.cjs --from "${{ github.event.before }}" --to "${{ github.sha }}"
           fi
