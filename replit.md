@@ -1,7 +1,7 @@
-# AI Agent - Desktop & Mobile Chat App
+# Iishnitsa - Desktop & Mobile Chat App
 
 ## Overview
-AI Agent is a cross-platform application that allows users to chat with AI models through any OpenAI-compatible API endpoint. The app supports Model Context Protocol (MCP) for enhanced AI capabilities with tool calling.
+Iishnitsa is a cross-platform application that allows users to chat with AI models through any OpenAI-compatible API endpoint. The app supports Model Context Protocol (MCP) for enhanced AI capabilities with tool calling.
 
 ## Platforms
 - **Electron Desktop App** - Standalone desktop application (Windows, macOS, Linux)

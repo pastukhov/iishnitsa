@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "AI Agent",
-    "slug": "ai-agent",
+    "name": "Iishnitsa",
+    "slug": "iishnitsa",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "aiagent",
+    "scheme": "iishnitsa",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aiagent.app"
+      "bundleIdentifier": "com.iishnitsa.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +19,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.aiagent.app"
+      "package": "com.iishnitsa.app"
     },
     "web": {
       "output": "single",
