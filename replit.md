@@ -3,7 +3,7 @@
 ## Overview
 Iishnitsa is a cross-platform application that allows users to chat with AI models through any OpenAI-compatible API endpoint. The app supports Model Context Protocol (MCP) for enhanced AI capabilities with tool calling.
 
-**Both apps are fully standalone - no server required!**
+**Both apps are fully standalone - no backend server required!**
 
 ## Platforms
 - **Electron Desktop App** - Standalone desktop application (Windows, macOS, Linux)
@@ -19,7 +19,7 @@ Iishnitsa is a cross-platform application that allows users to chat with AI mode
 
 ---
 
-## Expo Mobile App (Standalone)
+## Expo Mobile App
 
 ### Project Structure
 ```
@@ -46,15 +46,9 @@ eas login
 eas build --platform android --profile preview
 ```
 
-### Key Benefits
-- **No server required** - All API calls made directly from device
-- **No CORS issues** - React Native uses native HTTP client
-- **Persistent storage** - Uses AsyncStorage
-- **Works offline** - Settings and chats stored locally
-
 ---
 
-## Electron Desktop App (Standalone)
+## Electron Desktop App
 
 ### Project Structure
 ```
@@ -98,6 +92,7 @@ src/
 ---
 
 ## Recent Changes
+- 2024-12-31: Removed backend server completely - both apps fully standalone
 - 2024-12-31: Made Expo app fully standalone (no server dependency)
 - 2024-12-31: Renamed project to Iishnitsa
 - 2024-12-30: Added standalone Electron desktop app
