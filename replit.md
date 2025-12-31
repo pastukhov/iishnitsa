@@ -3,9 +3,11 @@
 ## Overview
 Iishnitsa is a cross-platform application that allows users to chat with AI models through any OpenAI-compatible API endpoint. The app supports Model Context Protocol (MCP) for enhanced AI capabilities with tool calling.
 
+**Both apps are fully standalone - no server required!**
+
 ## Platforms
 - **Electron Desktop App** - Standalone desktop application (Windows, macOS, Linux)
-- **Expo Mobile App** - Mobile application (Android, iOS, Web)
+- **Expo Mobile App** - Standalone mobile application (Android, iOS, Web)
 
 ## Features
 - **Custom Endpoint Support**: Connect to any OpenAI-compatible API (OpenAI, Anthropic, local LLMs, etc.)
@@ -13,10 +15,46 @@ Iishnitsa is a cross-platform application that allows users to chat with AI mode
 - **Chat History**: Manage multiple chat conversations
 - **Streaming Responses**: Real-time streaming of AI responses
 - **Dark/Light Theme**: Follows system preference
+- **Offline Storage**: All data stored locally on device
 
 ---
 
-## Electron Desktop App
+## Expo Mobile App (Standalone)
+
+### Project Structure
+```
+client/
+├── App.tsx                 # Main app entry point
+├── components/             # Reusable UI components
+├── lib/
+│   ├── store.ts            # Zustand store with AsyncStorage
+│   ├── api.ts              # OpenAI API client (direct calls)
+│   └── mcp-client.ts       # MCP client (direct HTTP)
+├── navigation/             # React Navigation setup
+└── screens/                # Screen components
+```
+
+### Running Mobile App (Development)
+```bash
+npx expo start
+```
+
+### Building APK
+```bash
+npm install -g eas-cli
+eas login
+eas build --platform android --profile preview
+```
+
+### Key Benefits
+- **No server required** - All API calls made directly from device
+- **No CORS issues** - React Native uses native HTTP client
+- **Persistent storage** - Uses AsyncStorage
+- **Works offline** - Settings and chats stored locally
+
+---
+
+## Electron Desktop App (Standalone)
 
 ### Project Structure
 ```
@@ -26,20 +64,9 @@ electron/
 src/
 ├── main.tsx                # React entry point
 ├── App.tsx                 # Main app component
-├── components/
-│   ├── Sidebar.tsx         # Chat list and navigation
-│   ├── ChatView.tsx        # Chat interface
-│   └── SettingsView.tsx    # Settings panel
-├── lib/
-│   ├── store.ts            # Zustand store
-│   ├── api.ts              # OpenAI API client
-│   └── mcp-client.ts       # MCP client (direct HTTP, no CORS)
-└── styles/
-    ├── global.css          # Global styles
-    ├── App.css             # App layout styles
-    ├── Sidebar.css         # Sidebar styles
-    ├── ChatView.css        # Chat styles
-    └── SettingsView.css    # Settings styles
+├── components/             # Sidebar, ChatView, SettingsView
+├── lib/                    # store, api, mcp-client
+└── styles/                 # CSS styles
 ```
 
 ### Running Electron App (Development)
@@ -51,41 +78,6 @@ src/
 ```bash
 ./scripts/electron-build.sh
 ```
-
-### Key Benefits
-- **No CORS restrictions** - Direct HTTP calls to MCP servers
-- **No server required** - All logic runs in the app
-- **Native performance** - Electron with React
-- **Persistent storage** - Uses electron-store
-
----
-
-## Expo Mobile App
-
-### Project Structure
-```
-client/
-├── App.tsx                 # Main app entry point
-├── components/             # Reusable UI components
-├── lib/
-│   ├── store.ts            # Zustand store
-│   ├── api.ts              # OpenAI API client
-│   └── mcp-client.ts       # MCP client with proxy support
-├── navigation/             # React Navigation setup
-└── screens/                # Screen components
-server/
-├── index.ts                # Express server entry
-├── routes.ts               # API routes & MCP proxy
-```
-
-### Running Mobile App
-```bash
-npm run server:dev   # Start Express backend
-npm run expo:dev     # Start Expo development server
-```
-
-### MCP Proxy
-The mobile app uses `/api/mcp-proxy` on the backend to bypass CORS restrictions for external MCP servers.
 
 ---
 
@@ -106,6 +98,7 @@ The mobile app uses `/api/mcp-proxy` on the backend to bypass CORS restrictions 
 ---
 
 ## Recent Changes
+- 2024-12-31: Made Expo app fully standalone (no server dependency)
+- 2024-12-31: Renamed project to Iishnitsa
 - 2024-12-30: Added standalone Electron desktop app
-- 2024-12-30: Fixed MCP proxy for external servers
 - 2024-12-30: Initial MVP with chat, settings, and MCP support
