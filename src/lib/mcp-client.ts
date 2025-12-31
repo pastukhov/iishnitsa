@@ -35,13 +35,13 @@ async function mcpRequest(
     body.id = id ?? Date.now();
   }
 
-  const response = await window.electronAPI.fetch(serverUrl, {
+  const response = await fetch(serverUrl, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
   });
 
-  const newSessionId = response.headers["mcp-session-id"];
+  const newSessionId = response.headers.get("mcp-session-id");
   if (newSessionId) {
     if (!clientStates.has(serverUrl)) {
       clientStates.set(serverUrl, { sessionId: null, tools: [] });
@@ -57,14 +57,11 @@ async function mcpRequest(
     throw new Error(`MCP error: ${response.statusText}`);
   }
 
-  if (!response.body) {
+  const responseText = await response.text();
+  if (!responseText) {
     return null;
   }
-
-  const data =
-    typeof response.body === "string"
-      ? JSON.parse(response.body)
-      : response.body;
+  const data = JSON.parse(responseText);
   if (data.error) {
     throw new Error(
       `MCP error: ${data.error.message || JSON.stringify(data.error)}`,

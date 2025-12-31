@@ -65,6 +65,36 @@ interface AppState {
   deleteMCPServer: (id: string) => void;
 }
 
+const storageKeys = {
+  chats: "iishnitsa.chats",
+  currentChatId: "iishnitsa.currentChatId",
+  settings: "iishnitsa.settings",
+};
+
+const hasLocalStorage =
+  typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+
+const loadFromStorage = async <T>(key: string, fallback: T): Promise<T> => {
+  if (!hasLocalStorage) return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    console.error("Failed to read from storage:", error);
+    return fallback;
+  }
+};
+
+const saveToStorage = async (key: string, value: unknown): Promise<void> => {
+  if (!hasLocalStorage) return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error("Failed to write to storage:", error);
+  }
+};
+
 const defaultSettings: Settings = {
   baseUrl: "https://api.openai.com/v1",
   apiKey: "",
@@ -82,9 +112,15 @@ export const useStore = create<AppState>((set, get) => ({
 
   initialize: async () => {
     try {
-      const chats = await window.electronAPI.store.get("chats");
-      const currentChatId = await window.electronAPI.store.get("currentChatId");
-      const settings = await window.electronAPI.store.get("settings");
+      const chats = await loadFromStorage<Chat[]>(storageKeys.chats, []);
+      const currentChatId = await loadFromStorage<string | null>(
+        storageKeys.currentChatId,
+        null,
+      );
+      const settings = await loadFromStorage<Settings | null>(
+        storageKeys.settings,
+        null,
+      );
 
       set({
         chats: chats || [],
@@ -102,13 +138,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   saveToStore: async () => {
     const { chats, currentChatId, settings } = get();
-    try {
-      await window.electronAPI.store.set("chats", chats);
-      await window.electronAPI.store.set("currentChatId", currentChatId);
-      await window.electronAPI.store.set("settings", settings);
-    } catch (error) {
-      console.error("Failed to save to store:", error);
-    }
+    await saveToStorage(storageKeys.chats, chats);
+    await saveToStorage(storageKeys.currentChatId, currentChatId);
+    await saveToStorage(storageKeys.settings, settings);
   },
 
   getCurrentChat: () => {

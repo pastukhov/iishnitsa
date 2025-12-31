@@ -2,18 +2,19 @@
 
 ## Project Structure & Module Organization
 - `client/` contains the Expo/React Native app (entry: `client/App.tsx`).
-- `src/` is the web/Electron renderer source (entry: `src/main.tsx`, styles in `src/styles/`).
-- `electron/` holds the Electron main/preload process (`electron/main.ts`, `electron/preload.ts`).
-- `assets/` stores static app assets; `dist/` and `electron-dist/` are build outputs.
-- Root config files include `app.json`, `eas.json`, `vite.electron.config.ts`, and `tsconfig*.json`.
+- `src/` is the web renderer source (entry: `src/main.tsx`, styles in `src/styles/`).
+- `assets/` stores static app assets; `dist/` is a build output.
+- Root config files include `app.json`, `eas.json`, and `tsconfig*.json`.
 
 ## Build, Test, and Development Commands
 - `npm run expo:dev`: start the Expo dev server for the mobile client in local Replit-style env.
 - `npm run expo:static:build`: build the static Expo bundle (uses `scripts/build.js`).
+- `npm install eas-cli`: install EAS CLI (one-time setup for APK builds).
+- `./node_modules/.bin/eas login`: authenticate EAS CLI (one-time setup for APK builds).
+- `./node_modules/.bin/eas build --platform android --profile preview`: build an Android APK.
 - `npm run lint` / `npm run lint:fix`: run ESLint (and auto-fix) for the Expo codebase.
 - `npm run check:types`: TypeScript typecheck across the project.
 - `npm run check:format` / `npm run format`: Prettier formatting checks and fixes.
-- `scripts/electron-dev.sh`: local Electron dev runner; `scripts/electron-build.sh` builds Electron app.
 
 ## Coding Style & Naming Conventions
 - TypeScript/JavaScript with double quotes and 2-space indentation (enforced by Prettier).
@@ -32,4 +33,4 @@
 
 ## Security & Configuration Tips
 - Avoid committing secrets or local credentials; prefer environment variables for tokens.
-- Treat `dist/` and `electron-dist/` as build artifacts and avoid manual edits.
+- Treat `dist/` as a build artifact and avoid manual edits.

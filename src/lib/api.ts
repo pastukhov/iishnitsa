@@ -46,7 +46,7 @@ export async function sendChatMessage(
     }));
   }
 
-  const response = await window.electronAPI.fetch(url, {
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -56,15 +56,17 @@ export async function sendChatMessage(
   });
 
   if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
     throw new Error(
-      response.error || `API error: ${response.status} ${response.statusText}`,
+      errorText || `API error: ${response.status} ${response.statusText}`,
     );
   }
 
   let content = "";
   const toolCalls: ToolCall[] = [];
 
-  const lines = response.body.split("\n");
+  const responseText = await response.text();
+  const lines = responseText.split("\n");
   for (const line of lines) {
     if (!line.startsWith("data: ")) continue;
     const data = line.slice(6);
