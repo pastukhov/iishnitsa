@@ -1,5 +1,7 @@
 # Иишница
 
+[![APK](https://img.shields.io/badge/APK-latest-brightgreen)](https://github.com/pastukhov/iishnitsa/releases/latest/download/iishnitsa.apk)
+
 Иишница — кроссплатформенное приложение с клиентом на Expo/React Native и веб-рендерером. Проект рассчитан на локальную разработку и сборку под разные окружения.
 
 ## Возможности
@@ -40,6 +42,9 @@ npm run expo:dev
 ## Настройка
 - Параметры API и MCP задаются в разделе Settings внутри приложения.
 - Секреты храните в окружении и не коммитьте в репозиторий.
+
+## CI
+- GitHub Actions для сборки APK требует секрет `EXPO_TOKEN` (Expo access token).
 
 ## Вклад
 - Держите изменения небольшими и локальными.

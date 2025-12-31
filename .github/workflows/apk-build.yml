@@ -1,0 +1,46 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Trigger EAS build
+        run: |
+          npx eas build --platform android --profile preview --non-interactive --json > build.json
+          node -e "const fs=require('fs');const data=JSON.parse(fs.readFileSync('build.json','utf8'));const build=Array.isArray(data)?data[0]:data;console.log('BUILD_ID='+(build.id||build.buildId));" >> $GITHUB_ENV
+
+      - name: Download APK
+        run: npx eas build:download --platform android --id $BUILD_ID --output iishnitsa.apk
+
+      - name: Publish release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: apk-latest
+          name: APK Latest
+          artifacts: iishnitsa.apk
+          artifactContentType: application/vnd.android.package-archive
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true
