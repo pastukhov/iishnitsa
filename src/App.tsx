@@ -9,7 +9,7 @@ import "./styles/App.css";
 type View = "chat" | "settings";
 
 export default function App() {
-  const { initialized, initialize, chats, currentChatId, createChat } = useStore();
+  const { initialized, initialize, chats, createChat } = useStore();
   const [currentView, setCurrentView] = useState<View>("chat");
   const [sidebarOpen, setSidebarOpen] = useState(true);
 

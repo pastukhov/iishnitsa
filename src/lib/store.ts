@@ -44,18 +44,21 @@ interface AppState {
   currentChatId: string | null;
   settings: Settings;
   initialized: boolean;
-  
+
   initialize: () => Promise<void>;
   saveToStore: () => Promise<void>;
-  
+
   getCurrentChat: () => Chat | null;
   createChat: () => string;
   deleteChat: (id: string) => void;
   selectChat: (id: string) => void;
-  
-  addMessage: (chatId: string, message: Omit<Message, "id" | "timestamp">) => void;
+
+  addMessage: (
+    chatId: string,
+    message: Omit<Message, "id" | "timestamp">,
+  ) => void;
   updateMessage: (chatId: string, messageId: string, content: string) => void;
-  
+
   updateSettings: (settings: Partial<Settings>) => void;
   addMCPServer: (server: Omit<MCPServer, "id">) => void;
   updateMCPServer: (id: string, updates: Partial<MCPServer>) => void;
@@ -86,7 +89,9 @@ export const useStore = create<AppState>((set, get) => ({
       set({
         chats: chats || [],
         currentChatId: currentChatId || null,
-        settings: settings ? { ...defaultSettings, ...settings } : defaultSettings,
+        settings: settings
+          ? { ...defaultSettings, ...settings }
+          : defaultSettings,
         initialized: true,
       });
     } catch (error) {
@@ -158,7 +163,8 @@ export const useStore = create<AppState>((set, get) => ({
         if (chat.id !== chatId) return chat;
         const title =
           chat.messages.length === 0 && message.role === "user"
-            ? message.content.slice(0, 30) + (message.content.length > 30 ? "..." : "")
+            ? message.content.slice(0, 30) +
+              (message.content.length > 30 ? "..." : "")
             : chat.title;
         return {
           ...chat,
@@ -178,7 +184,7 @@ export const useStore = create<AppState>((set, get) => ({
         return {
           ...chat,
           messages: chat.messages.map((m) =>
-            m.id === messageId ? { ...m, content } : m
+            m.id === messageId ? { ...m, content } : m,
           ),
           updatedAt: Date.now(),
         };
@@ -210,7 +216,7 @@ export const useStore = create<AppState>((set, get) => ({
       settings: {
         ...state.settings,
         mcpServers: state.settings.mcpServers.map((s) =>
-          s.id === id ? { ...s, ...updates } : s
+          s.id === id ? { ...s, ...updates } : s,
         ),
       },
     }));

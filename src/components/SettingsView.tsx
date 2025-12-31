@@ -1,9 +1,15 @@
 import React, { useState } from "react";
-import { useStore, MCPServer } from "../lib/store";
+import { useStore } from "../lib/store";
 import "../styles/SettingsView.css";
 
 export default function SettingsView() {
-  const { settings, updateSettings, addMCPServer, updateMCPServer, deleteMCPServer } = useStore();
+  const {
+    settings,
+    updateSettings,
+    addMCPServer,
+    updateMCPServer,
+    deleteMCPServer,
+  } = useStore();
   const [newServerName, setNewServerName] = useState("");
   const [newServerUrl, setNewServerUrl] = useState("");
 
@@ -100,7 +106,9 @@ export default function SettingsView() {
                         type="checkbox"
                         checked={server.enabled}
                         onChange={(e) =>
-                          updateMCPServer(server.id, { enabled: e.target.checked })
+                          updateMCPServer(server.id, {
+                            enabled: e.target.checked,
+                          })
                         }
                       />
                       <span className="toggle-slider" />

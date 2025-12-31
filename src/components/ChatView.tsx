@@ -1,11 +1,16 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useStore, Message, ToolCall } from "../lib/store";
+import { useStore } from "../lib/store";
 import { sendChatMessage, OpenAIMessage, MCPTool } from "../lib/api";
-import { initializeMCPServer, callMCPTool, getMCPTools, clearMCPSession } from "../lib/mcp-client";
+import {
+  initializeMCPServer,
+  callMCPTool,
+  getMCPTools,
+  clearMCPSession,
+} from "../lib/mcp-client";
 import "../styles/ChatView.css";
 
 export default function ChatView() {
-  const { getCurrentChat, addMessage, updateMessage, settings } = useStore();
+  const { getCurrentChat, addMessage, settings } = useStore();
   const chat = getCurrentChat();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -95,7 +100,7 @@ export default function ChatView() {
         settings.model,
         messages,
         settings.mcpEnabled && mcpTools.length > 0 ? mcpTools : undefined,
-        (chunk) => setStreamingContent((prev) => prev + chunk)
+        (chunk) => setStreamingContent((prev) => prev + chunk),
       );
 
       while (response.toolCalls && response.toolCalls.length > 0) {
@@ -115,17 +120,16 @@ export default function ChatView() {
           }
         }
 
-        const toolResultsContent = response.toolCalls
-          .map((tc) => `Tool: ${tc.name}\nResult: ${JSON.stringify(tc.result, null, 2)}`)
-          .join("\n\n");
-
         messages.push({
           role: "assistant",
           content: response.content || "",
           tool_calls: response.toolCalls.map((tc) => ({
             id: tc.id,
             type: "function",
-            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+            function: {
+              name: tc.name,
+              arguments: JSON.stringify(tc.arguments),
+            },
           })),
         });
 
@@ -142,7 +146,7 @@ export default function ChatView() {
           settings.model,
           messages,
           settings.mcpEnabled && mcpTools.length > 0 ? mcpTools : undefined,
-          (chunk) => setStreamingContent((prev) => prev + chunk)
+          (chunk) => setStreamingContent((prev) => prev + chunk),
         );
       }
 

@@ -9,8 +9,14 @@ interface SidebarProps {
   onViewChange: (view: "chat" | "settings") => void;
 }
 
-export default function Sidebar({ open, onToggle, currentView, onViewChange }: SidebarProps) {
-  const { chats, currentChatId, selectChat, createChat, deleteChat } = useStore();
+export default function Sidebar({
+  open,
+  onToggle,
+  currentView,
+  onViewChange,
+}: SidebarProps) {
+  const { chats, currentChatId, selectChat, createChat, deleteChat } =
+    useStore();
 
   const handleNewChat = () => {
     createChat();

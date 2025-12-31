@@ -6,7 +6,7 @@ interface ElectronAPI {
   };
   fetch: (
     url: string,
-    options: RequestInit
+    options: RequestInit,
   ) => Promise<{
     ok: boolean;
     status: number;

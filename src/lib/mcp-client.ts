@@ -11,7 +11,7 @@ async function mcpRequest(
   serverUrl: string,
   method: string,
   params: Record<string, any> = {},
-  id?: number
+  id?: number,
 ): Promise<any> {
   const state = clientStates.get(serverUrl);
   const isNotification = method.startsWith("notifications/");
@@ -61,15 +61,22 @@ async function mcpRequest(
     return null;
   }
 
-  const data = typeof response.body === "string" ? JSON.parse(response.body) : response.body;
+  const data =
+    typeof response.body === "string"
+      ? JSON.parse(response.body)
+      : response.body;
   if (data.error) {
-    throw new Error(`MCP error: ${data.error.message || JSON.stringify(data.error)}`);
+    throw new Error(
+      `MCP error: ${data.error.message || JSON.stringify(data.error)}`,
+    );
   }
 
   return data.result;
 }
 
-export async function initializeMCPServer(serverUrl: string): Promise<MCPTool[]> {
+export async function initializeMCPServer(
+  serverUrl: string,
+): Promise<MCPTool[]> {
   clientStates.set(serverUrl, { sessionId: null, tools: [] });
 
   await mcpRequest(serverUrl, "initialize", {
@@ -94,7 +101,7 @@ export async function initializeMCPServer(serverUrl: string): Promise<MCPTool[]>
 export async function callMCPTool(
   serverUrl: string,
   toolName: string,
-  args: Record<string, any>
+  args: Record<string, any>,
 ): Promise<any> {
   const result = await mcpRequest(serverUrl, "tools/call", {
     name: toolName,

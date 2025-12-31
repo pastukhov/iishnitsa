@@ -1,5 +1,4 @@
 declare module "react-dom/client" {
-  import { Container } from "react-dom";
   import { ReactNode } from "react";
 
   interface Root {
@@ -8,5 +7,8 @@ declare module "react-dom/client" {
   }
 
   export function createRoot(container: Element | DocumentFragment): Root;
-  export function hydrateRoot(container: Element | DocumentFragment, children: ReactNode): Root;
+  export function hydrateRoot(
+    container: Element | DocumentFragment,
+    children: ReactNode,
+  ): Root;
 }

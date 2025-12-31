@@ -1,4 +1,4 @@
-import { Message, ToolCall } from "./store";
+import { ToolCall } from "./store";
 
 export interface OpenAIMessage {
   role: "user" | "assistant" | "system";
@@ -25,7 +25,7 @@ export async function sendChatMessage(
   model: string,
   messages: OpenAIMessage[],
   tools?: MCPTool[],
-  onChunk?: (chunk: string) => void
+  onChunk?: (chunk: string) => void,
 ): Promise<{ content: string; toolCalls?: ToolCall[] }> {
   const url = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
 
@@ -56,7 +56,9 @@ export async function sendChatMessage(
   });
 
   if (!response.ok) {
-    throw new Error(response.error || `API error: ${response.status} ${response.statusText}`);
+    throw new Error(
+      response.error || `API error: ${response.status} ${response.statusText}`,
+    );
   }
 
   let content = "";
@@ -96,13 +98,14 @@ export async function sendChatMessage(
                   (existing || "") + tc.function.arguments;
               } else {
                 (toolCalls[tc.index] as any)._rawArgs =
-                  ((toolCalls[tc.index] as any)._rawArgs || "") + tc.function.arguments;
+                  ((toolCalls[tc.index] as any)._rawArgs || "") +
+                  tc.function.arguments;
               }
             }
           }
         }
       }
-    } catch (e) {}
+    } catch {}
   }
 
   for (const tc of toolCalls) {
