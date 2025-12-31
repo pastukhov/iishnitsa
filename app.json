@@ -17,6 +17,7 @@
         "backgroundColor": "#1A1A2E",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
+      "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.iishnitsa.app"
