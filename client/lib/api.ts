@@ -147,12 +147,6 @@ async function processConversation(
     throw new Error(errorMessage);
   }
 
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error("No response body");
-  }
-
-  const decoder = new TextDecoder();
   let fullContent = "";
   let toolCalls: Array<{
     id: string;
@@ -164,53 +158,86 @@ async function processConversation(
   }> = [];
   let currentToolCallIndex = -1;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const chunk = decoder.decode(value, { stream: true });
+  const parseChunk = (chunk: string) => {
     const lines = chunk.split("\n").filter((line) => line.trim() !== "");
 
     for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        const data = line.slice(6);
-        if (data === "[DONE]") continue;
+      if (!line.startsWith("data: ")) {
+        continue;
+      }
+      const data = line.slice(6);
+      if (data === "[DONE]") continue;
 
-        try {
-          const json = JSON.parse(data);
-          const delta = json.choices?.[0]?.delta;
+      try {
+        const json = JSON.parse(data);
+        const delta = json.choices?.[0]?.delta;
 
-          if (delta?.content) {
-            fullContent += delta.content;
-            onChunk(fullContent);
-          }
+        if (delta?.content) {
+          fullContent += delta.content;
+          onChunk(fullContent);
+        }
 
-          if (delta?.tool_calls) {
-            for (const toolCall of delta.tool_calls) {
-              const index = toolCall.index ?? 0;
+        if (delta?.tool_calls) {
+          for (const toolCall of delta.tool_calls) {
+            const index = toolCall.index ?? 0;
 
-              if (index > currentToolCallIndex) {
-                currentToolCallIndex = index;
-                toolCalls.push({
-                  id: toolCall.id || `call_${Date.now()}_${index}`,
-                  type: "function",
-                  function: {
-                    name: toolCall.function?.name || "",
-                    arguments: toolCall.function?.arguments || "",
-                  },
-                });
-              } else if (toolCalls[index]) {
-                if (toolCall.function?.name) {
-                  toolCalls[index].function.name += toolCall.function.name;
-                }
-                if (toolCall.function?.arguments) {
-                  toolCalls[index].function.arguments += toolCall.function.arguments;
-                }
+            if (index > currentToolCallIndex) {
+              currentToolCallIndex = index;
+              toolCalls.push({
+                id: toolCall.id || `call_${Date.now()}_${index}`,
+                type: "function",
+                function: {
+                  name: toolCall.function?.name || "",
+                  arguments: toolCall.function?.arguments || "",
+                },
+              });
+            } else if (toolCalls[index]) {
+              if (toolCall.function?.name) {
+                toolCalls[index].function.name += toolCall.function.name;
+              }
+              if (toolCall.function?.arguments) {
+                toolCalls[index].function.arguments += toolCall.function.arguments;
               }
             }
           }
-        } catch {
         }
+      } catch {
+      }
+    }
+  };
+
+  const reader = response.body?.getReader();
+  if (reader) {
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      parseChunk(chunk);
+    }
+  } else {
+    const responseText = await response.text();
+    if (responseText.includes("data: ")) {
+      parseChunk(responseText);
+    } else if (responseText.trim()) {
+      try {
+        const json = JSON.parse(responseText);
+        const message = json.choices?.[0]?.message;
+        if (message?.content) {
+          fullContent = message.content;
+          onChunk(fullContent);
+        }
+        if (message?.tool_calls) {
+          toolCalls = message.tool_calls.map((toolCall: any) => ({
+            id: toolCall.id || "",
+            type: "function",
+            function: {
+              name: toolCall.function?.name || "",
+              arguments: toolCall.function?.arguments || "",
+            },
+          }));
+        }
+      } catch {
       }
     }
   }
