@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,3 +50,15 @@ jobs:
           fi
           git tag "$NEXT_TAG"
           git push origin "$NEXT_TAG"
+
+      - name: Trigger APK build
+        if: env.NEXT_TAG != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "apk-build.yml",
+              ref: process.env.NEXT_TAG,
+            });
