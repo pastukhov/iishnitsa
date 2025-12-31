@@ -43,6 +43,7 @@ export class MCPClient {
   private serverName: string;
   private initialized: boolean = false;
   private initData: { protocolVersion: string; serverInfo: any; capabilities: any } | null = null;
+  private sessionId: string | null = null;
 
   constructor(server: MCPServer) {
     this.serverUrl = server.url;
@@ -62,12 +63,21 @@ export class MCPClient {
       "Accept": "application/json, text/event-stream",
     };
 
+    if (this.sessionId && method !== "initialize") {
+      headers["Mcp-Session-Id"] = this.sessionId;
+    }
+
     try {
       const response = await fetch(this.serverUrl, {
         method: "POST",
         headers,
         body: JSON.stringify(request),
       });
+
+      const newSessionId = response.headers.get("mcp-session-id");
+      if (newSessionId) {
+        this.sessionId = newSessionId;
+      }
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -124,12 +134,18 @@ export class MCPClient {
         params,
       };
 
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+      };
+
+      if (this.sessionId && method !== "initialize") {
+        headers["Mcp-Session-Id"] = this.sessionId;
+      }
+
       await fetch(this.serverUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json, text/event-stream",
-        },
+        headers,
         body: JSON.stringify(request),
       });
     } catch (error: any) {
