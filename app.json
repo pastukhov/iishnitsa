@@ -2,7 +2,7 @@
   "expo": {
     "name": "Iishnitsa",
     "slug": "iishnitsa",
-    "version": "1.0.0",
+    "version": "1.1.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "iishnitsa",
@@ -20,7 +20,8 @@
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.iishnitsa.app"
+      "package": "com.iishnitsa.app",
+      "versionCode": 10103
     },
     "web": {
       "output": "single",
