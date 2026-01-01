@@ -1,4 +1,5 @@
 import { ToolCall } from "./store";
+import { ProviderId, buildAuthHeaders, normalizeBaseUrl } from "./providers";
 
 export interface OpenAIMessage {
   role: "user" | "assistant" | "system";
@@ -26,8 +27,9 @@ export async function sendChatMessage(
   messages: OpenAIMessage[],
   tools?: MCPTool[],
   onChunk?: (chunk: string) => void,
+  providerId: ProviderId = "openai",
 ): Promise<{ content: string; toolCalls?: ToolCall[] }> {
-  const url = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const url = `${normalizeBaseUrl(baseUrl)}/chat/completions`;
 
   const body: Record<string, any> = {
     model,
@@ -50,7 +52,7 @@ export async function sendChatMessage(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      ...buildAuthHeaders(providerId, apiKey),
     },
     body: JSON.stringify(body),
   });

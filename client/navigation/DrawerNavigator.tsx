@@ -23,10 +23,11 @@ const Drawer = createDrawerNavigator<DrawerParamList>();
 function CustomDrawerContent(props: DrawerContentComponentProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { chats, currentChatId, createNewChat, selectChat, deleteChat } = useChatStore();
+  const { chats, currentChatId, createNewChat, selectChat, deleteChat } =
+    useChatStore();
 
   const sortedChats = [...chats].sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
   );
 
   const handleNewChat = () => {
@@ -46,7 +47,10 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
     if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     } else if (diffDays === 1) {
       return "Yesterday";
     } else if (diffDays < 7) {
@@ -61,11 +65,17 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
       <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
         <View style={styles.profileRow}>
           <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-            <MaterialIcons name="smart-toy" size={24} color={theme.buttonText} />
+            <MaterialIcons
+              name="smart-toy"
+              size={24}
+              color={theme.buttonText}
+            />
           </View>
           <View style={styles.profileInfo}>
             <ThemedText style={styles.appName}>AI Agent</ThemedText>
-            <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
+            <ThemedText
+              style={[styles.subtitle, { color: theme.textSecondary }]}
+            >
               Chat with AI
             </ThemedText>
           </View>
@@ -102,8 +112,8 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
                   item.id === currentChatId
                     ? theme.primaryContainer
                     : pressed
-                    ? theme.surfaceVariant
-                    : "transparent",
+                      ? theme.surfaceVariant
+                      : "transparent",
               },
             ]}
             onPress={() => handleSelectChat(item.id)}
@@ -113,7 +123,11 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
               <MaterialIcons
                 name="chat-bubble-outline"
                 size={20}
-                color={item.id === currentChatId ? theme.primary : theme.textSecondary}
+                color={
+                  item.id === currentChatId
+                    ? theme.primary
+                    : theme.textSecondary
+                }
               />
               <View style={styles.chatItemText}>
                 <ThemedText
@@ -125,7 +139,9 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
                 >
                   {item.title}
                 </ThemedText>
-                <ThemedText style={[styles.chatDate, { color: theme.textSecondary }]}>
+                <ThemedText
+                  style={[styles.chatDate, { color: theme.textSecondary }]}
+                >
                   {formatDate(item.updatedAt)}
                 </ThemedText>
               </View>
@@ -134,14 +150,18 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+            <ThemedText
+              style={[styles.emptyText, { color: theme.textSecondary }]}
+            >
               No chats yet
             </ThemedText>
           </View>
         }
       />
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
+      <View
+        style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}
+      >
         <Pressable
           style={({ pressed }) => [
             styles.footerItem,
@@ -149,8 +169,14 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
           ]}
           onPress={() => props.navigation.navigate("Settings")}
         >
-          <MaterialIcons name="settings" size={24} color={theme.textSecondary} />
-          <ThemedText style={[styles.footerText, { color: theme.textSecondary }]}>
+          <MaterialIcons
+            name="settings"
+            size={24}
+            color={theme.textSecondary}
+          />
+          <ThemedText
+            style={[styles.footerText, { color: theme.textSecondary }]}
+          >
             Settings
           </ThemedText>
         </Pressable>

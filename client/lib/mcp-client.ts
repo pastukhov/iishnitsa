@@ -42,7 +42,11 @@ export class MCPClient {
   private serverUrl: string;
   private serverName: string;
   private initialized: boolean = false;
-  private initData: { protocolVersion: string; serverInfo: any; capabilities: any } | null = null;
+  private initData: {
+    protocolVersion: string;
+    serverInfo: any;
+    capabilities: any;
+  } | null = null;
   private sessionId: string | null = null;
 
   constructor(server: MCPServer) {
@@ -50,7 +54,10 @@ export class MCPClient {
     this.serverName = server.name;
   }
 
-  private async sendRequest(method: string, params?: Record<string, any>): Promise<any> {
+  private async sendRequest(
+    method: string,
+    params?: Record<string, any>,
+  ): Promise<any> {
     const request: MCPRequest = {
       jsonrpc: "2.0",
       id: Date.now(),
@@ -60,7 +67,7 @@ export class MCPClient {
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      "Accept": "application/json, text/event-stream",
+      Accept: "application/json, text/event-stream",
     };
 
     if (this.sessionId && method !== "initialize") {
@@ -81,7 +88,10 @@ export class MCPClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`MCP ${method} failed with status ${response.status}:`, errorText);
+        console.error(
+          `MCP ${method} failed with status ${response.status}:`,
+          errorText,
+        );
         throw new Error(`MCP server returned ${response.status}: ${errorText}`);
       }
 
@@ -91,9 +101,12 @@ export class MCPClient {
       }
 
       const contentType = response.headers.get("content-type") || "";
-      
-      if (contentType.includes("text/event-stream") || responseText.includes("\n")) {
-        const lines = responseText.split("\n").filter(line => line.trim());
+
+      if (
+        contentType.includes("text/event-stream") ||
+        responseText.includes("\n")
+      ) {
+        const lines = responseText.split("\n").filter((line) => line.trim());
         for (const line of lines) {
           let jsonLine = line;
           if (line.startsWith("data: ")) {
@@ -108,8 +121,7 @@ export class MCPClient {
               }
               return parsed.result;
             }
-          } catch {
-          }
+          } catch {}
         }
       }
 
@@ -121,12 +133,18 @@ export class MCPClient {
 
       return jsonResponse.result;
     } catch (error: any) {
-      console.error(`MCP request to ${this.serverName} failed:`, error.message || error);
+      console.error(
+        `MCP request to ${this.serverName} failed:`,
+        error.message || error,
+      );
       throw error;
     }
   }
 
-  private async sendNotification(method: string, params?: Record<string, any>): Promise<void> {
+  private async sendNotification(
+    method: string,
+    params?: Record<string, any>,
+  ): Promise<void> {
     try {
       const request: MCPRequest = {
         jsonrpc: "2.0",
@@ -136,7 +154,7 @@ export class MCPClient {
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream",
+        Accept: "application/json, text/event-stream",
       };
 
       if (this.sessionId && method !== "initialize") {
@@ -153,11 +171,15 @@ export class MCPClient {
     }
   }
 
-  async initialize(): Promise<{ protocolVersion: string; serverInfo: any; capabilities: any }> {
+  async initialize(): Promise<{
+    protocolVersion: string;
+    serverInfo: any;
+    capabilities: any;
+  }> {
     if (this.initialized && this.initData) {
       return this.initData;
     }
-    
+
     const result = await this.sendRequest("initialize", {
       protocolVersion: "2024-11-05",
       capabilities: {},
@@ -166,9 +188,9 @@ export class MCPClient {
         version: "1.0.0",
       },
     });
-    
+
     await this.sendNotification("notifications/initialized");
-    
+
     this.initialized = true;
     this.initData = result;
     return result;
@@ -183,7 +205,10 @@ export class MCPClient {
     return result?.tools || [];
   }
 
-  async callTool(toolName: string, args: Record<string, any>): Promise<MCPToolResult> {
+  async callTool(
+    toolName: string,
+    args: Record<string, any>,
+  ): Promise<MCPToolResult> {
     const result = await this.sendRequest("tools/call", {
       name: toolName,
       arguments: args,
@@ -264,7 +289,7 @@ export async function getToolsFromServers(servers: MCPServer[]): Promise<{
           error: error.message || "Failed to connect",
         });
       }
-    })
+    }),
   );
 
   return { tools, errors };
@@ -273,7 +298,7 @@ export async function getToolsFromServers(servers: MCPServer[]): Promise<{
 export async function executeToolCall(
   server: MCPServer,
   toolName: string,
-  args: Record<string, any>
+  args: Record<string, any>,
 ): Promise<MCPToolResult> {
   const client = getOrCreateClient(server);
   await client.initialize();
@@ -281,7 +306,7 @@ export async function executeToolCall(
 }
 
 export function mcpToolsToOpenAIFunctions(
-  tools: Array<MCPTool & { serverName: string; serverId: string }>
+  tools: Array<MCPTool & { serverName: string; serverId: string }>,
 ): Array<{
   type: "function";
   function: {

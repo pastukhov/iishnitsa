@@ -101,6 +101,7 @@ export default function ChatView() {
         messages,
         settings.mcpEnabled && mcpTools.length > 0 ? mcpTools : undefined,
         (chunk) => setStreamingContent((prev) => prev + chunk),
+        settings.providerId,
       );
 
       while (response.toolCalls && response.toolCalls.length > 0) {
@@ -147,6 +148,7 @@ export default function ChatView() {
           messages,
           settings.mcpEnabled && mcpTools.length > 0 ? mcpTools : undefined,
           (chunk) => setStreamingContent((prev) => prev + chunk),
+          settings.providerId,
         );
       }
 

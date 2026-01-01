@@ -7,6 +7,11 @@ import {
   MCPTool,
   MCPToolResult,
 } from "@/lib/mcp-client";
+import {
+  buildAuthHeaders,
+  fetchProviderModels,
+  resolveBaseUrl,
+} from "@/lib/providers";
 
 interface ChatCompletionMessage {
   role: "user" | "assistant" | "system" | "tool";
@@ -43,7 +48,7 @@ export async function sendChatMessage(
   endpoint: EndpointConfig,
   onChunk: (content: string) => void,
   mcpServers: MCPServer[] = [],
-  mcpEnabled: boolean = false
+  mcpEnabled: boolean = false,
 ): Promise<void> {
   const chatMessages: ChatCompletionMessage[] = [];
 
@@ -64,14 +69,18 @@ export async function sendChatMessage(
   });
 
   let tools: OpenAIFunction[] = [];
-  let mcpToolsMap: Map<string, MCPTool & { serverName: string; serverId: string }> = new Map();
+  let mcpToolsMap: Map<
+    string,
+    MCPTool & { serverName: string; serverId: string }
+  > = new Map();
 
   if (mcpEnabled && mcpServers.length > 0) {
     const enabledServers = mcpServers.filter((s) => s.enabled);
     if (enabledServers.length > 0) {
       try {
-        const { tools: fetchedTools, errors } = await getToolsFromServers(enabledServers);
-        
+        const { tools: fetchedTools, errors } =
+          await getToolsFromServers(enabledServers);
+
         if (errors.length > 0) {
           console.warn("MCP server errors:", errors);
         }
@@ -94,7 +103,7 @@ export async function sendChatMessage(
     onChunk,
     tools,
     mcpToolsMap,
-    mcpServers
+    mcpServers,
   );
 }
 
@@ -105,14 +114,14 @@ async function processConversation(
   tools: OpenAIFunction[],
   mcpToolsMap: Map<string, MCPTool & { serverName: string; serverId: string }>,
   mcpServers: MCPServer[],
-  depth: number = 0
+  depth: number = 0,
 ): Promise<void> {
   const maxDepth = 10;
   if (depth >= maxDepth) {
     throw new Error("Maximum tool call depth exceeded");
   }
 
-  const baseUrl = normalizeBaseUrl(endpoint.baseUrl);
+  const baseUrl = resolveBaseUrl(endpoint.providerId, endpoint.baseUrl);
   const url = `${baseUrl}/chat/completions`;
 
   const requestBody: any = {
@@ -130,7 +139,7 @@ async function processConversation(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${endpoint.apiKey}`,
+      ...buildAuthHeaders(endpoint.providerId, endpoint.apiKey),
     },
     body: JSON.stringify(requestBody),
   });
@@ -196,13 +205,13 @@ async function processConversation(
                 toolCalls[index].function.name += toolCall.function.name;
               }
               if (toolCall.function?.arguments) {
-                toolCalls[index].function.arguments += toolCall.function.arguments;
+                toolCalls[index].function.arguments +=
+                  toolCall.function.arguments;
               }
             }
           }
         }
-      } catch {
-      }
+      } catch {}
     }
   };
 
@@ -237,8 +246,7 @@ async function processConversation(
             },
           }));
         }
-      } catch {
-      }
+      } catch {}
     }
   }
 
@@ -254,10 +262,11 @@ async function processConversation(
       const { toolName } = parseToolCallName(tc.function.name);
       return toolName;
     });
-    const statusMessage = toolNames.length === 1
-      ? `[Using tool: ${toolNames[0]}...]`
-      : `[Using tools: ${toolNames.join(", ")}...]`;
-    
+    const statusMessage =
+      toolNames.length === 1
+        ? `[Using tool: ${toolNames[0]}...]`
+        : `[Using tools: ${toolNames.join(", ")}...]`;
+
     onChunk(statusMessage);
 
     for (const toolCall of toolCalls) {
@@ -275,8 +284,7 @@ async function processConversation(
           let args: Record<string, any> = {};
           try {
             args = JSON.parse(toolCall.function.arguments);
-          } catch {
-          }
+          } catch {}
 
           const toolResult = await executeToolCall(server, toolName, args);
           result = formatToolResult(toolResult);
@@ -300,7 +308,7 @@ async function processConversation(
       tools,
       mcpToolsMap,
       mcpServers,
-      depth + 1
+      depth + 1,
     );
   }
 }
@@ -323,53 +331,38 @@ function formatToolResult(result: MCPToolResult): string {
     .join("\n");
 }
 
-function normalizeBaseUrl(baseUrl: string): string {
-  let url = baseUrl.trim();
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    url = "https://" + url;
-  }
-  while (url.endsWith("/")) {
-    url = url.slice(0, -1);
-  }
-  if (!url.endsWith("/v1")) {
-    if (!url.includes("/v1")) {
-      url = url + "/v1";
-    }
-  }
-  return url;
-}
-
 export async function testConnection(endpoint: EndpointConfig): Promise<{
   success: boolean;
   message: string;
   models?: string[];
 }> {
   try {
-    const baseUrl = normalizeBaseUrl(endpoint.baseUrl);
-    const url = `${baseUrl}/models`;
-
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${endpoint.apiKey}`,
-      },
+    const result = await fetchProviderModels({
+      providerId: endpoint.providerId,
+      baseUrl: endpoint.baseUrl,
+      apiKey: endpoint.apiKey,
+      currentModel: endpoint.model,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    if (result.error) {
       return {
         success: false,
-        message: `Connection failed: ${response.status} ${errorText}`,
+        message: result.error,
       };
     }
 
-    const data = await response.json();
-    const models = data.data?.map((m: any) => m.id) || [];
+    if (result.models.length === 0) {
+      return {
+        success: true,
+        message: result.message || "Connected. Enter a model manually.",
+      };
+    }
 
     return {
       success: true,
-      message: `Connected! Found ${models.length} models.`,
-      models,
+      message:
+        result.message || `Connected! Found ${result.models.length} models.`,
+      models: result.models,
     };
   } catch (error: any) {
     return {
@@ -385,8 +378,10 @@ export async function testMCPServer(server: MCPServer): Promise<{
   tools?: string[];
 }> {
   try {
-    const { tools, errors } = await getToolsFromServers([{ ...server, enabled: true }]);
-    
+    const { tools, errors } = await getToolsFromServers([
+      { ...server, enabled: true },
+    ]);
+
     if (errors.length > 0) {
       return {
         success: false,

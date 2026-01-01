@@ -143,11 +143,15 @@ function EmptyState() {
 
   return (
     <View style={styles.emptyState}>
-      <View style={[styles.emptyIcon, { backgroundColor: theme.primaryContainer }]}>
+      <View
+        style={[styles.emptyIcon, { backgroundColor: theme.primaryContainer }]}
+      >
         <MaterialIcons name="chat" size={48} color={theme.primary} />
       </View>
       <ThemedText style={styles.emptyTitle}>Start a conversation</ThemedText>
-      <ThemedText style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+      <ThemedText
+        style={[styles.emptySubtitle, { color: theme.textSecondary }]}
+      >
         Send a message to begin chatting with your AI agent
       </ThemedText>
     </View>
@@ -212,7 +216,12 @@ export default function ChatScreen() {
     try {
       const allMessages = [
         ...messages,
-        { id: "temp", role: "user" as const, content: text, timestamp: new Date().toISOString() },
+        {
+          id: "temp",
+          role: "user" as const,
+          content: text,
+          timestamp: new Date().toISOString(),
+        },
       ];
 
       await sendChatMessage(
@@ -222,16 +231,24 @@ export default function ChatScreen() {
           updateLastAssistantMessage(chunk);
         },
         settings.mcpServers,
-        settings.mcpEnabled
+        settings.mcpEnabled,
       );
     } catch (error: any) {
       updateLastAssistantMessage(
-        `Error: ${error.message || "Failed to get response from AI"}`
+        `Error: ${error.message || "Failed to get response from AI"}`,
       );
     } finally {
       setIsStreaming(false);
     }
-  }, [inputText, isStreaming, messages, settings, addMessage, updateLastAssistantMessage, setIsStreaming]);
+  }, [
+    inputText,
+    isStreaming,
+    messages,
+    settings,
+    addMessage,
+    updateLastAssistantMessage,
+    setIsStreaming,
+  ]);
 
   const handleClearChat = () => {
     if (Platform.OS !== "web") {
@@ -262,13 +279,25 @@ export default function ChatScreen() {
       >
         <Pressable
           onPress={openDrawer}
-          style={({ pressed }) => [styles.headerButton, { opacity: pressed ? 0.6 : 1 }]}
+          style={({ pressed }) => [
+            styles.headerButton,
+            { opacity: pressed ? 0.6 : 1 },
+          ]}
         >
           <MaterialIcons name="menu" size={24} color={theme.text} />
         </Pressable>
 
         <View style={styles.headerCenter}>
-          <View style={[styles.statusDot, { backgroundColor: settings.endpoint.apiKey ? theme.success : theme.error }]} />
+          <View
+            style={[
+              styles.statusDot,
+              {
+                backgroundColor: settings.endpoint.apiKey
+                  ? theme.success
+                  : theme.error,
+              },
+            ]}
+          />
           <ThemedText style={styles.headerTitle} numberOfLines={1}>
             {settings.endpoint.model || "AI Agent"}
           </ThemedText>
@@ -277,13 +306,19 @@ export default function ChatScreen() {
         <View style={styles.headerRight}>
           <Pressable
             onPress={handleClearChat}
-            style={({ pressed }) => [styles.headerButton, { opacity: pressed ? 0.6 : 1 }]}
+            style={({ pressed }) => [
+              styles.headerButton,
+              { opacity: pressed ? 0.6 : 1 },
+            ]}
           >
             <MaterialIcons name="delete-outline" size={24} color={theme.text} />
           </Pressable>
           <Pressable
             onPress={openSettings}
-            style={({ pressed }) => [styles.headerButton, { opacity: pressed ? 0.6 : 1 }]}
+            style={({ pressed }) => [
+              styles.headerButton,
+              { opacity: pressed ? 0.6 : 1 },
+            ]}
           >
             <MaterialIcons name="settings" size={24} color={theme.text} />
           </Pressable>
@@ -352,7 +387,9 @@ export default function ChatScreen() {
                 styles.sendButton,
                 {
                   backgroundColor:
-                    inputText.trim() && !isStreaming ? theme.primary : theme.surfaceVariant,
+                    inputText.trim() && !isStreaming
+                      ? theme.primary
+                      : theme.surfaceVariant,
                   opacity: pressed ? 0.8 : 1,
                 },
               ]}
@@ -360,7 +397,11 @@ export default function ChatScreen() {
               <MaterialIcons
                 name="send"
                 size={20}
-                color={inputText.trim() && !isStreaming ? theme.buttonText : theme.textSecondary}
+                color={
+                  inputText.trim() && !isStreaming
+                    ? theme.buttonText
+                    : theme.textSecondary
+                }
               />
             </Pressable>
           </View>

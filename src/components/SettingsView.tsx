@@ -1,5 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useStore } from "../lib/store";
+import {
+  ProviderId,
+  fetchProviderModels,
+  formatAuthHeaderLabel,
+  getProviderConfig,
+  getProviders,
+} from "../lib/providers";
 import "../styles/SettingsView.css";
 
 export default function SettingsView() {
@@ -12,6 +19,37 @@ export default function SettingsView() {
   } = useStore();
   const [newServerName, setNewServerName] = useState("");
   const [newServerUrl, setNewServerUrl] = useState("");
+  const [models, setModels] = useState<string[]>([]);
+  const [modelStatus, setModelStatus] = useState<{
+    loading: boolean;
+    message?: string;
+    error?: string;
+  }>({ loading: false });
+  const [isTesting, setIsTesting] = useState(false);
+  const [testMessage, setTestMessage] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+  const uiLabels = {
+    testing: "Проверка...",
+    test: "Проверить соединение",
+    modelsLoading: "Загрузка моделей...",
+    connected: (count: number) =>
+      `Соединение установлено. Доступно моделей: ${count}.`,
+  };
+
+  const providers = getProviders();
+  const providerConfig = getProviderConfig(settings.providerId);
+  const isCustomProvider = settings.providerId === "custom";
+  const resolvedBaseUrl = isCustomProvider
+    ? settings.baseUrl
+    : providerConfig.baseUrl;
+
+  useEffect(() => {
+    setModels([]);
+    setModelStatus({ loading: false });
+    setTestMessage(null);
+  }, [settings.apiKey, settings.providerId, resolvedBaseUrl]);
 
   const handleAddServer = () => {
     if (!newServerName.trim() || !newServerUrl.trim()) return;
@@ -30,6 +68,48 @@ export default function SettingsView() {
     }
   };
 
+  const handleTestConnection = async () => {
+    if (!settings.apiKey || !resolvedBaseUrl || isTesting) return;
+
+    setIsTesting(true);
+    setTestMessage(null);
+    setModelStatus({ loading: true });
+    setModels([]);
+
+    const result = await fetchProviderModels({
+      providerId: settings.providerId,
+      baseUrl: resolvedBaseUrl,
+      apiKey: settings.apiKey,
+      currentModel: settings.model,
+    });
+
+    setModelStatus({
+      loading: false,
+      message: result.message,
+      error: result.error,
+    });
+
+    if (result.error) {
+      setTestMessage({ success: false, message: result.error });
+    } else {
+      setModels(result.models);
+      setTestMessage({
+        success: true,
+        message: result.message || uiLabels.connected(result.models.length),
+      });
+    }
+
+    setIsTesting(false);
+  };
+
+  const handleProviderChange = (providerId: ProviderId) => {
+    const provider = getProviderConfig(providerId);
+    updateSettings({
+      providerId,
+      baseUrl: providerId === "custom" ? "" : provider.baseUrl,
+    });
+  };
+
   return (
     <div className="settings-container">
       <h1 className="settings-title">Settings</h1>
@@ -38,13 +118,31 @@ export default function SettingsView() {
         <h2>API Configuration</h2>
 
         <div className="form-group">
+          <label>Provider</label>
+          <select
+            value={settings.providerId}
+            onChange={(e) => handleProviderChange(e.target.value as ProviderId)}
+          >
+            {providers.map((provider) => (
+              <option key={provider.id} value={provider.id}>
+                {provider.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-group">
           <label>Base URL</label>
           <input
             type="text"
-            value={settings.baseUrl}
+            value={resolvedBaseUrl}
             onChange={(e) => updateSettings({ baseUrl: e.target.value })}
             placeholder="https://api.openai.com/v1"
+            disabled={!isCustomProvider}
           />
+          {!isCustomProvider && (
+            <p className="form-hint">Auto-filled from provider selection.</p>
+          )}
         </div>
 
         <div className="form-group">
@@ -55,17 +153,72 @@ export default function SettingsView() {
             onChange={(e) => updateSettings({ apiKey: e.target.value })}
             placeholder="sk-..."
           />
+          <p className="form-hint">
+            Auth format: {formatAuthHeaderLabel(settings.providerId)}
+          </p>
         </div>
 
         <div className="form-group">
-          <label>Model</label>
-          <input
-            type="text"
-            value={settings.model}
-            onChange={(e) => updateSettings({ model: e.target.value })}
-            placeholder="gpt-4o-mini"
-          />
+          <button
+            className="test-button"
+            onClick={handleTestConnection}
+            disabled={!settings.apiKey || !resolvedBaseUrl || isTesting}
+          >
+            {isTesting ? uiLabels.testing : uiLabels.test}
+          </button>
+          {testMessage && (
+            <p
+              className={`form-hint ${
+                testMessage.success ? "success" : "error"
+              }`}
+            >
+              {testMessage.message}
+            </p>
+          )}
         </div>
+
+        {models.length > 0 ? (
+          <div className="form-group">
+            <label>Model</label>
+            <select
+              value={settings.model || ""}
+              onChange={(e) => updateSettings({ model: e.target.value })}
+            >
+              {!settings.model && (
+                <option value="" disabled>
+                  Select a model
+                </option>
+              )}
+              {models.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
+              {settings.model && !models.includes(settings.model) && (
+                <option value={settings.model}>Custom: {settings.model}</option>
+              )}
+            </select>
+            {modelStatus.message && (
+              <p className="form-hint">{modelStatus.message}</p>
+            )}
+          </div>
+        ) : (
+          <div className="form-group">
+            <label>Model</label>
+            <input
+              type="text"
+              value={settings.model}
+              onChange={(e) => updateSettings({ model: e.target.value })}
+              placeholder="gpt-4o-mini"
+            />
+            {modelStatus.loading && (
+              <p className="form-hint">{uiLabels.modelsLoading}</p>
+            )}
+            {modelStatus.error && (
+              <p className="form-hint error">{modelStatus.error}</p>
+            )}
+          </div>
+        )}
 
         <div className="form-group">
           <label>System Prompt</label>

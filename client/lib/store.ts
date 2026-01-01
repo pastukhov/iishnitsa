@@ -21,6 +21,18 @@ export interface EndpointConfig {
   apiKey: string;
   model: string;
   systemPrompt: string;
+  providerId:
+    | "openai"
+    | "anthropic"
+    | "together"
+    | "mistral"
+    | "perplexity"
+    | "yandex"
+    | "replicate"
+    | "deepseek"
+    | "groq"
+    | "dashscope"
+    | "custom";
 }
 
 export interface MCPServer {
@@ -43,7 +55,7 @@ interface ChatStore {
   settings: Settings;
   isLoading: boolean;
   isStreaming: boolean;
-  
+
   loadFromStorage: () => Promise<void>;
   createNewChat: () => void;
   selectChat: (chatId: string) => void;
@@ -72,6 +84,7 @@ const defaultSettings: Settings = {
     apiKey: "",
     model: "gpt-4o-mini",
     systemPrompt: "You are a helpful AI assistant.",
+    providerId: "openai",
   },
   mcpServers: [],
   mcpEnabled: false,
@@ -107,15 +120,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       const chats = chatsJson ? JSON.parse(chatsJson) : [];
       const currentChatId = currentChatJson || null;
-      const settings = settingsJson
-        ? { ...defaultSettings, ...JSON.parse(settingsJson) }
+      const parsedSettings = settingsJson ? JSON.parse(settingsJson) : null;
+      const settings = parsedSettings
+        ? {
+            ...defaultSettings,
+            ...parsedSettings,
+            endpoint: {
+              ...defaultSettings.endpoint,
+              ...(parsedSettings.endpoint || {}),
+            },
+          }
         : defaultSettings;
 
       set({ chats, currentChatId, settings });
 
       if (chats.length === 0) {
         get().createNewChat();
-      } else if (!currentChatId || !chats.find((c: Chat) => c.id === currentChatId)) {
+      } else if (
+        !currentChatId ||
+        !chats.find((c: Chat) => c.id === currentChatId)
+      ) {
         set({ currentChatId: chats[0]?.id || null });
       }
     } catch (error) {
@@ -175,7 +199,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           const updatedMessages = [...chat.messages, newMessage];
           const title =
             chat.messages.length === 0 && message.role === "user"
-              ? message.content.slice(0, 50) + (message.content.length > 50 ? "..." : "")
+              ? message.content.slice(0, 50) +
+                (message.content.length > 50 ? "..." : "")
               : chat.title;
           return {
             ...chat,
@@ -263,7 +288,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const settings = {
         ...state.settings,
         mcpServers: state.settings.mcpServers.map((s) =>
-          s.id === id ? { ...s, enabled: !s.enabled } : s
+          s.id === id ? { ...s, enabled: !s.enabled } : s,
         ),
       };
       AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));

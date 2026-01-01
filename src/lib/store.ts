@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { ProviderId } from "./providers";
 
 export interface Message {
   id: string;
@@ -37,6 +38,7 @@ export interface Settings {
   systemPrompt: string;
   mcpEnabled: boolean;
   mcpServers: MCPServer[];
+  providerId: ProviderId;
 }
 
 interface AppState {
@@ -102,6 +104,7 @@ const defaultSettings: Settings = {
   systemPrompt: "You are a helpful AI assistant.",
   mcpEnabled: false,
   mcpServers: [],
+  providerId: "openai",
 };
 
 export const useStore = create<AppState>((set, get) => ({

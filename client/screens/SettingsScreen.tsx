@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -20,6 +20,12 @@ import { ThemedView } from "@/components/ThemedView";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useChatStore } from "@/lib/store";
 import { testConnection, testMCPServer } from "@/lib/api";
+import {
+  ProviderId,
+  formatAuthHeaderLabel,
+  getProviderConfig,
+  getProviders,
+} from "@/lib/providers";
 
 function SectionHeader({ title }: { title: string }) {
   const { theme } = useTheme();
@@ -38,6 +44,7 @@ function InputField({
   secureTextEntry = false,
   multiline = false,
   keyboardType = "default",
+  editable = true,
 }: {
   label: string;
   value: string;
@@ -46,6 +53,7 @@ function InputField({
   secureTextEntry?: boolean;
   multiline?: boolean;
   keyboardType?: "default" | "url";
+  editable?: boolean;
 }) {
   const { theme } = useTheme();
   const [showPassword, setShowPassword] = useState(false);
@@ -58,7 +66,10 @@ function InputField({
       <View
         style={[
           styles.inputWrapper,
-          { backgroundColor: theme.inputBackground, borderColor: theme.outlineVariant },
+          {
+            backgroundColor: theme.inputBackground,
+            borderColor: theme.outlineVariant,
+          },
         ]}
       >
         <TextInput
@@ -66,6 +77,7 @@ function InputField({
             styles.input,
             { color: theme.text },
             multiline && styles.multilineInput,
+            !editable && styles.inputDisabled,
           ]}
           value={value}
           onChangeText={onChangeText}
@@ -74,6 +86,7 @@ function InputField({
           secureTextEntry={secureTextEntry && !showPassword}
           multiline={multiline}
           keyboardType={keyboardType}
+          editable={editable}
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -90,6 +103,84 @@ function InputField({
           </Pressable>
         )}
       </View>
+    </View>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  placeholder,
+  onSelect,
+}: {
+  label: string;
+  value: string;
+  options: { label: string; value: string }[];
+  placeholder?: string;
+  onSelect: (value: string) => void;
+}) {
+  const { theme } = useTheme();
+  const [open, setOpen] = useState(false);
+  const selectedLabel = options.find((option) => option.value === value)?.label;
+
+  return (
+    <View style={styles.inputField}>
+      <ThemedText style={[styles.inputLabel, { color: theme.textSecondary }]}>
+        {label}
+      </ThemedText>
+      <Pressable
+        onPress={() => setOpen((prev) => !prev)}
+        style={[
+          styles.selectTrigger,
+          {
+            backgroundColor: theme.inputBackground,
+            borderColor: theme.outlineVariant,
+          },
+        ]}
+      >
+        <ThemedText style={{ color: theme.text }}>
+          {selectedLabel || placeholder || "Select"}
+        </ThemedText>
+        <MaterialIcons
+          name={open ? "expand-less" : "expand-more"}
+          size={20}
+          color={theme.textSecondary}
+        />
+      </Pressable>
+      {open && (
+        <View
+          style={[
+            styles.selectOptions,
+            {
+              borderColor: theme.outlineVariant,
+              backgroundColor: theme.surfaceVariant,
+            },
+          ]}
+        >
+          {options.map((option) => (
+            <Pressable
+              key={option.value}
+              onPress={() => {
+                onSelect(option.value);
+                setOpen(false);
+              }}
+              style={({ pressed }) => [
+                styles.selectOption,
+                {
+                  backgroundColor:
+                    option.value === value ? theme.surface : "transparent",
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <ThemedText style={{ color: theme.text }}>
+                {option.label}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -112,7 +203,9 @@ function ToggleRow({
       <View style={styles.toggleInfo}>
         <ThemedText style={styles.toggleLabel}>{label}</ThemedText>
         {description && (
-          <ThemedText style={[styles.toggleDescription, { color: theme.textSecondary }]}>
+          <ThemedText
+            style={[styles.toggleDescription, { color: theme.textSecondary }]}
+          >
             {description}
           </ThemedText>
         )}
@@ -154,6 +247,37 @@ export default function SettingsScreen() {
     success: boolean;
     message: string;
   } | null>(null);
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [modelStatus, setModelStatus] = useState<{
+    loading: boolean;
+    message?: string;
+    error?: string;
+  } | null>(null);
+  const uiLabels = {
+    testing: "Проверка...",
+    test: "Проверить соединение",
+    modelsLoading: "Загрузка моделей...",
+    connected: (count: number) =>
+      `Соединение установлено. Доступно моделей: ${count}.`,
+  };
+
+  const providers = getProviders();
+  const providerConfig = getProviderConfig(settings.endpoint.providerId);
+  const isCustomProvider = settings.endpoint.providerId === "custom";
+  const resolvedBaseUrl = isCustomProvider
+    ? settings.endpoint.baseUrl
+    : providerConfig.baseUrl;
+  const modelSelectOptions =
+    modelOptions.length > 0
+      ? modelOptions.includes(settings.endpoint.model)
+        ? modelOptions
+        : [...modelOptions, settings.endpoint.model].filter(Boolean)
+      : [];
+
+  useEffect(() => {
+    setModelOptions([]);
+    setModelStatus(null);
+  }, [settings.endpoint.apiKey, settings.endpoint.providerId, resolvedBaseUrl]);
 
   const handleTestConnection = async () => {
     if (Platform.OS !== "web") {
@@ -161,16 +285,38 @@ export default function SettingsScreen() {
     }
     setIsTesting(true);
     setTestResult(null);
+    setModelOptions([]);
+    setModelStatus({ loading: true });
 
     const result = await testConnection(settings.endpoint);
-    setTestResult(result);
+    const resultMessage =
+      result.message ||
+      (result.success
+        ? uiLabels.connected(result.models?.length || 0)
+        : "Ошибка подключения.");
+    if (result.success) {
+      setModelOptions(result.models || []);
+      setModelStatus({
+        loading: false,
+        message: resultMessage,
+        error: undefined,
+      });
+    } else {
+      setModelOptions([]);
+      setModelStatus({
+        loading: false,
+        message: undefined,
+        error: resultMessage,
+      });
+    }
+    setTestResult({ ...result, message: resultMessage });
     setIsTesting(false);
 
     if (Platform.OS !== "web") {
       Haptics.notificationAsync(
         result.success
           ? Haptics.NotificationFeedbackType.Success
-          : Haptics.NotificationFeedbackType.Error
+          : Haptics.NotificationFeedbackType.Error,
       );
     }
   };
@@ -208,15 +354,19 @@ export default function SettingsScreen() {
           onPress: () => {
             removeMCPServer(id);
             if (Platform.OS !== "web") {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Warning,
+              );
             }
           },
         },
-      ]
+      ],
     );
   };
 
-  const handleTestMCPServer = async (server: typeof settings.mcpServers[0]) => {
+  const handleTestMCPServer = async (
+    server: (typeof settings.mcpServers)[0],
+  ) => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
@@ -235,9 +385,17 @@ export default function SettingsScreen() {
       Haptics.notificationAsync(
         result.success
           ? Haptics.NotificationFeedbackType.Success
-          : Haptics.NotificationFeedbackType.Error
+          : Haptics.NotificationFeedbackType.Error,
       );
     }
+  };
+
+  const handleProviderChange = (providerId: ProviderId) => {
+    const provider = getProviderConfig(providerId);
+    updateEndpoint({
+      providerId,
+      baseUrl: providerId === "custom" ? "" : provider.baseUrl,
+    });
   };
 
   return (
@@ -250,14 +408,35 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <SectionHeader title="Endpoint Configuration" />
-        <View style={[styles.card, { backgroundColor: theme.backgroundDefault }]}>
+        <View
+          style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
+        >
+          <SelectField
+            label="Provider"
+            value={settings.endpoint.providerId}
+            options={providers.map((provider) => ({
+              label: provider.name,
+              value: provider.id,
+            }))}
+            onSelect={(value) => handleProviderChange(value as ProviderId)}
+            placeholder="Select a provider"
+          />
+
           <InputField
             label="Base URL"
-            value={settings.endpoint.baseUrl}
+            value={resolvedBaseUrl}
             onChangeText={(text) => updateEndpoint({ baseUrl: text })}
             placeholder="https://api.openai.com/v1"
             keyboardType="url"
+            editable={isCustomProvider}
           />
+          {!isCustomProvider && (
+            <ThemedText
+              style={[styles.helperText, { color: theme.textSecondary }]}
+            >
+              Auto-filled from provider selection.
+            </ThemedText>
+          )}
 
           <InputField
             label="API Key"
@@ -266,13 +445,50 @@ export default function SettingsScreen() {
             placeholder="sk-..."
             secureTextEntry
           />
+          <ThemedText
+            style={[styles.helperText, { color: theme.textSecondary }]}
+          >
+            Auth format: {formatAuthHeaderLabel(settings.endpoint.providerId)}
+          </ThemedText>
 
-          <InputField
-            label="Model"
-            value={settings.endpoint.model}
-            onChangeText={(text) => updateEndpoint({ model: text })}
-            placeholder="gpt-4o-mini"
-          />
+          {modelSelectOptions.length > 0 ? (
+            <SelectField
+              label="Model"
+              value={settings.endpoint.model}
+              options={modelSelectOptions.map((model) => ({
+                label: model,
+                value: model,
+              }))}
+              onSelect={(value) => updateEndpoint({ model: value })}
+              placeholder="Select a model"
+            />
+          ) : (
+            <InputField
+              label="Model"
+              value={settings.endpoint.model}
+              onChangeText={(text) => updateEndpoint({ model: text })}
+              placeholder="gpt-4o-mini"
+            />
+          )}
+          {modelStatus?.loading && (
+            <ThemedText
+              style={[styles.helperText, { color: theme.textSecondary }]}
+            >
+              {uiLabels.modelsLoading}
+            </ThemedText>
+          )}
+          {modelStatus?.message && (
+            <ThemedText
+              style={[styles.helperText, { color: theme.textSecondary }]}
+            >
+              {modelStatus.message}
+            </ThemedText>
+          )}
+          {modelStatus?.error && (
+            <ThemedText style={[styles.helperText, { color: theme.error }]}>
+              {modelStatus.error}
+            </ThemedText>
+          )}
 
           <InputField
             label="System Prompt"
@@ -284,12 +500,16 @@ export default function SettingsScreen() {
 
           <Pressable
             onPress={handleTestConnection}
-            disabled={isTesting || !settings.endpoint.apiKey}
+            disabled={
+              isTesting || !settings.endpoint.apiKey || !resolvedBaseUrl
+            }
             style={({ pressed }) => [
               styles.testButton,
               {
                 backgroundColor:
-                  settings.endpoint.apiKey ? theme.primary : theme.surfaceVariant,
+                  settings.endpoint.apiKey && resolvedBaseUrl
+                    ? theme.primary
+                    : theme.surfaceVariant,
                 opacity: pressed ? 0.8 : 1,
               },
             ]}
@@ -299,8 +519,10 @@ export default function SettingsScreen() {
             ) : (
               <>
                 <MaterialIcons name="wifi" size={20} color={theme.buttonText} />
-                <ThemedText style={[styles.testButtonText, { color: theme.buttonText }]}>
-                  Test Connection
+                <ThemedText
+                  style={[styles.testButtonText, { color: theme.buttonText }]}
+                >
+                  {uiLabels.test}
                 </ThemedText>
               </>
             )}
@@ -335,7 +557,9 @@ export default function SettingsScreen() {
         </View>
 
         <SectionHeader title="MCP Configuration" />
-        <View style={[styles.card, { backgroundColor: theme.backgroundDefault }]}>
+        <View
+          style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
+        >
           <ToggleRow
             label="Enable MCP"
             description="Connect to Model Context Protocol servers for enhanced capabilities"
@@ -345,7 +569,12 @@ export default function SettingsScreen() {
 
           {settings.mcpEnabled && (
             <>
-              <View style={[styles.divider, { backgroundColor: theme.outlineVariant }]} />
+              <View
+                style={[
+                  styles.divider,
+                  { backgroundColor: theme.outlineVariant },
+                ]}
+              />
 
               {settings.mcpServers.map((server) => (
                 <View key={server.id}>
@@ -355,14 +584,25 @@ export default function SettingsScreen() {
                       style={styles.mcpServerInfo}
                     >
                       <MaterialIcons
-                        name={server.enabled ? "check-box" : "check-box-outline-blank"}
+                        name={
+                          server.enabled
+                            ? "check-box"
+                            : "check-box-outline-blank"
+                        }
                         size={24}
-                        color={server.enabled ? theme.primary : theme.textSecondary}
+                        color={
+                          server.enabled ? theme.primary : theme.textSecondary
+                        }
                       />
                       <View style={styles.mcpServerText}>
-                        <ThemedText style={styles.mcpServerName}>{server.name}</ThemedText>
+                        <ThemedText style={styles.mcpServerName}>
+                          {server.name}
+                        </ThemedText>
                         <ThemedText
-                          style={[styles.mcpServerUrl, { color: theme.textSecondary }]}
+                          style={[
+                            styles.mcpServerUrl,
+                            { color: theme.textSecondary },
+                          ]}
                           numberOfLines={1}
                         >
                           {server.url}
@@ -372,19 +612,35 @@ export default function SettingsScreen() {
                     <Pressable
                       onPress={() => handleTestMCPServer(server)}
                       disabled={testingMCPId === server.id}
-                      style={({ pressed }) => [styles.testMcpButton, { opacity: pressed ? 0.6 : 1 }]}
+                      style={({ pressed }) => [
+                        styles.testMcpButton,
+                        { opacity: pressed ? 0.6 : 1 },
+                      ]}
                     >
                       {testingMCPId === server.id ? (
                         <ActivityIndicator size="small" color={theme.primary} />
                       ) : (
-                        <MaterialIcons name="wifi" size={18} color={theme.primary} />
+                        <MaterialIcons
+                          name="wifi"
+                          size={18}
+                          color={theme.primary}
+                        />
                       )}
                     </Pressable>
                     <Pressable
-                      onPress={() => handleRemoveMCPServer(server.id, server.name)}
-                      style={({ pressed }) => [styles.removeButton, { opacity: pressed ? 0.6 : 1 }]}
+                      onPress={() =>
+                        handleRemoveMCPServer(server.id, server.name)
+                      }
+                      style={({ pressed }) => [
+                        styles.removeButton,
+                        { opacity: pressed ? 0.6 : 1 },
+                      ]}
                     >
-                      <MaterialIcons name="delete-outline" size={20} color={theme.error} />
+                      <MaterialIcons
+                        name="delete-outline"
+                        size={20}
+                        color={theme.error}
+                      />
                     </Pressable>
                   </View>
                   {mcpTestResult?.serverId === server.id && (
@@ -401,13 +657,19 @@ export default function SettingsScreen() {
                       <MaterialIcons
                         name={mcpTestResult.success ? "check-circle" : "error"}
                         size={16}
-                        color={mcpTestResult.success ? theme.success : theme.error}
+                        color={
+                          mcpTestResult.success ? theme.success : theme.error
+                        }
                         style={{ marginTop: 2 }}
                       />
                       <ThemedText
                         style={[
                           styles.mcpTestResultText,
-                          { color: mcpTestResult.success ? theme.success : theme.error },
+                          {
+                            color: mcpTestResult.success
+                              ? theme.success
+                              : theme.error,
+                          },
                         ]}
                         selectable
                       >
@@ -438,7 +700,10 @@ export default function SettingsScreen() {
                       onPress={() => setShowAddMCP(false)}
                       style={({ pressed }) => [
                         styles.cancelButton,
-                        { borderColor: theme.outline, opacity: pressed ? 0.8 : 1 },
+                        {
+                          borderColor: theme.outline,
+                          opacity: pressed ? 0.8 : 1,
+                        },
                       ]}
                     >
                       <ThemedText>Cancel</ThemedText>
@@ -447,10 +712,15 @@ export default function SettingsScreen() {
                       onPress={handleAddMCPServer}
                       style={({ pressed }) => [
                         styles.addButton,
-                        { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 },
+                        {
+                          backgroundColor: theme.primary,
+                          opacity: pressed ? 0.8 : 1,
+                        },
                       ]}
                     >
-                      <ThemedText style={{ color: theme.buttonText }}>Add Server</ThemedText>
+                      <ThemedText style={{ color: theme.buttonText }}>
+                        Add Server
+                      </ThemedText>
                     </Pressable>
                   </View>
                 </View>
@@ -463,7 +733,9 @@ export default function SettingsScreen() {
                   ]}
                 >
                   <MaterialIcons name="add" size={20} color={theme.primary} />
-                  <ThemedText style={[styles.addServerText, { color: theme.primary }]}>
+                  <ThemedText
+                    style={[styles.addServerText, { color: theme.primary }]}
+                  >
                     Add MCP Server
                   </ThemedText>
                 </Pressable>
@@ -473,10 +745,14 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.aboutSection}>
-          <ThemedText style={[styles.aboutText, { color: theme.textSecondary }]}>
+          <ThemedText
+            style={[styles.aboutText, { color: theme.textSecondary }]}
+          >
             AI Agent v1.0.0
           </ThemedText>
-          <ThemedText style={[styles.aboutText, { color: theme.textSecondary }]}>
+          <ThemedText
+            style={[styles.aboutText, { color: theme.textSecondary }]}
+          >
             Connect to any OpenAI-compatible endpoint
           </ThemedText>
         </View>
@@ -519,12 +795,37 @@ const styles = StyleSheet.create({
     ...Typography.bodyLarge,
     padding: Spacing.md,
   },
+  inputDisabled: {
+    opacity: 0.6,
+  },
   multilineInput: {
     minHeight: 80,
     textAlignVertical: "top",
   },
   eyeButton: {
     padding: Spacing.md,
+  },
+  selectTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    padding: Spacing.md,
+  },
+  selectOptions: {
+    marginTop: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  selectOption: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  helperText: {
+    ...Typography.bodySmall,
+    marginTop: Spacing.xs,
   },
   testButton: {
     flexDirection: "row",
