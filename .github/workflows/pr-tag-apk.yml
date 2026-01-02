@@ -1,0 +1,42 @@
+name: Tag PR APK
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  tag-pr:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --tags --force
+
+      - name: Compute PR tag
+        run: |
+          DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
+          LAST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1)
+          if [ -z "$LAST_TAG" ]; then
+            BASE_VERSION=$(git show "origin/${DEFAULT_BRANCH}:app.json" | node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(data.expo.version)")
+          else
+            BASE_VERSION=${LAST_TAG#v}
+          fi
+          NEXT_VERSION=$(node -e "const base=process.env.BASE_VERSION; const parts=base.split('.').map((n)=>parseInt(n,10)); if (parts.length !== 3 || parts.some((n)=>Number.isNaN(n))) { throw new Error('Invalid base version: ' + base); } let [major, minor] = parts; minor += 1; console.log([major, minor, 0].join('.'));")
+          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          SAFE_BRANCH=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g' | sed -E 's/^-+|-+$//g')
+          echo "NEXT_VERSION=$NEXT_VERSION" >> $GITHUB_ENV
+          echo "PR_TAG=v${NEXT_VERSION}-${SAFE_BRANCH}" >> $GITHUB_ENV
+        env:
+          BASE_VERSION: ${{ env.BASE_VERSION }}
+
+      - name: Create or update tag
+        run: |
+          git tag -f "$PR_TAG"
+          git push origin -f "$PR_TAG"
