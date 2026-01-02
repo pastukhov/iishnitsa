@@ -34,6 +34,9 @@
 
 ## Commit & Pull Request Guidelines
 - Commit messages in history are short, descriptive sentences; keep them scoped and readable.
+- Branch names should be two words describing the change, joined with a hyphen (e.g., `mcp-collections`).
+- PRs are auto-created from branch pushes and auto-merged when required checks are green.
+- Protect `main`: require all workflow status checks to pass before merging.
 - For PRs, include: purpose, summary of changes, manual verification steps, and risk notes.
 - Link related issues when applicable; include screenshots only for UI changes.
 
