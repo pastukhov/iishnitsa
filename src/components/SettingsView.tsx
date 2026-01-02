@@ -132,7 +132,7 @@ export default function SettingsView() {
           : { tone: "success", text: "Collections imported successfully." },
       );
       event.target.value = "";
-    } catch (error) {
+    } catch {
       setCollectionMessage({
         tone: "error",
         text: "Failed to import YAML. Please check the file format.",
@@ -398,9 +398,7 @@ export default function SettingsView() {
                     <div className="collection-buttons">
                       <button
                         className="secondary-button"
-                        onClick={() =>
-                          setActiveMCPCollection(collection.id)
-                        }
+                        onClick={() => setActiveMCPCollection(collection.id)}
                         disabled={
                           settings.activeMcpCollectionId === collection.id
                         }
