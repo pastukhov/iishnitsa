@@ -100,6 +100,14 @@ jobs:
           git tag "$NEXT_TAG"
           git push origin "$NEXT_TAG"
 
+      - name: Create GitHub release
+        if: env.SKIP_BUMP != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.NEXT_TAG }}
+          name: ${{ env.NEXT_TAG }}
+          generate_release_notes: true
+
       - name: Trigger APK build
         if: env.NEXT_TAG != ''
         uses: actions/github-script@v7
