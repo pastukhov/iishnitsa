@@ -31,6 +31,12 @@ export interface MCPServer {
   enabled: boolean;
 }
 
+export interface MCPServerCollection {
+  id: string;
+  name: string;
+  servers: MCPServer[];
+}
+
 export interface Settings {
   baseUrl: string;
   apiKey: string;
@@ -38,6 +44,8 @@ export interface Settings {
   systemPrompt: string;
   mcpEnabled: boolean;
   mcpServers: MCPServer[];
+  mcpCollections: MCPServerCollection[];
+  activeMcpCollectionId: string | null;
   providerId: ProviderId;
 }
 
@@ -65,6 +73,14 @@ interface AppState {
   addMCPServer: (server: Omit<MCPServer, "id">) => void;
   updateMCPServer: (id: string, updates: Partial<MCPServer>) => void;
   deleteMCPServer: (id: string) => void;
+  addMCPCollection: (name: string, servers?: MCPServer[]) => void;
+  updateMCPCollection: (id: string, updates: Partial<MCPServerCollection>) => void;
+  deleteMCPCollection: (id: string) => void;
+  setActiveMCPCollection: (id: string | null) => void;
+  replaceMCPCollections: (
+    collections: MCPServerCollection[],
+    activeId?: string | null,
+  ) => void;
 }
 
 const storageKeys = {
@@ -104,7 +120,58 @@ const defaultSettings: Settings = {
   systemPrompt: "You are a helpful AI assistant.",
   mcpEnabled: false,
   mcpServers: [],
+  mcpCollections: [],
+  activeMcpCollectionId: null,
   providerId: "openai",
+};
+
+const ensureCollections = (settings: Settings): Settings => {
+  const collections =
+    settings.mcpCollections && settings.mcpCollections.length > 0
+      ? settings.mcpCollections
+      : [
+          {
+            id: crypto.randomUUID(),
+            name: "Default",
+            servers: settings.mcpServers || [],
+          },
+        ];
+
+  const activeCollectionId =
+    settings.activeMcpCollectionId &&
+    collections.some((c) => c.id === settings.activeMcpCollectionId)
+      ? settings.activeMcpCollectionId
+      : collections[0]?.id || null;
+
+  const activeCollection = activeCollectionId
+    ? collections.find((c) => c.id === activeCollectionId) || null
+    : null;
+
+  return {
+    ...settings,
+    mcpCollections: collections,
+    activeMcpCollectionId: activeCollectionId,
+    mcpServers: activeCollection ? activeCollection.servers : settings.mcpServers,
+  };
+};
+
+const updateActiveCollectionServers = (
+  settings: Settings,
+  servers: MCPServer[],
+): Settings => {
+  if (!settings.activeMcpCollectionId) {
+    return { ...settings, mcpServers: servers };
+  }
+
+  return {
+    ...settings,
+    mcpServers: servers,
+    mcpCollections: settings.mcpCollections.map((collection) =>
+      collection.id === settings.activeMcpCollectionId
+        ? { ...collection, servers }
+        : collection,
+    ),
+  };
 };
 
 export const useStore = create<AppState>((set, get) => ({
@@ -125,12 +192,14 @@ export const useStore = create<AppState>((set, get) => ({
         null,
       );
 
+      const mergedSettings = settings
+        ? { ...defaultSettings, ...settings }
+        : defaultSettings;
+
       set({
         chats: chats || [],
         currentChatId: currentChatId || null,
-        settings: settings
-          ? { ...defaultSettings, ...settings }
-          : defaultSettings,
+        settings: ensureCollections(mergedSettings),
         initialized: true,
       });
     } catch (error) {
@@ -229,42 +298,151 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   updateSettings: (newSettings: Partial<Settings>) => {
-    set((state) => ({
-      settings: { ...state.settings, ...newSettings },
-    }));
+    set((state) => {
+      const updated = { ...state.settings, ...newSettings };
+      if (newSettings.mcpServers) {
+        return {
+          settings: updateActiveCollectionServers(
+            updated,
+            newSettings.mcpServers,
+          ),
+        };
+      }
+      return { settings: updated };
+    });
     get().saveToStore();
   },
 
   addMCPServer: (server: Omit<MCPServer, "id">) => {
     const id = crypto.randomUUID();
     set((state) => ({
-      settings: {
-        ...state.settings,
-        mcpServers: [...state.settings.mcpServers, { ...server, id }],
-      },
+      settings: updateActiveCollectionServers(state.settings, [
+        ...state.settings.mcpServers,
+        { ...server, id },
+      ]),
     }));
     get().saveToStore();
   },
 
   updateMCPServer: (id: string, updates: Partial<MCPServer>) => {
     set((state) => ({
-      settings: {
-        ...state.settings,
-        mcpServers: state.settings.mcpServers.map((s) =>
+      settings: updateActiveCollectionServers(
+        state.settings,
+        state.settings.mcpServers.map((s) =>
           s.id === id ? { ...s, ...updates } : s,
         ),
-      },
+      ),
     }));
     get().saveToStore();
   },
 
   deleteMCPServer: (id: string) => {
     set((state) => ({
+      settings: updateActiveCollectionServers(
+        state.settings,
+        state.settings.mcpServers.filter((s) => s.id !== id),
+      ),
+    }));
+    get().saveToStore();
+  },
+
+  addMCPCollection: (name: string, servers?: MCPServer[]) => {
+    const id = crypto.randomUUID();
+    set((state) => ({
       settings: {
         ...state.settings,
-        mcpServers: state.settings.mcpServers.filter((s) => s.id !== id),
+        mcpCollections: [
+          ...state.settings.mcpCollections,
+          { id, name, servers: servers || state.settings.mcpServers },
+        ],
       },
     }));
+    get().saveToStore();
+  },
+
+  updateMCPCollection: (id: string, updates: Partial<MCPServerCollection>) => {
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        mcpCollections: state.settings.mcpCollections.map((collection) =>
+          collection.id === id ? { ...collection, ...updates } : collection,
+        ),
+      },
+    }));
+    get().saveToStore();
+  },
+
+  deleteMCPCollection: (id: string) => {
+    set((state) => {
+      const remaining = state.settings.mcpCollections.filter(
+        (collection) => collection.id !== id,
+      );
+      const activeId =
+        state.settings.activeMcpCollectionId === id
+          ? remaining[0]?.id || null
+          : state.settings.activeMcpCollectionId;
+      const activeCollection = activeId
+        ? remaining.find((collection) => collection.id === activeId) || null
+        : null;
+
+      return {
+        settings: {
+          ...state.settings,
+          mcpCollections: remaining,
+          activeMcpCollectionId: activeId,
+          mcpServers: activeCollection
+            ? activeCollection.servers
+            : state.settings.mcpServers,
+        },
+      };
+    });
+    get().saveToStore();
+  },
+
+  setActiveMCPCollection: (id: string | null) => {
+    set((state) => {
+      const activeCollection = id
+        ? state.settings.mcpCollections.find((collection) => collection.id === id) ||
+          null
+        : null;
+
+      return {
+        settings: {
+          ...state.settings,
+          activeMcpCollectionId: id,
+          mcpServers: activeCollection
+            ? activeCollection.servers
+            : state.settings.mcpServers,
+        },
+      };
+    });
+    get().saveToStore();
+  },
+
+  replaceMCPCollections: (
+    collections: MCPServerCollection[],
+    activeId?: string | null,
+  ) => {
+    set((state) => {
+      const resolvedActiveId =
+        activeId && collections.some((c) => c.id === activeId)
+          ? activeId
+          : collections[0]?.id || null;
+      const activeCollection = resolvedActiveId
+        ? collections.find((c) => c.id === resolvedActiveId) || null
+        : null;
+
+      return {
+        settings: {
+          ...state.settings,
+          mcpCollections: collections,
+          activeMcpCollectionId: resolvedActiveId,
+          mcpServers: activeCollection
+            ? activeCollection.servers
+            : state.settings.mcpServers,
+        },
+      };
+    });
     get().saveToStore();
   },
 }));
