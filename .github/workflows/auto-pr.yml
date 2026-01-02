@@ -1,0 +1,81 @@
+name: Auto PR
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const base = "main";
+            const head = context.ref.replace("refs/heads/", "");
+
+            if (head === base) {
+              core.info("Skipping base branch.");
+              return;
+            }
+
+            const { data: pulls } = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: "open",
+              base,
+              head: `${owner}:${head}`,
+            });
+
+            let pullRequest = pulls[0];
+
+            if (!pullRequest) {
+              const title = `Auto PR: ${head}`;
+              const body = [
+                "This PR was auto-created on branch push.",
+                "",
+                `Branch: \`${head}\``,
+              ].join("\n");
+
+              const { data: created } = await github.rest.pulls.create({
+                owner,
+                repo,
+                title,
+                head,
+                base,
+                body,
+              });
+
+              pullRequest = created;
+              core.info(`Created PR #${pullRequest.number}`);
+            } else {
+              core.info(`Found existing PR #${pullRequest.number}`);
+            }
+
+            try {
+              await github.graphql(
+                `
+                  mutation EnableAutoMerge($pullRequestId: ID!) {
+                    enablePullRequestAutoMerge(
+                      input: { pullRequestId: $pullRequestId, mergeMethod: SQUASH }
+                    ) {
+                      pullRequest {
+                        number
+                      }
+                    }
+                  }
+                `,
+                { pullRequestId: pullRequest.node_id },
+              );
+              core.info("Enabled auto-merge (squash).");
+            } catch (error) {
+              core.warning(`Auto-merge not enabled: ${error.message}`);
+            }

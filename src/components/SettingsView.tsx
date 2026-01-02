@@ -7,6 +7,10 @@ import {
   getProviderConfig,
   getProviders,
 } from "../lib/providers";
+import {
+  buildMCPCollectionsYaml,
+  parseMCPCollectionsYaml,
+} from "../lib/mcp-collections";
 import "../styles/SettingsView.css";
 
 export default function SettingsView() {
@@ -16,9 +20,19 @@ export default function SettingsView() {
     addMCPServer,
     updateMCPServer,
     deleteMCPServer,
+    addMCPCollection,
+    updateMCPCollection,
+    deleteMCPCollection,
+    setActiveMCPCollection,
+    replaceMCPCollections,
   } = useStore();
   const [newServerName, setNewServerName] = useState("");
   const [newServerUrl, setNewServerUrl] = useState("");
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [collectionMessage, setCollectionMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+  } | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [modelStatus, setModelStatus] = useState<{
     loading: boolean;
@@ -65,6 +79,64 @@ export default function SettingsView() {
   const handleDeleteServer = (id: string) => {
     if (confirm("Delete this MCP server?")) {
       deleteMCPServer(id);
+    }
+  };
+
+  const handleAddCollection = () => {
+    const trimmed = newCollectionName.trim();
+    if (!trimmed) return;
+    addMCPCollection(trimmed, settings.mcpServers);
+    setNewCollectionName("");
+  };
+
+  const handleRenameCollection = (id: string, currentName: string) => {
+    const nextName = prompt("New collection name:", currentName);
+    if (!nextName) return;
+    updateMCPCollection(id, { name: nextName.trim() || currentName });
+  };
+
+  const handleDeleteCollection = (id: string, name: string) => {
+    if (confirm(`Delete MCP collection "${name}"?`)) {
+      deleteMCPCollection(id);
+    }
+  };
+
+  const handleExportCollections = () => {
+    const yaml = buildMCPCollectionsYaml(
+      settings.mcpCollections,
+      settings.activeMcpCollectionId,
+    );
+    const blob = new Blob([yaml], { type: "text/yaml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "mcp-collections.yaml";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportCollections = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const result = parseMCPCollectionsYaml(text);
+      replaceMCPCollections(result.collections, result.activeCollectionId);
+      setCollectionMessage(
+        result.warnings.length > 0
+          ? { tone: "error", text: result.warnings.join(" ") }
+          : { tone: "success", text: "Collections imported successfully." },
+      );
+      event.target.value = "";
+    } catch (error) {
+      setCollectionMessage({
+        tone: "error",
+        text: "Failed to import YAML. Please check the file format.",
+      });
     }
   };
 
@@ -246,6 +318,117 @@ export default function SettingsView() {
 
         {settings.mcpEnabled && (
           <>
+            <div className="collection-panel">
+              <div className="collection-header">
+                <h3>MCP Collections</h3>
+                <div className="collection-actions">
+                  <button
+                    className="secondary-button"
+                    onClick={handleExportCollections}
+                    disabled={settings.mcpCollections.length === 0}
+                  >
+                    Export YAML
+                  </button>
+                  <label className="secondary-button file-button">
+                    Import YAML
+                    <input
+                      type="file"
+                      accept=".yaml,.yml"
+                      onChange={handleImportCollections}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="collection-controls">
+                <div className="form-group">
+                  <label>Active collection</label>
+                  <select
+                    value={settings.activeMcpCollectionId || ""}
+                    onChange={(e) =>
+                      setActiveMCPCollection(
+                        e.target.value ? e.target.value : null,
+                      )
+                    }
+                  >
+                    {settings.mcpCollections.map((collection) => (
+                      <option key={collection.id} value={collection.id}>
+                        {collection.name} ({collection.servers.length})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-row collection-row">
+                  <input
+                    type="text"
+                    value={newCollectionName}
+                    onChange={(e) => setNewCollectionName(e.target.value)}
+                    placeholder="New collection name"
+                  />
+                  <button
+                    onClick={handleAddCollection}
+                    disabled={!newCollectionName.trim()}
+                  >
+                    Create from current
+                  </button>
+                </div>
+              </div>
+
+              {collectionMessage && (
+                <p
+                  className={`form-hint ${
+                    collectionMessage.tone === "error" ? "error" : "success"
+                  }`}
+                >
+                  {collectionMessage.text}
+                </p>
+              )}
+
+              <div className="collection-list">
+                {settings.mcpCollections.map((collection) => (
+                  <div key={collection.id} className="collection-item">
+                    <div className="collection-info">
+                      <span className="collection-name">{collection.name}</span>
+                      <span className="collection-meta">
+                        {collection.servers.length} server
+                        {collection.servers.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <div className="collection-buttons">
+                      <button
+                        className="secondary-button"
+                        onClick={() =>
+                          setActiveMCPCollection(collection.id)
+                        }
+                        disabled={
+                          settings.activeMcpCollectionId === collection.id
+                        }
+                      >
+                        Use
+                      </button>
+                      <button
+                        className="secondary-button"
+                        onClick={() =>
+                          handleRenameCollection(collection.id, collection.name)
+                        }
+                      >
+                        Rename
+                      </button>
+                      <button
+                        className="delete-server-btn"
+                        onClick={() =>
+                          handleDeleteCollection(collection.id, collection.name)
+                        }
+                      >
+                        x
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="server-list">
               {settings.mcpServers.map((server) => (
                 <div key={server.id} className="server-item">
