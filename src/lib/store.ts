@@ -74,7 +74,10 @@ interface AppState {
   updateMCPServer: (id: string, updates: Partial<MCPServer>) => void;
   deleteMCPServer: (id: string) => void;
   addMCPCollection: (name: string, servers?: MCPServer[]) => void;
-  updateMCPCollection: (id: string, updates: Partial<MCPServerCollection>) => void;
+  updateMCPCollection: (
+    id: string,
+    updates: Partial<MCPServerCollection>,
+  ) => void;
   deleteMCPCollection: (id: string) => void;
   setActiveMCPCollection: (id: string | null) => void;
   replaceMCPCollections: (
@@ -151,7 +154,9 @@ const ensureCollections = (settings: Settings): Settings => {
     ...settings,
     mcpCollections: collections,
     activeMcpCollectionId: activeCollectionId,
-    mcpServers: activeCollection ? activeCollection.servers : settings.mcpServers,
+    mcpServers: activeCollection
+      ? activeCollection.servers
+      : settings.mcpServers,
   };
 };
 
@@ -402,8 +407,9 @@ export const useStore = create<AppState>((set, get) => ({
   setActiveMCPCollection: (id: string | null) => {
     set((state) => {
       const activeCollection = id
-        ? state.settings.mcpCollections.find((collection) => collection.id === id) ||
-          null
+        ? state.settings.mcpCollections.find(
+            (collection) => collection.id === id,
+          ) || null
         : null;
 
       return {
