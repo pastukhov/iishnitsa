@@ -33,7 +33,8 @@
 - If you add tests, document how to run them in this file and update scripts accordingly.
 
 ## Commit & Pull Request Guidelines
-- Commit messages in history are short, descriptive sentences; keep them scoped and readable.
+- Commit messages must follow Conventional Commits (e.g., `feat: add mcp checks`, `chore(ci): update workflows`).
+- Keep commit subjects short and descriptive.
 - Branch names should be two words describing the change, joined with a hyphen (e.g., `mcp-collections`).
 - PRs are auto-created from branch pushes and auto-merged when required checks are green.
 - Protect `main`: require all workflow status checks to pass before merging.
