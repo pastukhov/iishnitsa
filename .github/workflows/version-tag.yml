@@ -6,6 +6,10 @@ on:
       - "**"
   workflow_dispatch:
 
+concurrency:
+  group: version-tag-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   checks:
     runs-on: ubuntu-latest

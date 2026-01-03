@@ -1,5 +1,6 @@
 # Иишница
 
+[![PR Checks](https://github.com/pastukhov/iishnitsa/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/pastukhov/iishnitsa/actions/workflows/pr-checks.yml)
 [![APK](https://img.shields.io/badge/APK-latest-brightgreen)](https://github.com/pastukhov/iishnitsa/releases/latest/download/iishnitsa.apk)
 
 Иишница — кроссплатформенное приложение с клиентом на Expo/React Native и веб-рендерером. Проект рассчитан на локальную разработку и сборку под разные окружения.
@@ -44,6 +45,8 @@ npm run expo:dev
 - Секреты храните в окружении и не коммитьте в репозиторий.
 
 ## CI
+- PR проверки (`PR Checks`) обязательны для merge в `main`.
+- Релизы создаются по тегу `vX.Y.Z` и запускают EAS сборку APK.
 - GitHub Actions для сборки APK требует секрет `EXPO_TOKEN` (Expo access token).
 
 ## Вклад
