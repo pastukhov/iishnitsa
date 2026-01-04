@@ -49,7 +49,7 @@ jobs:
       # $GITHUB_ENV so that it can be referenced in later steps if needed.
       - name: Trigger EAS build
         run: |
-          npx eas build --platform android --profile preview --non-interactive --json > build.json
+          npx eas build --platform android --profile preview --non-interactive --wait --json > build.json
           node -e "const fs = require('fs'); const data = JSON.parse(fs.readFileSync('build.json', 'utf8')); const build = Array.isArray(data) ? data[0] : data; console.log(`BUILD_ID=${build.id || build.buildId}`);" >> $GITHUB_ENV
 
       # Install jq for JSON parsing; apt-get update is required for package lists.
@@ -61,8 +61,16 @@ jobs:
       - name: Download APK
         run: |
           BUILD_URL=$(jq -r 'if type == "object" then .artifacts.buildUrl else .[0].artifacts.buildUrl end' build.json)
+          if [ -z "$BUILD_URL" ] || [ "$BUILD_URL" = "null" ]; then
+            echo "Build URL is missing from EAS response."
+            exit 1
+          fi
           echo "Build URL: $BUILD_URL"
-          curl -L "$BUILD_URL" -o "iishnitsa-${BUILD_VERSION}.apk"
+          curl -fL "$BUILD_URL" -o "iishnitsa-${BUILD_VERSION}.apk"
+          if [ ! -s "iishnitsa-${BUILD_VERSION}.apk" ]; then
+            echo "Downloaded APK is empty."
+            exit 1
+          fi
 
       - name: Generate release notes
         run: |
