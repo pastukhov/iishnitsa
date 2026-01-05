@@ -10,7 +10,7 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_VERSION": "1.6.4"
+        "APP_VERSION": "1.7.0"
       }
     },
     "preview": {
@@ -19,7 +19,7 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_VERSION": "1.6.4"
+        "APP_VERSION": "1.7.0"
       }
     },
     "production": {
@@ -27,7 +27,7 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_VERSION": "1.6.4"
+        "APP_VERSION": "1.7.0"
       }
     }
   },
