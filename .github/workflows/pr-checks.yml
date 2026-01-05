@@ -100,7 +100,15 @@ jobs:
         run: npm ci
 
       - name: Lint commits
-        run: npx commitlint --config commitlint.config.cjs --from "${{ github.event.pull_request.base.sha }}" --to "${{ github.event.pull_request.head.sha }}"
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            FROM="${{ github.event.pull_request.base.sha }}"
+            TO="${{ github.event.pull_request.head.sha }}"
+          else
+            FROM="${{ github.event.before }}"
+            TO="${{ github.sha }}"
+          fi
+          npx commitlint --config commitlint.config.cjs --from "$FROM" --to "$TO"
 
   pr-comment:
     runs-on: ubuntu-latest
