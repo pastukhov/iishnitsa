@@ -42,8 +42,13 @@ try {
 }
 
 const endpoint = `repos/${repo}/branches/${branch}/protection`;
+const payloadPath = path.resolve(
+  process.cwd(),
+  `.branch-protection.${branch}.tmp.json`,
+);
 
 try {
+  fs.writeFileSync(payloadPath, JSON.stringify(config, null, 2));
   execFileSync(
     "gh",
     [
@@ -54,15 +59,18 @@ try {
       "-H",
       "Accept: application/vnd.github+json",
       "--input",
-      "-",
+      payloadPath,
     ],
     {
-      input: JSON.stringify(config),
       stdio: "inherit",
     },
   );
+  fs.unlinkSync(payloadPath);
   console.log(`Applied branch protection to ${repo}:${branch}`);
 } catch (error) {
+  if (fs.existsSync(payloadPath)) {
+    fs.unlinkSync(payloadPath);
+  }
   console.error("Failed to apply branch protection.");
   console.error(error.message);
   process.exit(1);
