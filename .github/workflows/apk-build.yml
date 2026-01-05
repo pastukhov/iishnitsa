@@ -65,7 +65,22 @@ jobs:
       - name: Generate release notes
         run: |
           git fetch --tags --force
-          npx -y -p conventional-changelog-cli -p conventional-changelog-angular conventional-changelog -p angular -r 1 > release-notes.md
+          CURRENT_TAG="${GITHUB_REF_NAME}"
+          PREV_TAG=$(git tag -l "v*" --sort=-v:refname | grep -v "^${CURRENT_TAG}$" | head -n 1 || true)
+          {
+            echo "# ${CURRENT_TAG}"
+            echo
+            if [ -n "$PREV_TAG" ]; then
+              echo "Changes since ${PREV_TAG}:"
+              echo
+              git log --pretty=format:"- %s (%h)" "${PREV_TAG}..${CURRENT_TAG}"
+            else
+              echo "Changes:"
+              echo
+              git log --pretty=format:"- %s (%h)" -n 20
+            fi
+            echo
+          } > release-notes.md
 
       - name: Create or update draft release
         env:
