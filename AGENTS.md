@@ -23,6 +23,7 @@
 ## GitHub Helper
 - Use the GitHub CLI (`gh`) to inspect Actions runs, releases, and PR status when troubleshooting CI.
 - Always create PR branches from the latest `main` (rebase or update before opening PRs).
+- Each PR must be opened from the latest `main` (refresh the branch immediately before creating the PR).
 - Prefer `gh api` for repository queries if standard `gh` commands rely on git in environments where git execution is restricted.
 
 ## Coding Style & Naming Conventions
