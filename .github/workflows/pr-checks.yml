@@ -114,6 +114,12 @@ jobs:
             FROM="$GITHUB_BEFORE"
             TO="$GITHUB_SHA"
           fi
+          if [ -n "$FROM" ] && [ "$FROM" != "0000000000000000000000000000000000000000" ]; then
+            if ! git merge-base --is-ancestor "$FROM" "$TO"; then
+              ALT_FROM=$(git merge-base "origin/main" "$TO" || true)
+              FROM="${ALT_FROM:-}"
+            fi
+          fi
           if [ -z "$FROM" ] || [ "$FROM" = "0000000000000000000000000000000000000000" ]; then
             echo "No base SHA available; skipping commitlint."
             exit 0
