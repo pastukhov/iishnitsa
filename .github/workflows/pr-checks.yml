@@ -4,6 +4,12 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches-ignore:
+      - main
+    tags-ignore:
+      - "*"
+  workflow_dispatch:
 
 concurrency:
   group: pr-checks-${{ github.head_ref || github.ref }}
