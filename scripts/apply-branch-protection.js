@@ -21,7 +21,7 @@ const configPath =
 
 if (!repo) {
   console.error(
-    "Missing repo. Pass --repo owner/name or set GITHUB_REPOSITORY.",
+    "Missing repo. Pass --repo owner/name or set GITHUB_REPOSITORY."
   );
   process.exit(1);
 }
@@ -44,7 +44,7 @@ try {
 const endpoint = `repos/${repo}/branches/${branch}/protection`;
 const payloadPath = path.resolve(
   process.cwd(),
-  `.branch-protection.${branch}.tmp.json`,
+  `.branch-protection.${branch}.tmp.json`
 );
 
 try {
@@ -63,7 +63,7 @@ try {
     ],
     {
       stdio: "inherit",
-    },
+    }
   );
   fs.unlinkSync(payloadPath);
   console.log(`Applied branch protection to ${repo}:${branch}`);
