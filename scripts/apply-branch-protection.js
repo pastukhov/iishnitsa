@@ -12,16 +12,14 @@ function getArgValue(flag) {
 }
 
 const repo =
-  getArgValue("--repo") ||
-  process.env.GITHUB_REPOSITORY ||
-  process.env.REPO;
+  getArgValue("--repo") || process.env.GITHUB_REPOSITORY || process.env.REPO;
 const branch = getArgValue("--branch") || process.env.BRANCH || "main";
 const configPath =
   getArgValue("--config") || process.env.CONFIG || "branch-protection.json";
 
 if (!repo) {
   console.error(
-    "Missing repo. Pass --repo owner/name or set GITHUB_REPOSITORY."
+    "Missing repo. Pass --repo owner/name or set GITHUB_REPOSITORY.",
   );
   process.exit(1);
 }
@@ -44,7 +42,7 @@ try {
 const endpoint = `repos/${repo}/branches/${branch}/protection`;
 const payloadPath = path.resolve(
   process.cwd(),
-  `.branch-protection.${branch}.tmp.json`
+  `.branch-protection.${branch}.tmp.json`,
 );
 
 try {
@@ -63,7 +61,7 @@ try {
     ],
     {
       stdio: "inherit",
-    }
+    },
   );
   fs.unlinkSync(payloadPath);
   console.log(`Applied branch protection to ${repo}:${branch}`);
