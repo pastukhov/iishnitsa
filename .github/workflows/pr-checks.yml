@@ -100,13 +100,23 @@ jobs:
         run: npm ci
 
       - name: Lint commits
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_BEFORE: ${{ github.event.before }}
+          GITHUB_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            FROM="${{ github.event.pull_request.base.sha }}"
-            TO="${{ github.event.pull_request.head.sha }}"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            FROM="$PR_BASE_SHA"
+            TO="$PR_HEAD_SHA"
           else
-            FROM="${{ github.event.before }}"
-            TO="${{ github.sha }}"
+            FROM="$GITHUB_BEFORE"
+            TO="$GITHUB_SHA"
+          fi
+          if [ -z "$FROM" ] || [ "$FROM" = "0000000000000000000000000000000000000000" ]; then
+            echo "No base SHA available; skipping commitlint."
+            exit 0
           fi
           npx commitlint --config commitlint.config.cjs --from "$FROM" --to "$TO"
 
