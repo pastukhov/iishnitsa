@@ -2,11 +2,11 @@
   "required_status_checks": {
     "strict": true,
     "contexts": [
-      "PR Checks / lint",
-      "PR Checks / typecheck",
-      "PR Checks / format",
-      "PR Checks / providers-mock",
-      "PR Checks / commitlint"
+      "lint",
+      "typecheck",
+      "format",
+      "providers-mock",
+      "commitlint"
     ]
   },
   "enforce_admins": true,
