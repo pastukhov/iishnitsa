@@ -91,3 +91,21 @@ jobs:
           allowUpdates: true
           replacesArtifacts: true
           makeLatest: true
+          draft: true
+
+      - name: Publish draft release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: context.ref.replace("refs/tags/", ""),
+            });
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id,
+              draft: false,
+              make_latest: true,
+            });
