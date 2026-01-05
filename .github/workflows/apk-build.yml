@@ -67,35 +67,24 @@ jobs:
           git fetch --tags --force
           npx -y -p conventional-changelog-cli -p conventional-changelog-angular conventional-changelog -p angular -r 1 > release-notes.md
 
-      # Publish the APK as a GitHub release. The release-action will create or
-      # update the tag `apk-latest` and attach the APK file. Use allowUpdates to
-      # overwrite previous artifacts and makeLatest to mark this release as the latest.
-      - name: Publish release
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ github.ref_name }}
-          name: APK ${{ github.ref_name }}
-          artifacts: iishnitsa-${{ env.BUILD_VERSION }}.apk
-          artifactContentType: application/vnd.android.package-archive
-          bodyFile: release-notes.md
-          allowUpdates: true
-          replacesArtifacts: true
-          makeLatest: true
-          draft: true
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          NAME="APK ${GITHUB_REF_NAME}"
+          NOTES_FILE="release-notes.md"
+          APK="iishnitsa-${BUILD_VERSION}.apk"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --title "$NAME" --notes-file "$NOTES_FILE" --draft --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$APK" --title "$NAME" --notes-file "$NOTES_FILE" --draft --repo "$GITHUB_REPOSITORY"
+          fi
 
-      - name: Publish draft release
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { data: release } = await github.rest.repos.getReleaseByTag({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag: context.ref.replace("refs/tags/", ""),
-            });
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: release.id,
-              draft: false,
-              make_latest: true,
-            });
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest --repo "$GITHUB_REPOSITORY"
