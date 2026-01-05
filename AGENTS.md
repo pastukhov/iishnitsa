@@ -20,6 +20,10 @@
 - Expo MCP tools are available for documentation lookups and EAS workflow guidance.
 - Keep EAS profiles in `eas.json` and default to `preview` for APK builds unless noted otherwise.
 
+## GitHub Helper
+- Use the GitHub CLI (`gh`) to inspect Actions runs, releases, and PR status when troubleshooting CI.
+- Prefer `gh api` for repository queries if standard `gh` commands rely on git in environments where git execution is restricted.
+
 ## Coding Style & Naming Conventions
 - TypeScript/JavaScript with double quotes and 2-space indentation (enforced by Prettier).
 - Prefer descriptive, explicit names for components and hooks (e.g., `ChatView`, `useStore`).
