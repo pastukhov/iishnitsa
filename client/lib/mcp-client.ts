@@ -1,4 +1,5 @@
 import { MCPServer } from "@/lib/store";
+import { appInfo } from "@/lib/app-info";
 
 export interface MCPTool {
   name: string;
@@ -185,7 +186,7 @@ export class MCPClient {
       capabilities: {},
       clientInfo: {
         name: "Iishnitsa Mobile",
-        version: "1.0.0",
+        version: appInfo.version,
       },
     });
 

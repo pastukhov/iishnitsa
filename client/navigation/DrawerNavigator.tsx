@@ -4,6 +4,7 @@ import {
   DrawerContentScrollView,
   DrawerContentComponentProps,
 } from "@react-navigation/drawer";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { View, StyleSheet, Pressable, FlatList } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -13,6 +14,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import ChatScreen from "@/screens/ChatScreen";
 import { useChatStore } from "@/lib/store";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 export type DrawerParamList = {
   Chat: { chatId?: string };
@@ -25,6 +27,8 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
   const { chats, currentChatId, createNewChat, selectChat, deleteChat } =
     useChatStore();
+  const rootNavigation =
+    props.navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
 
   const sortedChats = [...chats].sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
@@ -167,7 +171,25 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
             styles.footerItem,
             { opacity: pressed ? 0.6 : 1 },
           ]}
-          onPress={() => props.navigation.navigate("Settings")}
+          onPress={() => rootNavigation?.navigate("About")}
+        >
+          <MaterialIcons
+            name="info-outline"
+            size={24}
+            color={theme.textSecondary}
+          />
+          <ThemedText
+            style={[styles.footerText, { color: theme.textSecondary }]}
+          >
+            About
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            styles.footerItem,
+            { opacity: pressed ? 0.6 : 1 },
+          ]}
+          onPress={() => rootNavigation?.navigate("Settings")}
         >
           <MaterialIcons
             name="settings"
