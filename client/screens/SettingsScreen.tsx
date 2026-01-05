@@ -743,19 +743,6 @@ export default function SettingsScreen() {
             </>
           )}
         </View>
-
-        <View style={styles.aboutSection}>
-          <ThemedText
-            style={[styles.aboutText, { color: theme.textSecondary }]}
-          >
-            AI Agent v1.0.0
-          </ThemedText>
-          <ThemedText
-            style={[styles.aboutText, { color: theme.textSecondary }]}
-          >
-            Connect to any OpenAI-compatible endpoint
-          </ThemedText>
-        </View>
       </ScrollView>
     </ThemedView>
   );
@@ -944,14 +931,5 @@ const styles = StyleSheet.create({
   },
   addServerText: {
     ...Typography.labelLarge,
-  },
-  aboutSection: {
-    alignItems: "center",
-    marginTop: Spacing["3xl"],
-    paddingVertical: Spacing.xl,
-  },
-  aboutText: {
-    ...Typography.bodySmall,
-    marginBottom: Spacing.xs,
   },
 });

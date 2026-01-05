@@ -44,23 +44,7 @@ jobs:
 
       - name: Apply version from tag
         run: |
-          node -e "const fs=require('fs'); const path='app.json'; const data=JSON.parse(fs.readFileSync(path,'utf8')); data.expo.version=process.env.BUILD_VERSION; fs.writeFileSync(path, JSON.stringify(data, null, 2) + '\n');"
-
-      # Generate native Android project and build APK locally on the runner.
-      - name: Prebuild Android project
-        run: npx expo prebuild --platform android --non-interactive --clean
-
-      - name: Build APK
-        run: |
-          cd android
-          ./gradlew assembleRelease
-          cd ..
-          APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
-          if [ ! -s "$APK_PATH" ]; then
-            echo "Release APK not found at $APK_PATH"
-            exit 1
-          fi
-          cp "$APK_PATH" "iishnitsa-${BUILD_VERSION}.apk"
+          node -e "const fs=require('fs'); const appPath='app.json'; const appData=JSON.parse(fs.readFileSync(appPath,'utf8')); appData.expo.version=process.env.BUILD_VERSION; fs.writeFileSync(appPath, JSON.stringify(appData, null, 2) + '\\n'); const pkgPath='package.json'; const pkgData=JSON.parse(fs.readFileSync(pkgPath,'utf8')); pkgData.version=process.env.BUILD_VERSION; fs.writeFileSync(pkgPath, JSON.stringify(pkgData, null, 2) + '\\n');"
 
       - name: Generate release notes
         run: |
@@ -81,6 +65,23 @@ jobs:
             fi
             echo
           } > release-notes.md
+          node -e "const fs=require('fs'); const notes=fs.readFileSync('release-notes.md','utf8'); const tag=process.env.GITHUB_REF_NAME || 'dev'; const content=`export const releaseTag = ${JSON.stringify(tag)};\\nexport const releaseNotes = ${JSON.stringify(notes)};\\n`; fs.writeFileSync('client/constants/releaseNotes.ts', content);"
+
+      # Generate native Android project and build APK locally on the runner.
+      - name: Prebuild Android project
+        run: npx expo prebuild --platform android --non-interactive --clean
+
+      - name: Build APK
+        run: |
+          cd android
+          ./gradlew assembleRelease
+          cd ..
+          APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -s "$APK_PATH" ]; then
+            echo "Release APK not found at $APK_PATH"
+            exit 1
+          fi
+          cp "$APK_PATH" "iishnitsa-${BUILD_VERSION}.apk"
 
       - name: Create or update draft release
         env:
