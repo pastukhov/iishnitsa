@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.head.repo.full_name == github.repository
     permissions:
+      actions: write
       contents: write
     steps:
       - name: Checkout
@@ -26,7 +27,7 @@ jobs:
       - name: Compute PR tag
         run: |
           DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
-          LAST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1)
+          LAST_TAG=$(git tag -l "v*" --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)
           if [ -z "$LAST_TAG" ]; then
             BASE_VERSION=$(git show "origin/${DEFAULT_BRANCH}:app.json" | node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync(0,'utf8')); process.stdout.write(data.expo.version)")
           else
@@ -44,3 +45,9 @@ jobs:
         run: |
           git tag -f "$PR_TAG"
           git push origin -f "$PR_TAG"
+
+      - name: Trigger APK build for PR tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run apk-build.yml --ref "$PR_TAG" --repo "$GITHUB_REPOSITORY"
