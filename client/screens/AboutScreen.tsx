@@ -53,10 +53,7 @@ export default function AboutScreen() {
         <View
           style={[
             styles.heroCard,
-            {
-              backgroundColor: theme.surface,
-              borderColor: theme.outlineVariant,
-            },
+            { backgroundColor: theme.surface, borderColor: theme.outlineVariant },
           ]}
         >
           <ThemedText style={[styles.appName, { color: theme.text }]}>
