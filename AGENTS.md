@@ -41,6 +41,7 @@
 - Keep commit subjects short and descriptive.
 - Branch names should be two words describing the change, joined with a hyphen (e.g., `mcp-collections`).
 - PRs are auto-created from branch pushes and auto-merged when required checks are green.
+- Apply branch protection from `branch-protection.json` via `scripts/apply-branch-protection.js` when updating review requirements.
 - Protect `main`: require all workflow status checks to pass before merging.
 - For PRs, include: purpose, summary of changes, manual verification steps, and risk notes.
 - Link related issues when applicable; include screenshots only for UI changes.
