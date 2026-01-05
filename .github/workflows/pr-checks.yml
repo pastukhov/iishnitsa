@@ -118,7 +118,7 @@ jobs:
       - format
       - providers-mock
       - commitlint
-    if: always()
+    if: ${{ always() && github.event_name == 'pull_request' }}
     permissions:
       pull-requests: write
     steps:
