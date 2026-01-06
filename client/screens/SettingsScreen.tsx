@@ -6,6 +6,7 @@ import {
   Pressable,
   Switch,
   ScrollView,
+  KeyboardAvoidingView,
   ActivityIndicator,
   Alert,
   Platform,
@@ -399,28 +400,35 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + Spacing.xl },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <SectionHeader title="Endpoint Configuration" />
-        <View
-          style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={insets.top}
+    >
+      <ThemedView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + Spacing.xl },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
-          <SelectField
-            label="Provider"
-            value={settings.endpoint.providerId}
-            options={providers.map((provider) => ({
-              label: provider.name,
-              value: provider.id,
-            }))}
-            onSelect={(value) => handleProviderChange(value as ProviderId)}
-            placeholder="Select a provider"
-          />
+          <SectionHeader title="Endpoint Configuration" />
+          <View
+            style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
+          >
+            <SelectField
+              label="Provider"
+              value={settings.endpoint.providerId}
+              options={providers.map((provider) => ({
+                label: provider.name,
+                value: provider.id,
+              }))}
+              onSelect={(value) => handleProviderChange(value as ProviderId)}
+              placeholder="Select a provider"
+            />
 
           <InputField
             label="Base URL"
@@ -742,9 +750,10 @@ export default function SettingsScreen() {
               )}
             </>
           )}
-        </View>
-      </ScrollView>
-    </ThemedView>
+          </View>
+        </ScrollView>
+      </ThemedView>
+    </KeyboardAvoidingView>
   );
 }
 
