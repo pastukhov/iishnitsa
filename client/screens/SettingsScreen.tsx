@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -9,7 +9,10 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
   Alert,
+  Dimensions,
   Platform,
+  StyleProp,
+  TextStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -46,6 +49,8 @@ function InputField({
   multiline = false,
   keyboardType = "default",
   editable = true,
+  inputStyle,
+  scrollEnabled = false,
 }: {
   label: string;
   value: string;
@@ -55,6 +60,8 @@ function InputField({
   multiline?: boolean;
   keyboardType?: "default" | "url";
   editable?: boolean;
+  inputStyle?: StyleProp<TextStyle>;
+  scrollEnabled?: boolean;
 }) {
   const { theme } = useTheme();
   const [showPassword, setShowPassword] = useState(false);
@@ -79,6 +86,7 @@ function InputField({
             { color: theme.text },
             multiline && styles.multilineInput,
             !editable && styles.inputDisabled,
+            inputStyle,
           ]}
           value={value}
           onChangeText={onChangeText}
@@ -88,6 +96,7 @@ function InputField({
           multiline={multiline}
           keyboardType={keyboardType}
           editable={editable}
+          scrollEnabled={scrollEnabled}
           autoCapitalize="none"
           autoCorrect={false}
         />
@@ -254,6 +263,10 @@ export default function SettingsScreen() {
     message?: string;
     error?: string;
   } | null>(null);
+  const systemPromptHeight = useMemo(
+    () => Math.max(120, Math.floor(Dimensions.get("window").height / 3)),
+    [],
+  );
   const uiLabels = {
     testing: "Проверка...",
     test: "Проверить соединение",
@@ -498,13 +511,15 @@ export default function SettingsScreen() {
               </ThemedText>
             )}
 
-            <InputField
-              label="System Prompt"
-              value={settings.endpoint.systemPrompt}
-              onChangeText={(text) => updateEndpoint({ systemPrompt: text })}
-              placeholder="You are a helpful AI assistant."
-              multiline
-            />
+          <InputField
+            label="System Prompt"
+            value={settings.endpoint.systemPrompt}
+            onChangeText={(text) => updateEndpoint({ systemPrompt: text })}
+            placeholder="You are a helpful AI assistant."
+            multiline
+            scrollEnabled
+            inputStyle={{ height: systemPromptHeight }}
+          />
 
             <Pressable
               onPress={handleTestConnection}
