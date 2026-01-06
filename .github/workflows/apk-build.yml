@@ -71,6 +71,19 @@ jobs:
       - name: Prebuild Android project
         run: npx expo prebuild --platform android --non-interactive --clean
 
+      - name: Configure Gradle Maven mirror
+        run: |
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/init.gradle <<'EOF'
+          allprojects {
+            repositories {
+              maven { url "https://maven-central.storage-download.googleapis.com/maven2" }
+              mavenCentral()
+              google()
+            }
+          }
+          EOF
+
       - name: Build APK
         run: |
           cd android
