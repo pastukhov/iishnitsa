@@ -75,11 +75,27 @@ jobs:
         run: |
           mkdir -p ~/.gradle
           cat > ~/.gradle/init.gradle <<'EOF'
+          def mirrorRepo = { ->
+            maven { url "https://maven-central.storage-download.googleapis.com/maven2" }
+            mavenCentral()
+            google()
+            gradlePluginPortal()
+          }
+
+          settingsEvaluated { settings ->
+            settings.pluginManagement {
+              repositories { mirrorRepo() }
+            }
+          }
+
           allprojects {
             repositories {
-              maven { url "https://maven-central.storage-download.googleapis.com/maven2" }
-              mavenCentral()
-              google()
+              mirrorRepo()
+            }
+            buildscript {
+              repositories {
+                mirrorRepo()
+              }
             }
           }
           EOF
