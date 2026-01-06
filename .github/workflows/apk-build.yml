@@ -65,7 +65,7 @@ jobs:
             fi
             echo
           } > release-notes.md
-          node -e 'const fs=require("fs"); const notes=fs.readFileSync("release-notes.md","utf8"); const tag=process.env.GITHUB_REF_NAME || "dev"; const content=`export const releaseTag = ${JSON.stringify(tag)};\\nexport const releaseNotes = ${JSON.stringify(notes)};\\n`; fs.writeFileSync("client/constants/releaseNotes.ts", content);'
+          node -e 'const fs=require("fs"); const notes=fs.readFileSync("release-notes.md","utf8"); const tag=process.env.GITHUB_REF_NAME || "dev"; const content="export const releaseTag = " + JSON.stringify(tag) + ";\n" + "export const releaseNotes = " + JSON.stringify(notes) + ";\n"; fs.writeFileSync("client/constants/releaseNotes.ts", content);'
 
       # Generate native Android project and build APK locally on the runner.
       - name: Prebuild Android project
