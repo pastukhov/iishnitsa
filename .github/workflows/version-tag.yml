@@ -3,7 +3,7 @@ name: Tag Release Version
 on:
   push:
     branches:
-      - "**"
+      - main
   workflow_dispatch:
 
 concurrency:
@@ -73,29 +73,7 @@ jobs:
           BASE_VERSION: ${{ env.BASE_VERSION }}
           BUMP_TYPE: ${{ env.BUMP_TYPE }}
 
-      - name: Skip if already bumped
-        run: |
-          LAST_MESSAGE=$(git log -1 --pretty=%s)
-          if echo "$LAST_MESSAGE" | grep -q "^chore: bump version to v"; then
-            echo "SKIP_BUMP=true" >> $GITHUB_ENV
-          fi
-
-      - name: Update version files
-        if: env.SKIP_BUMP != 'true'
-        run: |
-          node -e "const fs=require('fs'); const appPath='app.json'; const easPath='eas.json'; const version=process.env.NEXT_VERSION; const app=JSON.parse(fs.readFileSync(appPath,'utf8')); app.expo.version=version; app.expo.android=app.expo.android || {}; const parts=version.split('.').map((n)=>parseInt(n,10)); const versionCode=(parts[0]*10000)+(parts[1]*100)+parts[2]; app.expo.android.versionCode=versionCode; fs.writeFileSync(appPath, JSON.stringify(app, null, 2) + '\\n'); const eas=JSON.parse(fs.readFileSync(easPath,'utf8')); ['development','preview','production'].forEach((profile)=>{ if (!eas.build) return; eas.build[profile]=eas.build[profile] || {}; eas.build[profile].env=eas.build[profile].env || {}; eas.build[profile].env.APP_VERSION=version; }); fs.writeFileSync(easPath, JSON.stringify(eas, null, 2) + '\\n');"
-
-      - name: Commit version bump
-        if: env.SKIP_BUMP != 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add app.json eas.json
-          git commit -m "chore: bump version to v$NEXT_VERSION"
-          git push origin HEAD:main
-
       - name: Create and push tag
-        if: env.SKIP_BUMP != 'true'
         run: |
           if git rev-parse "$NEXT_TAG" >/dev/null 2>&1; then
             echo "Tag $NEXT_TAG already exists. Skipping."
