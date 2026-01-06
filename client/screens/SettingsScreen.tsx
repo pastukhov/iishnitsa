@@ -6,6 +6,7 @@ import {
   Pressable,
   Switch,
   ScrollView,
+  KeyboardAvoidingView,
   ActivityIndicator,
   Alert,
   Platform,
@@ -399,352 +400,372 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + Spacing.xl },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <SectionHeader title="Endpoint Configuration" />
-        <View
-          style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={insets.top}
+    >
+      <ThemedView style={styles.container}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + Spacing.xl },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
-          <SelectField
-            label="Provider"
-            value={settings.endpoint.providerId}
-            options={providers.map((provider) => ({
-              label: provider.name,
-              value: provider.id,
-            }))}
-            onSelect={(value) => handleProviderChange(value as ProviderId)}
-            placeholder="Select a provider"
-          />
-
-          <InputField
-            label="Base URL"
-            value={resolvedBaseUrl}
-            onChangeText={(text) => updateEndpoint({ baseUrl: text })}
-            placeholder="https://api.openai.com/v1"
-            keyboardType="url"
-            editable={isCustomProvider}
-          />
-          {!isCustomProvider && (
-            <ThemedText
-              style={[styles.helperText, { color: theme.textSecondary }]}
-            >
-              Auto-filled from provider selection.
-            </ThemedText>
-          )}
-
-          <InputField
-            label="API Key"
-            value={settings.endpoint.apiKey}
-            onChangeText={(text) => updateEndpoint({ apiKey: text })}
-            placeholder="sk-..."
-            secureTextEntry
-          />
-          <ThemedText
-            style={[styles.helperText, { color: theme.textSecondary }]}
+          <SectionHeader title="Endpoint Configuration" />
+          <View
+            style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
           >
-            Auth format: {formatAuthHeaderLabel(settings.endpoint.providerId)}
-          </ThemedText>
-
-          {modelSelectOptions.length > 0 ? (
             <SelectField
-              label="Model"
-              value={settings.endpoint.model}
-              options={modelSelectOptions.map((model) => ({
-                label: model,
-                value: model,
+              label="Provider"
+              value={settings.endpoint.providerId}
+              options={providers.map((provider) => ({
+                label: provider.name,
+                value: provider.id,
               }))}
-              onSelect={(value) => updateEndpoint({ model: value })}
-              placeholder="Select a model"
+              onSelect={(value) => handleProviderChange(value as ProviderId)}
+              placeholder="Select a provider"
             />
-          ) : (
+
             <InputField
-              label="Model"
-              value={settings.endpoint.model}
-              onChangeText={(text) => updateEndpoint({ model: text })}
-              placeholder="gpt-4o-mini"
+              label="Base URL"
+              value={resolvedBaseUrl}
+              onChangeText={(text) => updateEndpoint({ baseUrl: text })}
+              placeholder="https://api.openai.com/v1"
+              keyboardType="url"
+              editable={isCustomProvider}
             />
-          )}
-          {modelStatus?.loading && (
-            <ThemedText
-              style={[styles.helperText, { color: theme.textSecondary }]}
-            >
-              {uiLabels.modelsLoading}
-            </ThemedText>
-          )}
-          {modelStatus?.message && (
-            <ThemedText
-              style={[styles.helperText, { color: theme.textSecondary }]}
-            >
-              {modelStatus.message}
-            </ThemedText>
-          )}
-          {modelStatus?.error && (
-            <ThemedText style={[styles.helperText, { color: theme.error }]}>
-              {modelStatus.error}
-            </ThemedText>
-          )}
-
-          <InputField
-            label="System Prompt"
-            value={settings.endpoint.systemPrompt}
-            onChangeText={(text) => updateEndpoint({ systemPrompt: text })}
-            placeholder="You are a helpful AI assistant."
-            multiline
-          />
-
-          <Pressable
-            onPress={handleTestConnection}
-            disabled={
-              isTesting || !settings.endpoint.apiKey || !resolvedBaseUrl
-            }
-            style={({ pressed }) => [
-              styles.testButton,
-              {
-                backgroundColor:
-                  settings.endpoint.apiKey && resolvedBaseUrl
-                    ? theme.primary
-                    : theme.surfaceVariant,
-                opacity: pressed ? 0.8 : 1,
-              },
-            ]}
-          >
-            {isTesting ? (
-              <ActivityIndicator size="small" color={theme.buttonText} />
-            ) : (
-              <>
-                <MaterialIcons name="wifi" size={20} color={theme.buttonText} />
-                <ThemedText
-                  style={[styles.testButtonText, { color: theme.buttonText }]}
-                >
-                  {uiLabels.test}
-                </ThemedText>
-              </>
+            {!isCustomProvider && (
+              <ThemedText
+                style={[styles.helperText, { color: theme.textSecondary }]}
+              >
+                Auto-filled from provider selection.
+              </ThemedText>
             )}
-          </Pressable>
 
-          {testResult && (
-            <View
-              style={[
-                styles.testResult,
+            <InputField
+              label="API Key"
+              value={settings.endpoint.apiKey}
+              onChangeText={(text) => updateEndpoint({ apiKey: text })}
+              placeholder="sk-..."
+              secureTextEntry
+            />
+            <ThemedText
+              style={[styles.helperText, { color: theme.textSecondary }]}
+            >
+              Auth format: {formatAuthHeaderLabel(settings.endpoint.providerId)}
+            </ThemedText>
+
+            {modelSelectOptions.length > 0 ? (
+              <SelectField
+                label="Model"
+                value={settings.endpoint.model}
+                options={modelSelectOptions.map((model) => ({
+                  label: model,
+                  value: model,
+                }))}
+                onSelect={(value) => updateEndpoint({ model: value })}
+                placeholder="Select a model"
+              />
+            ) : (
+              <InputField
+                label="Model"
+                value={settings.endpoint.model}
+                onChangeText={(text) => updateEndpoint({ model: text })}
+                placeholder="gpt-4o-mini"
+              />
+            )}
+            {modelStatus?.loading && (
+              <ThemedText
+                style={[styles.helperText, { color: theme.textSecondary }]}
+              >
+                {uiLabels.modelsLoading}
+              </ThemedText>
+            )}
+            {modelStatus?.message && (
+              <ThemedText
+                style={[styles.helperText, { color: theme.textSecondary }]}
+              >
+                {modelStatus.message}
+              </ThemedText>
+            )}
+            {modelStatus?.error && (
+              <ThemedText style={[styles.helperText, { color: theme.error }]}>
+                {modelStatus.error}
+              </ThemedText>
+            )}
+
+            <InputField
+              label="System Prompt"
+              value={settings.endpoint.systemPrompt}
+              onChangeText={(text) => updateEndpoint({ systemPrompt: text })}
+              placeholder="You are a helpful AI assistant."
+              multiline
+            />
+
+            <Pressable
+              onPress={handleTestConnection}
+              disabled={
+                isTesting || !settings.endpoint.apiKey || !resolvedBaseUrl
+              }
+              style={({ pressed }) => [
+                styles.testButton,
                 {
-                  backgroundColor: testResult.success
-                    ? theme.successContainer
-                    : theme.errorContainer,
+                  backgroundColor:
+                    settings.endpoint.apiKey && resolvedBaseUrl
+                      ? theme.primary
+                      : theme.surfaceVariant,
+                  opacity: pressed ? 0.8 : 1,
                 },
               ]}
             >
-              <MaterialIcons
-                name={testResult.success ? "check-circle" : "error"}
-                size={20}
-                color={testResult.success ? theme.success : theme.error}
-              />
-              <ThemedText
-                style={[
-                  styles.testResultText,
-                  { color: testResult.success ? theme.success : theme.error },
-                ]}
-              >
-                {testResult.message}
-              </ThemedText>
-            </View>
-          )}
-        </View>
+              {isTesting ? (
+                <ActivityIndicator size="small" color={theme.buttonText} />
+              ) : (
+                <>
+                  <MaterialIcons
+                    name="wifi"
+                    size={20}
+                    color={theme.buttonText}
+                  />
+                  <ThemedText
+                    style={[styles.testButtonText, { color: theme.buttonText }]}
+                  >
+                    {uiLabels.test}
+                  </ThemedText>
+                </>
+              )}
+            </Pressable>
 
-        <SectionHeader title="MCP Configuration" />
-        <View
-          style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
-        >
-          <ToggleRow
-            label="Enable MCP"
-            description="Connect to Model Context Protocol servers for enhanced capabilities"
-            value={settings.mcpEnabled}
-            onValueChange={(value) => updateSettings({ mcpEnabled: value })}
-          />
-
-          {settings.mcpEnabled && (
-            <>
+            {testResult && (
               <View
                 style={[
-                  styles.divider,
-                  { backgroundColor: theme.outlineVariant },
+                  styles.testResult,
+                  {
+                    backgroundColor: testResult.success
+                      ? theme.successContainer
+                      : theme.errorContainer,
+                  },
                 ]}
-              />
-
-              {settings.mcpServers.map((server) => (
-                <View key={server.id}>
-                  <View style={styles.mcpServerRow}>
-                    <Pressable
-                      onPress={() => toggleMCPServer(server.id)}
-                      style={styles.mcpServerInfo}
-                    >
-                      <MaterialIcons
-                        name={
-                          server.enabled
-                            ? "check-box"
-                            : "check-box-outline-blank"
-                        }
-                        size={24}
-                        color={
-                          server.enabled ? theme.primary : theme.textSecondary
-                        }
-                      />
-                      <View style={styles.mcpServerText}>
-                        <ThemedText style={styles.mcpServerName}>
-                          {server.name}
-                        </ThemedText>
-                        <ThemedText
-                          style={[
-                            styles.mcpServerUrl,
-                            { color: theme.textSecondary },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {server.url}
-                        </ThemedText>
-                      </View>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => handleTestMCPServer(server)}
-                      disabled={testingMCPId === server.id}
-                      style={({ pressed }) => [
-                        styles.testMcpButton,
-                        { opacity: pressed ? 0.6 : 1 },
-                      ]}
-                    >
-                      {testingMCPId === server.id ? (
-                        <ActivityIndicator size="small" color={theme.primary} />
-                      ) : (
-                        <MaterialIcons
-                          name="wifi"
-                          size={18}
-                          color={theme.primary}
-                        />
-                      )}
-                    </Pressable>
-                    <Pressable
-                      onPress={() =>
-                        handleRemoveMCPServer(server.id, server.name)
-                      }
-                      style={({ pressed }) => [
-                        styles.removeButton,
-                        { opacity: pressed ? 0.6 : 1 },
-                      ]}
-                    >
-                      <MaterialIcons
-                        name="delete-outline"
-                        size={20}
-                        color={theme.error}
-                      />
-                    </Pressable>
-                  </View>
-                  {mcpTestResult?.serverId === server.id && (
-                    <View
-                      style={[
-                        styles.mcpTestResult,
-                        {
-                          backgroundColor: mcpTestResult.success
-                            ? theme.successContainer
-                            : theme.errorContainer,
-                        },
-                      ]}
-                    >
-                      <MaterialIcons
-                        name={mcpTestResult.success ? "check-circle" : "error"}
-                        size={16}
-                        color={
-                          mcpTestResult.success ? theme.success : theme.error
-                        }
-                        style={{ marginTop: 2 }}
-                      />
-                      <ThemedText
-                        style={[
-                          styles.mcpTestResultText,
-                          {
-                            color: mcpTestResult.success
-                              ? theme.success
-                              : theme.error,
-                          },
-                        ]}
-                        selectable
-                      >
-                        {mcpTestResult.message}
-                      </ThemedText>
-                    </View>
-                  )}
-                </View>
-              ))}
-
-              {showAddMCP ? (
-                <View style={styles.addMCPForm}>
-                  <InputField
-                    label="Server Name"
-                    value={newMCPName}
-                    onChangeText={setNewMCPName}
-                    placeholder="My MCP Server"
-                  />
-                  <InputField
-                    label="Server URL"
-                    value={newMCPUrl}
-                    onChangeText={setNewMCPUrl}
-                    placeholder="http://localhost:3000"
-                    keyboardType="url"
-                  />
-                  <View style={styles.addMCPButtons}>
-                    <Pressable
-                      onPress={() => setShowAddMCP(false)}
-                      style={({ pressed }) => [
-                        styles.cancelButton,
-                        {
-                          borderColor: theme.outline,
-                          opacity: pressed ? 0.8 : 1,
-                        },
-                      ]}
-                    >
-                      <ThemedText>Cancel</ThemedText>
-                    </Pressable>
-                    <Pressable
-                      onPress={handleAddMCPServer}
-                      style={({ pressed }) => [
-                        styles.addButton,
-                        {
-                          backgroundColor: theme.primary,
-                          opacity: pressed ? 0.8 : 1,
-                        },
-                      ]}
-                    >
-                      <ThemedText style={{ color: theme.buttonText }}>
-                        Add Server
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                </View>
-              ) : (
-                <Pressable
-                  onPress={() => setShowAddMCP(true)}
-                  style={({ pressed }) => [
-                    styles.addServerButton,
-                    { borderColor: theme.primary, opacity: pressed ? 0.8 : 1 },
+              >
+                <MaterialIcons
+                  name={testResult.success ? "check-circle" : "error"}
+                  size={20}
+                  color={testResult.success ? theme.success : theme.error}
+                />
+                <ThemedText
+                  style={[
+                    styles.testResultText,
+                    { color: testResult.success ? theme.success : theme.error },
                   ]}
                 >
-                  <MaterialIcons name="add" size={20} color={theme.primary} />
-                  <ThemedText
-                    style={[styles.addServerText, { color: theme.primary }]}
+                  {testResult.message}
+                </ThemedText>
+              </View>
+            )}
+          </View>
+
+          <SectionHeader title="MCP Configuration" />
+          <View
+            style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
+          >
+            <ToggleRow
+              label="Enable MCP"
+              description="Connect to Model Context Protocol servers for enhanced capabilities"
+              value={settings.mcpEnabled}
+              onValueChange={(value) => updateSettings({ mcpEnabled: value })}
+            />
+
+            {settings.mcpEnabled && (
+              <>
+                <View
+                  style={[
+                    styles.divider,
+                    { backgroundColor: theme.outlineVariant },
+                  ]}
+                />
+
+                {settings.mcpServers.map((server) => (
+                  <View key={server.id}>
+                    <View style={styles.mcpServerRow}>
+                      <Pressable
+                        onPress={() => toggleMCPServer(server.id)}
+                        style={styles.mcpServerInfo}
+                      >
+                        <MaterialIcons
+                          name={
+                            server.enabled
+                              ? "check-box"
+                              : "check-box-outline-blank"
+                          }
+                          size={24}
+                          color={
+                            server.enabled ? theme.primary : theme.textSecondary
+                          }
+                        />
+                        <View style={styles.mcpServerText}>
+                          <ThemedText style={styles.mcpServerName}>
+                            {server.name}
+                          </ThemedText>
+                          <ThemedText
+                            style={[
+                              styles.mcpServerUrl,
+                              { color: theme.textSecondary },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {server.url}
+                          </ThemedText>
+                        </View>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleTestMCPServer(server)}
+                        disabled={testingMCPId === server.id}
+                        style={({ pressed }) => [
+                          styles.testMcpButton,
+                          { opacity: pressed ? 0.6 : 1 },
+                        ]}
+                      >
+                        {testingMCPId === server.id ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={theme.primary}
+                          />
+                        ) : (
+                          <MaterialIcons
+                            name="wifi"
+                            size={18}
+                            color={theme.primary}
+                          />
+                        )}
+                      </Pressable>
+                      <Pressable
+                        onPress={() =>
+                          handleRemoveMCPServer(server.id, server.name)
+                        }
+                        style={({ pressed }) => [
+                          styles.removeButton,
+                          { opacity: pressed ? 0.6 : 1 },
+                        ]}
+                      >
+                        <MaterialIcons
+                          name="delete-outline"
+                          size={20}
+                          color={theme.error}
+                        />
+                      </Pressable>
+                    </View>
+                    {mcpTestResult?.serverId === server.id && (
+                      <View
+                        style={[
+                          styles.mcpTestResult,
+                          {
+                            backgroundColor: mcpTestResult.success
+                              ? theme.successContainer
+                              : theme.errorContainer,
+                          },
+                        ]}
+                      >
+                        <MaterialIcons
+                          name={
+                            mcpTestResult.success ? "check-circle" : "error"
+                          }
+                          size={16}
+                          color={
+                            mcpTestResult.success ? theme.success : theme.error
+                          }
+                          style={{ marginTop: 2 }}
+                        />
+                        <ThemedText
+                          style={[
+                            styles.mcpTestResultText,
+                            {
+                              color: mcpTestResult.success
+                                ? theme.success
+                                : theme.error,
+                            },
+                          ]}
+                          selectable
+                        >
+                          {mcpTestResult.message}
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+                ))}
+
+                {showAddMCP ? (
+                  <View style={styles.addMCPForm}>
+                    <InputField
+                      label="Server Name"
+                      value={newMCPName}
+                      onChangeText={setNewMCPName}
+                      placeholder="My MCP Server"
+                    />
+                    <InputField
+                      label="Server URL"
+                      value={newMCPUrl}
+                      onChangeText={setNewMCPUrl}
+                      placeholder="http://localhost:3000"
+                      keyboardType="url"
+                    />
+                    <View style={styles.addMCPButtons}>
+                      <Pressable
+                        onPress={() => setShowAddMCP(false)}
+                        style={({ pressed }) => [
+                          styles.cancelButton,
+                          {
+                            borderColor: theme.outline,
+                            opacity: pressed ? 0.8 : 1,
+                          },
+                        ]}
+                      >
+                        <ThemedText>Cancel</ThemedText>
+                      </Pressable>
+                      <Pressable
+                        onPress={handleAddMCPServer}
+                        style={({ pressed }) => [
+                          styles.addButton,
+                          {
+                            backgroundColor: theme.primary,
+                            opacity: pressed ? 0.8 : 1,
+                          },
+                        ]}
+                      >
+                        <ThemedText style={{ color: theme.buttonText }}>
+                          Add Server
+                        </ThemedText>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => setShowAddMCP(true)}
+                    style={({ pressed }) => [
+                      styles.addServerButton,
+                      {
+                        borderColor: theme.primary,
+                        opacity: pressed ? 0.8 : 1,
+                      },
+                    ]}
                   >
-                    Add MCP Server
-                  </ThemedText>
-                </Pressable>
-              )}
-            </>
-          )}
-        </View>
-      </ScrollView>
-    </ThemedView>
+                    <MaterialIcons name="add" size={20} color={theme.primary} />
+                    <ThemedText
+                      style={[styles.addServerText, { color: theme.primary }]}
+                    >
+                      Add MCP Server
+                    </ThemedText>
+                  </Pressable>
+                )}
+              </>
+            )}
+          </View>
+        </ScrollView>
+      </ThemedView>
+    </KeyboardAvoidingView>
   );
 }
 
