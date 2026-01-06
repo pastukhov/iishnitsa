@@ -38,12 +38,14 @@
 - Use `npm run check:providers` to smoke-test provider connectivity (set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TOGETHER_API_KEY`, `MISTRAL_API_KEY`, `PERPLEXITY_API_KEY`, `YANDEX_API_KEY`, `REPLICATE_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, `DASHSCOPE_API_KEY`; optional per-provider `*_BASE_URL` overrides and `ANTHROPIC_MODEL`/`PERPLEXITY_MODEL`).
 - Use `npm run check:providers:mock` (or `MOCK_PROVIDERS=1`) to run mocked provider checks when CI secrets are unavailable.
 - If you add tests, document how to run them in this file and update scripts accordingly.
+- Be proactive: when checks or validations are feasible, run them instead of asking the user to do so.
 
 ## Commit & Pull Request Guidelines
 - Commit messages must follow Conventional Commits (e.g., `feat: add mcp checks`, `chore(ci): update workflows`).
 - Keep commit subjects short and descriptive.
 - Branch names should be two words describing the change, joined with a hyphen (e.g., `mcp-collections`).
 - PRs are auto-created from branch pushes and auto-merged when required checks are green.
+- Open PRs proactively after pushing changes; do not ask the user to open PRs for you.
 - Apply branch protection from `branch-protection.json` via `scripts/apply-branch-protection.js` when updating review requirements.
 - Protect `main`: require all workflow status checks to pass before merging.
 - For PRs, include: purpose, summary of changes, manual verification steps, and risk notes.
