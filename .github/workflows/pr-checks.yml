@@ -16,6 +16,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  base-up-to-date:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Fetch main
+        run: git fetch origin main --depth=1
+
+      - name: Ensure branch is based on latest main
+        run: |
+          MAIN_SHA=$(git rev-parse origin/main)
+          BASE_SHA=$(git merge-base origin/main HEAD)
+          if [ "$BASE_SHA" != "$MAIN_SHA" ]; then
+            echo "Branch is not based on the latest main. Rebase or merge origin/main."
+            echo "merge-base: $BASE_SHA"
+            echo "origin/main: $MAIN_SHA"
+            exit 1
+          fi
+
   lint:
     runs-on: ubuntu-latest
     steps:
