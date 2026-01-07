@@ -42,17 +42,9 @@ export interface MCPServer {
   enabled: boolean;
 }
 
-export interface MCPServerCollection {
-  id: string;
-  name: string;
-  servers: MCPServer[];
-}
-
 export interface Settings {
   endpoint: EndpointConfig;
   mcpServers: MCPServer[];
-  mcpCollections: MCPServerCollection[];
-  activeMcpCollectionId: string | null;
   mcpEnabled: boolean;
   theme: "light" | "dark" | "system";
 }
@@ -76,13 +68,6 @@ interface ChatStore {
   addMCPServer: (server: Omit<MCPServer, "id">) => void;
   removeMCPServer: (id: string) => void;
   toggleMCPServer: (id: string) => void;
-  addMCPCollection: (name: string, servers?: MCPServer[]) => void;
-  updateMCPCollection: (
-    id: string,
-    updates: Partial<MCPServerCollection>,
-  ) => void;
-  deleteMCPCollection: (id: string) => void;
-  setActiveMCPCollection: (id: string | null) => void;
   setIsStreaming: (isStreaming: boolean) => void;
   clearCurrentChat: () => void;
 }
@@ -178,68 +163,12 @@ Always ensure:
     providerId: "openai",
   },
   mcpServers: [],
-  mcpCollections: [],
-  activeMcpCollectionId: null,
   mcpEnabled: false,
   theme: "system",
 };
 
 const generateId = () => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
-};
-
-const ensureCollections = (settings: Settings): Settings => {
-  const collections =
-    settings.mcpCollections && settings.mcpCollections.length > 0
-      ? settings.mcpCollections
-      : [
-          {
-            id: generateId(),
-            name: "Default",
-            servers: settings.mcpServers || [],
-          },
-        ];
-
-  const activeCollectionId =
-    settings.activeMcpCollectionId &&
-    collections.some(
-      (collection) => collection.id === settings.activeMcpCollectionId,
-    )
-      ? settings.activeMcpCollectionId
-      : collections[0]?.id || null;
-
-  const activeCollection = activeCollectionId
-    ? collections.find((collection) => collection.id === activeCollectionId) ||
-      null
-    : null;
-
-  return {
-    ...settings,
-    mcpCollections: collections,
-    activeMcpCollectionId: activeCollectionId,
-    mcpServers: activeCollection
-      ? activeCollection.servers
-      : settings.mcpServers,
-  };
-};
-
-const updateActiveCollectionServers = (
-  settings: Settings,
-  servers: MCPServer[],
-): Settings => {
-  if (!settings.activeMcpCollectionId) {
-    return { ...settings, mcpServers: servers };
-  }
-
-  return {
-    ...settings,
-    mcpServers: servers,
-    mcpCollections: settings.mcpCollections.map((collection) =>
-      collection.id === settings.activeMcpCollectionId
-        ? { ...collection, servers }
-        : collection,
-    ),
-  };
 };
 
 const createNewChatObject = (): Chat => ({
@@ -279,7 +208,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
         : defaultSettings;
 
-      set({ chats, currentChatId, settings: ensureCollections(settings) });
+      set({ chats, currentChatId, settings });
 
       if (chats.length === 0) {
         get().createNewChat();
@@ -410,10 +339,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   addMCPServer: (server) => {
     const newServer: MCPServer = { ...server, id: generateId() };
     set((state) => {
-      const settings = updateActiveCollectionServers(state.settings, [
-        ...state.settings.mcpServers,
-        newServer,
-      ]);
+      const settings = {
+        ...state.settings,
+        mcpServers: [...state.settings.mcpServers, newServer],
+      };
       AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
       return { settings };
     });
@@ -421,10 +350,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   removeMCPServer: (id) => {
     set((state) => {
-      const settings = updateActiveCollectionServers(
-        state.settings,
-        state.settings.mcpServers.filter((s) => s.id !== id),
-      );
+      const settings = {
+        ...state.settings,
+        mcpServers: state.settings.mcpServers.filter((s) => s.id !== id),
+      };
       AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
       return { settings };
     });
@@ -432,90 +361,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   toggleMCPServer: (id) => {
     set((state) => {
-      const settings = updateActiveCollectionServers(
-        state.settings,
-        state.settings.mcpServers.map((s) =>
+      const settings = {
+        ...state.settings,
+        mcpServers: state.settings.mcpServers.map((s) =>
           s.id === id ? { ...s, enabled: !s.enabled } : s,
         ),
-      );
-      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-      return { settings };
-    });
-  },
-
-  addMCPCollection: (name, servers) => {
-    const newCollection: MCPServerCollection = {
-      id: generateId(),
-      name,
-      servers: servers || [],
-    };
-    set((state) => {
-      const settings = {
-        ...state.settings,
-        mcpCollections: [...state.settings.mcpCollections, newCollection],
-      };
-      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-      return { settings };
-    });
-  },
-
-  updateMCPCollection: (id, updates) => {
-    set((state) => {
-      const updatedCollections = state.settings.mcpCollections.map(
-        (collection) =>
-          collection.id === id ? { ...collection, ...updates } : collection,
-      );
-      const settings = {
-        ...state.settings,
-        mcpCollections: updatedCollections,
-        mcpServers:
-          state.settings.activeMcpCollectionId === id && updates.servers
-            ? updates.servers
-            : state.settings.mcpServers,
-      };
-      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-      return { settings };
-    });
-  },
-
-  deleteMCPCollection: (id) => {
-    set((state) => {
-      const remaining = state.settings.mcpCollections.filter(
-        (collection) => collection.id !== id,
-      );
-      const activeId =
-        state.settings.activeMcpCollectionId === id
-          ? remaining[0]?.id || null
-          : state.settings.activeMcpCollectionId;
-      const activeCollection = activeId
-        ? remaining.find((collection) => collection.id === activeId) || null
-        : null;
-      const settings = {
-        ...state.settings,
-        mcpCollections: remaining,
-        activeMcpCollectionId: activeId,
-        mcpServers: activeCollection
-          ? activeCollection.servers
-          : state.settings.mcpServers,
-      };
-      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-      return { settings };
-    });
-  },
-
-  setActiveMCPCollection: (id) => {
-    set((state) => {
-      const activeCollection = id
-        ? state.settings.mcpCollections.find(
-            (collection) => collection.id === id,
-          ) || null
-        : null;
-      const settings = {
-        ...state.settings,
-        activeMcpCollectionId: id,
-        mcpServers: activeCollection
-          ? activeCollection.servers
-          : state.settings.mcpServers,
       };
       AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
       return { settings };

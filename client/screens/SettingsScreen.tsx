@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Clipboard from "expo-clipboard";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -24,6 +25,10 @@ import { ThemedView } from "@/components/ThemedView";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useChatStore } from "@/lib/store";
 import { testConnection, testMCPServer } from "@/lib/api";
+import {
+  buildMCPServersYaml,
+  parseMCPServersYaml,
+} from "@/lib/mcp-collections";
 import {
   ProviderId,
   formatAuthHeaderLabel,
@@ -240,10 +245,6 @@ export default function SettingsScreen() {
     addMCPServer,
     removeMCPServer,
     toggleMCPServer,
-    addMCPCollection,
-    updateMCPCollection,
-    deleteMCPCollection,
-    setActiveMCPCollection,
   } = useChatStore();
 
   const [isTesting, setIsTesting] = useState(false);
@@ -261,11 +262,11 @@ export default function SettingsScreen() {
     success: boolean;
     message: string;
   } | null>(null);
-  const [newCollectionName, setNewCollectionName] = useState("");
-  const [editingCollectionId, setEditingCollectionId] = useState<string | null>(
-    null,
-  );
-  const [editingCollectionName, setEditingCollectionName] = useState("");
+  const [mcpYamlText, setMcpYamlText] = useState("");
+  const [mcpYamlMessage, setMcpYamlMessage] = useState<{
+    tone: "success" | "error";
+    text: string;
+  } | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelStatus, setModelStatus] = useState<{
     loading: boolean;
@@ -413,60 +414,55 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleAddCollection = () => {
-    const trimmed = newCollectionName.trim();
-    if (!trimmed) return;
-    addMCPCollection(trimmed, settings.mcpServers);
-    setNewCollectionName("");
+  const handleExportMCPYaml = async () => {
+    const yaml = buildMCPServersYaml(settings.mcpServers);
+    await Clipboard.setStringAsync(yaml);
+    setMcpYamlMessage({
+      tone: "success",
+      text: "YAML copied to clipboard.",
+    });
     if (Platform.OS !== "web") {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
   };
 
-  const handleStartRenameCollection = (id: string, currentName: string) => {
-    setEditingCollectionId(id);
-    setEditingCollectionName(currentName);
+  const handlePasteMCPYaml = async () => {
+    const text = await Clipboard.getStringAsync();
+    setMcpYamlText(text);
   };
 
-  const handleSaveCollectionName = () => {
-    if (!editingCollectionId) return;
-    const trimmed = editingCollectionName.trim();
+  const handleImportMCPYaml = () => {
+    const trimmed = mcpYamlText.trim();
     if (!trimmed) return;
-    updateMCPCollection(editingCollectionId, { name: trimmed });
-    setEditingCollectionId(null);
-    setEditingCollectionName("");
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  };
-
-  const handleDeleteCollection = (id: string, name: string) => {
     Alert.alert(
-      "Delete MCP Collection",
-      `Are you sure you want to delete "${name}"?`,
+      "Import MCP Servers",
+      "This will replace your current MCP server list.",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Delete",
+          text: "Replace",
           style: "destructive",
           onPress: () => {
-            deleteMCPCollection(id);
+            const result = parseMCPServersYaml(trimmed);
+            updateSettings({ mcpServers: result.servers });
+            setMcpYamlMessage({
+              tone: result.warnings.length > 0 ? "error" : "success",
+              text:
+                result.warnings.length > 0
+                  ? result.warnings.join(" ")
+                  : "Servers imported successfully.",
+            });
             if (Platform.OS !== "web") {
               Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Warning,
+                result.warnings.length > 0
+                  ? Haptics.NotificationFeedbackType.Warning
+                  : Haptics.NotificationFeedbackType.Success,
               );
             }
           },
         },
       ],
     );
-  };
-
-  const handleSetActiveCollection = (id: string) => {
-    setActiveMCPCollection(id);
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
   };
 
   const handleProviderChange = (providerId: ProviderId) => {
@@ -668,45 +664,76 @@ export default function SettingsScreen() {
                   ]}
                 />
 
-                <View style={styles.collectionPanel}>
-                  <ThemedText style={styles.collectionTitle}>
-                    MCP Collections
+                <View style={styles.mcpYamlPanel}>
+                  <ThemedText style={styles.mcpYamlTitle}>
+                    MCP Servers YAML
                   </ThemedText>
-                  {settings.mcpCollections.length > 0 ? (
-                    <SelectField
-                      label="Active collection"
-                      value={settings.activeMcpCollectionId || ""}
-                      options={settings.mcpCollections.map((collection) => ({
-                        label: `${collection.name} (${collection.servers.length})`,
-                        value: collection.id,
-                      }))}
-                      onSelect={(value) => handleSetActiveCollection(value)}
-                      placeholder="Select a collection"
-                    />
-                  ) : (
-                    <ThemedText
-                      style={[
-                        styles.helperText,
-                        { color: theme.textSecondary },
+                  <View style={styles.mcpYamlActions}>
+                    <Pressable
+                      onPress={handleExportMCPYaml}
+                      style={({ pressed }) => [
+                        styles.secondaryButton,
+                        {
+                          borderColor: theme.primary,
+                          opacity: pressed ? 0.8 : 1,
+                        },
                       ]}
                     >
-                      No collections yet. Create one from your current servers.
-                    </ThemedText>
-                  )}
-
+                      <MaterialIcons
+                        name="content-copy"
+                        size={18}
+                        color={theme.primary}
+                      />
+                      <ThemedText
+                        style={[
+                          styles.secondaryButtonText,
+                          { color: theme.primary },
+                        ]}
+                      >
+                        Copy YAML
+                      </ThemedText>
+                    </Pressable>
+                    <Pressable
+                      onPress={handlePasteMCPYaml}
+                      style={({ pressed }) => [
+                        styles.secondaryButton,
+                        {
+                          borderColor: theme.outline,
+                          opacity: pressed ? 0.8 : 1,
+                        },
+                      ]}
+                    >
+                      <MaterialIcons
+                        name="content-paste"
+                        size={18}
+                        color={theme.textSecondary}
+                      />
+                      <ThemedText
+                        style={[
+                          styles.secondaryButtonText,
+                          { color: theme.textSecondary },
+                        ]}
+                      >
+                        Paste YAML
+                      </ThemedText>
+                    </Pressable>
+                  </View>
                   <InputField
-                    label="New collection name"
-                    value={newCollectionName}
-                    onChangeText={setNewCollectionName}
-                    placeholder="My MCP setup"
+                    label="Import YAML"
+                    value={mcpYamlText}
+                    onChangeText={setMcpYamlText}
+                    placeholder="- name: My MCP\n  url: https://example.com/mcp"
+                    multiline
+                    scrollEnabled
+                    inputStyle={{ height: 120 }}
                   />
                   <Pressable
-                    onPress={handleAddCollection}
-                    disabled={!newCollectionName.trim()}
+                    onPress={handleImportMCPYaml}
+                    disabled={!mcpYamlText.trim()}
                     style={({ pressed }) => [
-                      styles.addCollectionButton,
+                      styles.addButton,
                       {
-                        backgroundColor: newCollectionName.trim()
+                        backgroundColor: mcpYamlText.trim()
                           ? theme.primary
                           : theme.surfaceVariant,
                         opacity: pressed ? 0.8 : 1,
@@ -714,135 +741,24 @@ export default function SettingsScreen() {
                     ]}
                   >
                     <ThemedText style={{ color: theme.buttonText }}>
-                      Create from current
+                      Import and replace
                     </ThemedText>
                   </Pressable>
-
-                  {settings.mcpCollections.map((collection) => (
-                    <View key={collection.id} style={styles.collectionItem}>
-                      <View style={styles.collectionRow}>
-                        <View style={styles.collectionInfo}>
-                          <ThemedText style={styles.collectionName}>
-                            {collection.name}
-                          </ThemedText>
-                          <ThemedText
-                            style={[
-                              styles.collectionMeta,
-                              { color: theme.textSecondary },
-                            ]}
-                          >
-                            {collection.servers.length} server
-                            {collection.servers.length === 1 ? "" : "s"}
-                          </ThemedText>
-                        </View>
-                        <View style={styles.collectionButtons}>
-                          <Pressable
-                            onPress={() =>
-                              handleSetActiveCollection(collection.id)
-                            }
-                            disabled={
-                              settings.activeMcpCollectionId === collection.id
-                            }
-                            style={({ pressed }) => [
-                              styles.collectionButton,
-                              { opacity: pressed ? 0.6 : 1 },
-                            ]}
-                          >
-                            <MaterialIcons
-                              name={
-                                settings.activeMcpCollectionId === collection.id
-                                  ? "check-circle"
-                                  : "check-circle-outline"
-                              }
-                              size={20}
-                              color={theme.primary}
-                            />
-                          </Pressable>
-                          <Pressable
-                            onPress={() =>
-                              handleStartRenameCollection(
-                                collection.id,
-                                collection.name,
-                              )
-                            }
-                            style={({ pressed }) => [
-                              styles.collectionButton,
-                              { opacity: pressed ? 0.6 : 1 },
-                            ]}
-                          >
-                            <MaterialIcons
-                              name="edit"
-                              size={20}
-                              color={theme.textSecondary}
-                            />
-                          </Pressable>
-                          <Pressable
-                            onPress={() =>
-                              handleDeleteCollection(
-                                collection.id,
-                                collection.name,
-                              )
-                            }
-                            style={({ pressed }) => [
-                              styles.collectionButton,
-                              { opacity: pressed ? 0.6 : 1 },
-                            ]}
-                          >
-                            <MaterialIcons
-                              name="delete-outline"
-                              size={20}
-                              color={theme.error}
-                            />
-                          </Pressable>
-                        </View>
-                      </View>
-
-                      {editingCollectionId === collection.id && (
-                        <View style={styles.collectionEdit}>
-                          <InputField
-                            label="Rename collection"
-                            value={editingCollectionName}
-                            onChangeText={setEditingCollectionName}
-                            placeholder={collection.name}
-                          />
-                          <View style={styles.collectionEditActions}>
-                            <Pressable
-                              onPress={() => {
-                                setEditingCollectionId(null);
-                                setEditingCollectionName("");
-                              }}
-                              style={({ pressed }) => [
-                                styles.cancelButton,
-                                {
-                                  borderColor: theme.outline,
-                                  opacity: pressed ? 0.8 : 1,
-                                },
-                              ]}
-                            >
-                              <ThemedText>Cancel</ThemedText>
-                            </Pressable>
-                            <Pressable
-                              onPress={handleSaveCollectionName}
-                              disabled={!editingCollectionName.trim()}
-                              style={({ pressed }) => [
-                                styles.addButton,
-                                {
-                                  backgroundColor: editingCollectionName.trim()
-                                    ? theme.primary
-                                    : theme.surfaceVariant,
-                                  opacity: pressed ? 0.8 : 1,
-                                },
-                              ]}
-                            >
-                              <ThemedText style={{ color: theme.buttonText }}>
-                                Save
-                              </ThemedText>
-                            </Pressable>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  ))}
+                  {mcpYamlMessage && (
+                    <ThemedText
+                      style={[
+                        styles.helperText,
+                        {
+                          color:
+                            mcpYamlMessage.tone === "error"
+                              ? theme.error
+                              : theme.success,
+                        },
+                      ]}
+                    >
+                      {mcpYamlMessage.text}
+                    </ThemedText>
+                  )}
                 </View>
 
                 <View
@@ -1143,49 +1059,28 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     marginVertical: Spacing.md,
   },
-  collectionPanel: {
+  mcpYamlPanel: {
     gap: Spacing.md,
   },
-  collectionTitle: {
+  mcpYamlTitle: {
     ...Typography.labelLarge,
   },
-  collectionItem: {
-    marginTop: Spacing.sm,
-  },
-  collectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  collectionInfo: {
-    flex: 1,
-    marginRight: Spacing.md,
-  },
-  collectionName: {
-    ...Typography.bodyLarge,
-  },
-  collectionMeta: {
-    ...Typography.bodySmall,
-  },
-  collectionButtons: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  collectionButton: {
-    padding: Spacing.sm,
-  },
-  collectionEdit: {
-    marginTop: Spacing.sm,
-  },
-  collectionEditActions: {
+  mcpYamlActions: {
     flexDirection: "row",
     gap: Spacing.md,
-    marginTop: Spacing.sm,
   },
-  addCollectionButton: {
+  secondaryButton: {
+    flex: 1,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
     padding: Spacing.md,
     borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+  },
+  secondaryButtonText: {
+    ...Typography.labelLarge,
   },
   mcpServerRow: {
     flexDirection: "row",
