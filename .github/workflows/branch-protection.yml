@@ -13,6 +13,13 @@ permissions:
   contents: read
 
 jobs:
+  noop:
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip branch protection on non-main push
+        run: echo "Branch protection is only applied on main."
+
   branch-protection-check:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
