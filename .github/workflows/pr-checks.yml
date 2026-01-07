@@ -112,6 +112,15 @@ jobs:
       - name: Provider smoke checks (mock)
         run: npm run check:providers:mock
 
+  branch-protection-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate branch protection config
+        run: node scripts/validate-branch-protection.js
+
   commitlint:
     runs-on: ubuntu-latest
     steps:
@@ -157,6 +166,7 @@ jobs:
       - typecheck
       - format
       - providers-mock
+      - branch-protection-check
       - commitlint
     if: ${{ always() && github.event_name == 'pull_request' }}
     permissions:
