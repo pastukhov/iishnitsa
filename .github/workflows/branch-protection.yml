@@ -1,6 +1,9 @@
 name: Apply Branch Protection
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -8,11 +11,24 @@ on:
 
 permissions:
   contents: read
-  administration: write
 
 jobs:
-  apply-protection:
+  branch-protection-check:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate branch protection config
+        run: node scripts/validate-branch-protection.js
+
+  apply-protection:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      administration: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
