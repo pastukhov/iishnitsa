@@ -32,7 +32,8 @@
 - New scripts should live in `scripts/` and use lowercase names with hyphens.
 
 ## Testing Guidelines
-- No automated test suite is configured.
+- Unit tests run via Jest.
+- Use `npm run test` or `npm run test:coverage` for unit tests.
 - Use `npm run check:types` and `npm run lint` as the primary quality gates.
 - Use `npm run check:providers` to smoke-test provider connectivity (set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TOGETHER_API_KEY`, `MISTRAL_API_KEY`, `PERPLEXITY_API_KEY`, `YANDEX_API_KEY`, `REPLICATE_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, `DASHSCOPE_API_KEY`; optional per-provider `*_BASE_URL` overrides and `ANTHROPIC_MODEL`/`PERPLEXITY_MODEL`).
 - Use `npm run check:providers:mock` (or `MOCK_PROVIDERS=1`) to run mocked provider checks when CI secrets are unavailable.

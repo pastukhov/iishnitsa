@@ -1,6 +1,7 @@
 # Иишница
 
 [![PR Checks](https://github.com/pastukhov/iishnitsa/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/pastukhov/iishnitsa/actions/workflows/pr-checks.yml)
+[![Coverage](https://codecov.io/gh/pastukhov/iishnitsa/branch/main/graph/badge.svg)](https://codecov.io/gh/pastukhov/iishnitsa)
 [![APK](https://img.shields.io/badge/APK-latest-brightgreen)](https://github.com/pastukhov/iishnitsa/releases/download/apk-latest/iishnitsa.apk)
 
 Иишница — приложение с клиентом на Expo/React Native. Проект рассчитан на локальную разработку и сборку под разные окружения.
@@ -34,6 +35,8 @@ npm run expo:dev
 - `./node_modules/.bin/eas build --platform android --profile preview` — сборка APK через EAS.
 - `npm run lint` / `npm run lint:fix` — линтинг и автоисправления.
 - `npm run check:types` — проверка типов TypeScript.
+- `npm run test` — запуск unit-тестов (Jest).
+- `npm run test:coverage` — запуск unit-тестов с покрытием.
 
 ## EAS и MCP
 - Профили сборки задаются в `eas.json`; актуальный для APK — `preview`.
