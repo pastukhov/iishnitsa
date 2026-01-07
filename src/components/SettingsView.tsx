@@ -28,6 +28,7 @@ export default function SettingsView() {
   } = useStore();
   const [newServerName, setNewServerName] = useState("");
   const [newServerUrl, setNewServerUrl] = useState("");
+  const [newServerToken, setNewServerToken] = useState("");
   const [newCollectionName, setNewCollectionName] = useState("");
   const [collectionMessage, setCollectionMessage] = useState<{
     tone: "success" | "error";
@@ -71,9 +72,11 @@ export default function SettingsView() {
       name: newServerName.trim(),
       url: newServerUrl.trim(),
       enabled: true,
+      token: newServerToken.trim() || undefined,
     });
     setNewServerName("");
     setNewServerUrl("");
+    setNewServerToken("");
   };
 
   const handleDeleteServer = (id: string) => {
@@ -433,6 +436,16 @@ export default function SettingsView() {
                   <div className="server-info">
                     <span className="server-name">{server.name}</span>
                     <span className="server-url">{server.url}</span>
+                    <input
+                      type="password"
+                      value={server.token ?? ""}
+                      onChange={(e) =>
+                        updateMCPServer(server.id, {
+                          token: e.target.value.trim() || undefined,
+                        })
+                      }
+                      placeholder="Auth token (optional)"
+                    />
                   </div>
                   <div className="server-actions">
                     <label className="toggle small">
@@ -476,6 +489,12 @@ export default function SettingsView() {
                   value={newServerUrl}
                   onChange={(e) => setNewServerUrl(e.target.value)}
                   placeholder="Server URL"
+                />
+                <input
+                  type="password"
+                  value={newServerToken}
+                  onChange={(e) => setNewServerToken(e.target.value)}
+                  placeholder="Auth token (optional)"
                 />
                 <button
                   onClick={handleAddServer}

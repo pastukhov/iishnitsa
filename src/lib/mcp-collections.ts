@@ -11,6 +11,7 @@ type RawServer = {
   name?: unknown;
   url?: unknown;
   enabled?: unknown;
+  token?: unknown;
 };
 
 type RawCollection = {
@@ -28,6 +29,8 @@ const normalizeServer = (raw: RawServer, index: number): MCPServer | null => {
     name,
     url,
     enabled: raw.enabled === undefined ? true : Boolean(raw.enabled),
+    token:
+      typeof raw.token === "string" ? raw.token.trim() || undefined : undefined,
   };
 };
 
@@ -139,6 +142,7 @@ export const buildMCPCollectionsYaml = (
         name: server.name,
         url: server.url,
         enabled: server.enabled,
+        token: server.token || undefined,
       })),
     })),
   };

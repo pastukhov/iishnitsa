@@ -29,6 +29,7 @@ export interface MCPServer {
   name: string;
   url: string;
   enabled: boolean;
+  token?: string;
 }
 
 export interface MCPServerCollection {
