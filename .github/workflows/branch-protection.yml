@@ -4,9 +4,6 @@ on:
   pull_request:
     branches:
       - main
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -22,18 +19,3 @@ jobs:
 
       - name: Validate branch protection config
         run: node scripts/validate-branch-protection.js
-
-  apply-protection:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      administration: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Apply branch protection
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/apply-branch-protection.js --repo "$GITHUB_REPOSITORY" --branch main
