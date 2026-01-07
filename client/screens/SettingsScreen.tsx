@@ -240,6 +240,10 @@ export default function SettingsScreen() {
     addMCPServer,
     removeMCPServer,
     toggleMCPServer,
+    addMCPCollection,
+    updateMCPCollection,
+    deleteMCPCollection,
+    setActiveMCPCollection,
   } = useChatStore();
 
   const [isTesting, setIsTesting] = useState(false);
@@ -257,6 +261,11 @@ export default function SettingsScreen() {
     success: boolean;
     message: string;
   } | null>(null);
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [editingCollectionId, setEditingCollectionId] = useState<string | null>(
+    null,
+  );
+  const [editingCollectionName, setEditingCollectionName] = useState("");
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelStatus, setModelStatus] = useState<{
     loading: boolean;
@@ -401,6 +410,62 @@ export default function SettingsScreen() {
           ? Haptics.NotificationFeedbackType.Success
           : Haptics.NotificationFeedbackType.Error,
       );
+    }
+  };
+
+  const handleAddCollection = () => {
+    const trimmed = newCollectionName.trim();
+    if (!trimmed) return;
+    addMCPCollection(trimmed, settings.mcpServers);
+    setNewCollectionName("");
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const handleStartRenameCollection = (id: string, currentName: string) => {
+    setEditingCollectionId(id);
+    setEditingCollectionName(currentName);
+  };
+
+  const handleSaveCollectionName = () => {
+    if (!editingCollectionId) return;
+    const trimmed = editingCollectionName.trim();
+    if (!trimmed) return;
+    updateMCPCollection(editingCollectionId, { name: trimmed });
+    setEditingCollectionId(null);
+    setEditingCollectionName("");
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const handleDeleteCollection = (id: string, name: string) => {
+    Alert.alert(
+      "Delete MCP Collection",
+      `Are you sure you want to delete "${name}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            deleteMCPCollection(id);
+            if (Platform.OS !== "web") {
+              Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Warning,
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleSetActiveCollection = (id: string) => {
+    setActiveMCPCollection(id);
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
 
@@ -596,6 +661,190 @@ export default function SettingsScreen() {
 
             {settings.mcpEnabled && (
               <>
+                <View
+                  style={[
+                    styles.divider,
+                    { backgroundColor: theme.outlineVariant },
+                  ]}
+                />
+
+                <View style={styles.collectionPanel}>
+                  <ThemedText style={styles.collectionTitle}>
+                    MCP Collections
+                  </ThemedText>
+                  {settings.mcpCollections.length > 0 ? (
+                    <SelectField
+                      label="Active collection"
+                      value={settings.activeMcpCollectionId || ""}
+                      options={settings.mcpCollections.map((collection) => ({
+                        label: `${collection.name} (${collection.servers.length})`,
+                        value: collection.id,
+                      }))}
+                      onSelect={(value) => handleSetActiveCollection(value)}
+                      placeholder="Select a collection"
+                    />
+                  ) : (
+                    <ThemedText
+                      style={[
+                        styles.helperText,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      No collections yet. Create one from your current servers.
+                    </ThemedText>
+                  )}
+
+                  <InputField
+                    label="New collection name"
+                    value={newCollectionName}
+                    onChangeText={setNewCollectionName}
+                    placeholder="My MCP setup"
+                  />
+                  <Pressable
+                    onPress={handleAddCollection}
+                    disabled={!newCollectionName.trim()}
+                    style={({ pressed }) => [
+                      styles.addCollectionButton,
+                      {
+                        backgroundColor: newCollectionName.trim()
+                          ? theme.primary
+                          : theme.surfaceVariant,
+                        opacity: pressed ? 0.8 : 1,
+                      },
+                    ]}
+                  >
+                    <ThemedText style={{ color: theme.buttonText }}>
+                      Create from current
+                    </ThemedText>
+                  </Pressable>
+
+                  {settings.mcpCollections.map((collection) => (
+                    <View key={collection.id} style={styles.collectionItem}>
+                      <View style={styles.collectionRow}>
+                        <View style={styles.collectionInfo}>
+                          <ThemedText style={styles.collectionName}>
+                            {collection.name}
+                          </ThemedText>
+                          <ThemedText
+                            style={[
+                              styles.collectionMeta,
+                              { color: theme.textSecondary },
+                            ]}
+                          >
+                            {collection.servers.length} server
+                            {collection.servers.length === 1 ? "" : "s"}
+                          </ThemedText>
+                        </View>
+                        <View style={styles.collectionButtons}>
+                          <Pressable
+                            onPress={() =>
+                              handleSetActiveCollection(collection.id)
+                            }
+                            disabled={
+                              settings.activeMcpCollectionId === collection.id
+                            }
+                            style={({ pressed }) => [
+                              styles.collectionButton,
+                              { opacity: pressed ? 0.6 : 1 },
+                            ]}
+                          >
+                            <MaterialIcons
+                              name={
+                                settings.activeMcpCollectionId === collection.id
+                                  ? "check-circle"
+                                  : "check-circle-outline"
+                              }
+                              size={20}
+                              color={theme.primary}
+                            />
+                          </Pressable>
+                          <Pressable
+                            onPress={() =>
+                              handleStartRenameCollection(
+                                collection.id,
+                                collection.name,
+                              )
+                            }
+                            style={({ pressed }) => [
+                              styles.collectionButton,
+                              { opacity: pressed ? 0.6 : 1 },
+                            ]}
+                          >
+                            <MaterialIcons
+                              name="edit"
+                              size={20}
+                              color={theme.textSecondary}
+                            />
+                          </Pressable>
+                          <Pressable
+                            onPress={() =>
+                              handleDeleteCollection(
+                                collection.id,
+                                collection.name,
+                              )
+                            }
+                            style={({ pressed }) => [
+                              styles.collectionButton,
+                              { opacity: pressed ? 0.6 : 1 },
+                            ]}
+                          >
+                            <MaterialIcons
+                              name="delete-outline"
+                              size={20}
+                              color={theme.error}
+                            />
+                          </Pressable>
+                        </View>
+                      </View>
+
+                      {editingCollectionId === collection.id && (
+                        <View style={styles.collectionEdit}>
+                          <InputField
+                            label="Rename collection"
+                            value={editingCollectionName}
+                            onChangeText={setEditingCollectionName}
+                            placeholder={collection.name}
+                          />
+                          <View style={styles.collectionEditActions}>
+                            <Pressable
+                              onPress={() => {
+                                setEditingCollectionId(null);
+                                setEditingCollectionName("");
+                              }}
+                              style={({ pressed }) => [
+                                styles.cancelButton,
+                                {
+                                  borderColor: theme.outline,
+                                  opacity: pressed ? 0.8 : 1,
+                                },
+                              ]}
+                            >
+                              <ThemedText>Cancel</ThemedText>
+                            </Pressable>
+                            <Pressable
+                              onPress={handleSaveCollectionName}
+                              disabled={!editingCollectionName.trim()}
+                              style={({ pressed }) => [
+                                styles.addButton,
+                                {
+                                  backgroundColor: editingCollectionName.trim()
+                                    ? theme.primary
+                                    : theme.surfaceVariant,
+                                  opacity: pressed ? 0.8 : 1,
+                                },
+                              ]}
+                            >
+                              <ThemedText style={{ color: theme.buttonText }}>
+                                Save
+                              </ThemedText>
+                            </Pressable>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
+
                 <View
                   style={[
                     styles.divider,
@@ -893,6 +1142,50 @@ const styles = StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
     marginVertical: Spacing.md,
+  },
+  collectionPanel: {
+    gap: Spacing.md,
+  },
+  collectionTitle: {
+    ...Typography.labelLarge,
+  },
+  collectionItem: {
+    marginTop: Spacing.sm,
+  },
+  collectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  collectionInfo: {
+    flex: 1,
+    marginRight: Spacing.md,
+  },
+  collectionName: {
+    ...Typography.bodyLarge,
+  },
+  collectionMeta: {
+    ...Typography.bodySmall,
+  },
+  collectionButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  collectionButton: {
+    padding: Spacing.sm,
+  },
+  collectionEdit: {
+    marginTop: Spacing.sm,
+  },
+  collectionEditActions: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  addCollectionButton: {
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
   },
   mcpServerRow: {
     flexDirection: "row",
