@@ -40,6 +40,7 @@ export interface MCPServer {
   name: string;
   url: string;
   enabled: boolean;
+  token?: string;
 }
 
 export interface MCPServerCollection {
@@ -74,6 +75,7 @@ interface ChatStore {
   updateSettings: (settings: Partial<Settings>) => void;
   updateEndpoint: (endpoint: Partial<EndpointConfig>) => void;
   addMCPServer: (server: Omit<MCPServer, "id">) => void;
+  updateMCPServer: (id: string, updates: Partial<MCPServer>) => void;
   removeMCPServer: (id: string) => void;
   toggleMCPServer: (id: string) => void;
   addMCPCollection: (name: string, servers?: MCPServer[]) => void;
@@ -414,6 +416,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         ...state.settings.mcpServers,
         newServer,
       ]);
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  updateMCPServer: (id, updates) => {
+    set((state) => {
+      const settings = {
+        ...state.settings,
+        mcpServers: state.settings.mcpServers.map((server) =>
+          server.id === id ? { ...server, ...updates } : server,
+        ),
+      };
       AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
       return { settings };
     });

@@ -3,6 +3,7 @@ import { MCPTool } from "./api";
 interface MCPClientState {
   sessionId: string | null;
   tools: MCPTool[];
+  authToken: string | null;
 }
 
 const clientStates = new Map<string, MCPClientState>();
@@ -20,6 +21,10 @@ async function mcpRequest(
     "Content-Type": "application/json",
     Accept: "application/json, text/event-stream",
   };
+
+  if (state?.authToken) {
+    headers.Authorization = `Bearer ${state.authToken}`;
+  }
 
   if (state?.sessionId && method !== "initialize") {
     headers["Mcp-Session-Id"] = state.sessionId;
@@ -44,7 +49,11 @@ async function mcpRequest(
   const newSessionId = response.headers.get("mcp-session-id");
   if (newSessionId) {
     if (!clientStates.has(serverUrl)) {
-      clientStates.set(serverUrl, { sessionId: null, tools: [] });
+      clientStates.set(serverUrl, {
+        sessionId: null,
+        tools: [],
+        authToken: null,
+      });
     }
     clientStates.get(serverUrl)!.sessionId = newSessionId;
   }
@@ -73,8 +82,13 @@ async function mcpRequest(
 
 export async function initializeMCPServer(
   serverUrl: string,
+  authToken?: string,
 ): Promise<MCPTool[]> {
-  clientStates.set(serverUrl, { sessionId: null, tools: [] });
+  clientStates.set(serverUrl, {
+    sessionId: null,
+    tools: [],
+    authToken: authToken?.trim() || null,
+  });
 
   await mcpRequest(serverUrl, "initialize", {
     protocolVersion: "2025-03-26",

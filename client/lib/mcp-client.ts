@@ -49,10 +49,19 @@ export class MCPClient {
     capabilities: any;
   } | null = null;
   private sessionId: string | null = null;
+  private authToken: string | null = null;
+  private signature: string;
 
   constructor(server: MCPServer) {
     this.serverUrl = server.url;
     this.serverName = server.name;
+    this.authToken = server.token?.trim() || null;
+    this.signature = `${server.url}|${server.token?.trim() || ""}`;
+  }
+
+  matchesServer(server: MCPServer): boolean {
+    const nextSignature = `${server.url}|${server.token?.trim() || ""}`;
+    return this.signature === nextSignature;
   }
 
   private async sendRequest(
@@ -70,6 +79,10 @@ export class MCPClient {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
     };
+
+    if (this.authToken) {
+      headers.Authorization = `Bearer ${this.authToken}`;
+    }
 
     if (this.sessionId && method !== "initialize") {
       headers["Mcp-Session-Id"] = this.sessionId;
@@ -158,6 +171,10 @@ export class MCPClient {
         Accept: "application/json, text/event-stream",
       };
 
+      if (this.authToken) {
+        headers.Authorization = `Bearer ${this.authToken}`;
+      }
+
       if (this.sessionId && method !== "initialize") {
         headers["Mcp-Session-Id"] = this.sessionId;
       }
@@ -245,8 +262,11 @@ const clientCache = new Map<string, MCPClient>();
 
 function getOrCreateClient(server: MCPServer): MCPClient {
   const existingClient = clientCache.get(server.id);
-  if (existingClient) {
+  if (existingClient && existingClient.matchesServer(server)) {
     return existingClient;
+  }
+  if (existingClient) {
+    clientCache.delete(server.id);
   }
   const newClient = new MCPClient(server);
   clientCache.set(server.id, newClient);

@@ -43,7 +43,7 @@ export default function ChatView() {
 
       for (const server of enabledServers) {
         try {
-          const tools = await initializeMCPServer(server.url);
+          const tools = await initializeMCPServer(server.url, server.token);
           allTools.push(...tools);
         } catch (error: any) {
           console.error(`Failed to init MCP server ${server.name}:`, error);

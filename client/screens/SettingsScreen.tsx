@@ -238,6 +238,7 @@ export default function SettingsScreen() {
     updateEndpoint,
     updateSettings,
     addMCPServer,
+    updateMCPServer,
     removeMCPServer,
     toggleMCPServer,
     addMCPCollection,
@@ -254,6 +255,7 @@ export default function SettingsScreen() {
 
   const [newMCPName, setNewMCPName] = useState("");
   const [newMCPUrl, setNewMCPUrl] = useState("");
+  const [newMCPToken, setNewMCPToken] = useState("");
   const [showAddMCP, setShowAddMCP] = useState(false);
   const [testingMCPId, setTestingMCPId] = useState<string | null>(null);
   const [mcpTestResult, setMcpTestResult] = useState<{
@@ -354,10 +356,12 @@ export default function SettingsScreen() {
       name: newMCPName.trim(),
       url: newMCPUrl.trim(),
       enabled: true,
+      token: newMCPToken.trim() || undefined,
     });
 
     setNewMCPName("");
     setNewMCPUrl("");
+    setNewMCPToken("");
     setShowAddMCP(false);
 
     if (Platform.OS !== "web") {
@@ -922,6 +926,17 @@ export default function SettingsScreen() {
                         />
                       </Pressable>
                     </View>
+                    <InputField
+                      label="Auth token (optional)"
+                      value={server.token ?? ""}
+                      onChangeText={(text) =>
+                        updateMCPServer(server.id, {
+                          token: text.trim() || undefined,
+                        })
+                      }
+                      placeholder="Enter token"
+                      secureTextEntry
+                    />
                     {mcpTestResult?.serverId === server.id && (
                       <View
                         style={[
@@ -975,6 +990,13 @@ export default function SettingsScreen() {
                       onChangeText={setNewMCPUrl}
                       placeholder="http://localhost:3000"
                       keyboardType="url"
+                    />
+                    <InputField
+                      label="Auth token (optional)"
+                      value={newMCPToken}
+                      onChangeText={setNewMCPToken}
+                      placeholder="Enter token"
+                      secureTextEntry
                     />
                     <View style={styles.addMCPButtons}>
                       <Pressable
