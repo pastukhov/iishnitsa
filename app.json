@@ -23,10 +23,6 @@
       "package": "com.iishnitsa.app",
       "versionCode": 10801
     },
-    "web": {
-      "output": "single",
-      "favicon": "./assets/images/favicon.png"
-    },
     "plugins": [
       [
         "expo-splash-screen",

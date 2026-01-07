@@ -2,7 +2,6 @@
 
 ## Project Structure & Module Organization
 - `client/` contains the Expo/React Native app (entry: `client/App.tsx`).
-- `src/` is the web renderer source (entry: `src/main.tsx`, styles in `src/styles/`).
 - `assets/` stores static app assets; `dist/` is a build output.
 - Root config files include `app.json`, `eas.json`, and `tsconfig*.json`.
 
