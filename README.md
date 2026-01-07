@@ -3,16 +3,15 @@
 [![PR Checks](https://github.com/pastukhov/iishnitsa/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/pastukhov/iishnitsa/actions/workflows/pr-checks.yml)
 [![APK](https://img.shields.io/badge/APK-latest-brightgreen)](https://github.com/pastukhov/iishnitsa/releases/download/apk-latest/iishnitsa.apk)
 
-Иишница — кроссплатформенное приложение с клиентом на Expo/React Native и веб-рендерером. Проект рассчитан на локальную разработку и сборку под разные окружения.
+Иишница — приложение с клиентом на Expo/React Native. Проект рассчитан на локальную разработку и сборку под разные окружения.
 
 ## Возможности
 - Единый интерфейс чата с настройками подключения.
 - Поддержка MCP-инструментов через конфиг в приложении.
-- Запуск как мобильного клиента (Expo), так и десктопа (Electron).
+- Запуск мобильного клиента (Expo).
 
 ## Структура проекта
 - `client/` — мобильный клиент на Expo (точка входа: `client/App.tsx`).
-- `src/` — веб/рендерер (Vite/React), стили в `src/styles/`.
 - `assets/` — статические ресурсы.
 - `scripts/` — вспомогательные скрипты сборки.
 

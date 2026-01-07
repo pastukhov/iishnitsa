@@ -96,6 +96,32 @@ const modelEnvDefaults = {
   perplexity: process.env.PERPLEXITY_MODEL || "sonar",
 };
 
+const providerEnv = {
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+  TOGETHER_API_KEY: process.env.TOGETHER_API_KEY,
+  MISTRAL_API_KEY: process.env.MISTRAL_API_KEY,
+  PERPLEXITY_API_KEY: process.env.PERPLEXITY_API_KEY,
+  YANDEX_API_KEY: process.env.YANDEX_API_KEY,
+  REPLICATE_API_KEY: process.env.REPLICATE_API_KEY,
+  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+  GROQ_API_KEY: process.env.GROQ_API_KEY,
+  DASHSCOPE_API_KEY: process.env.DASHSCOPE_API_KEY,
+};
+
+const providerBaseUrlEnv = {
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY_BASE_URL,
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY_BASE_URL,
+  TOGETHER_API_KEY: process.env.TOGETHER_API_KEY_BASE_URL,
+  MISTRAL_API_KEY: process.env.MISTRAL_API_KEY_BASE_URL,
+  PERPLEXITY_API_KEY: process.env.PERPLEXITY_API_KEY_BASE_URL,
+  YANDEX_API_KEY: process.env.YANDEX_API_KEY_BASE_URL,
+  REPLICATE_API_KEY: process.env.REPLICATE_API_KEY_BASE_URL,
+  DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY_BASE_URL,
+  GROQ_API_KEY: process.env.GROQ_API_KEY_BASE_URL,
+  DASHSCOPE_API_KEY: process.env.DASHSCOPE_API_KEY_BASE_URL,
+};
+
 const normalizeBaseUrl = (url) => url.replace(/\/+$/, "");
 
 const buildAuthHeaders = (provider, apiKey) => ({
@@ -181,13 +207,12 @@ const runCheck = async (provider) => {
     };
   }
 
-  const apiKey = process.env[provider.envKey];
+  const apiKey = providerEnv[provider.envKey];
   if (!apiKey) {
     return { provider, status: "skipped", message: "Missing API key." };
   }
 
-  const baseUrl =
-    process.env[`${provider.envKey}_BASE_URL`] || provider.baseUrl;
+  const baseUrl = providerBaseUrlEnv[provider.envKey] || provider.baseUrl;
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
 
   try {
