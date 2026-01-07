@@ -511,15 +511,15 @@ export default function SettingsScreen() {
               </ThemedText>
             )}
 
-          <InputField
-            label="System Prompt"
-            value={settings.endpoint.systemPrompt}
-            onChangeText={(text) => updateEndpoint({ systemPrompt: text })}
-            placeholder="You are a helpful AI assistant."
-            multiline
-            scrollEnabled
-            inputStyle={{ height: systemPromptHeight }}
-          />
+            <InputField
+              label="System Prompt"
+              value={settings.endpoint.systemPrompt}
+              onChangeText={(text) => updateEndpoint({ systemPrompt: text })}
+              placeholder="You are a helpful AI assistant."
+              multiline
+              scrollEnabled
+              inputStyle={{ height: systemPromptHeight }}
+            />
 
             <Pressable
               onPress={handleTestConnection}
