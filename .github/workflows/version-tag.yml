@@ -34,23 +34,36 @@ jobs:
                 core.setOutput("should_run", "false");
                 return;
               }
-              const pr = run.pull_requests && run.pull_requests[0];
-              if (!pr) {
-                core.setOutput("should_run", "false");
-                return;
+              let prData = null;
+              const prFromRun = run.pull_requests && run.pull_requests[0];
+              if (prFromRun && prFromRun.number) {
+                const { data } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prFromRun.number,
+                });
+                prData = data;
+              } else if (run.head_sha) {
+                const { data } =
+                  await github.rest.repos.listPullRequestsAssociatedWithCommit(
+                    {
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      commit_sha: run.head_sha,
+                    },
+                  );
+                prData =
+                  data.find((item) => item.base?.ref === "main") ||
+                  data[0] ||
+                  null;
               }
-              const { data } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: pr.number,
-              });
-              if (!data.merged || data.base.ref !== "main") {
+              if (!prData || !prData.merged || prData.base?.ref !== "main") {
                 core.setOutput("should_run", "false");
                 return;
               }
               core.setOutput("should_run", "true");
-              if (data.merge_commit_sha) {
-                core.setOutput("target_sha", data.merge_commit_sha);
+              if (prData.merge_commit_sha) {
+                core.setOutput("target_sha", prData.merge_commit_sha);
               }
               return;
             }
