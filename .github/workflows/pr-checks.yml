@@ -112,6 +112,31 @@ jobs:
       - name: Provider smoke checks (mock)
         run: npm run check:providers:mock
 
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
+        continue-on-error: true
+
   commitlint:
     runs-on: ubuntu-latest
     steps:
@@ -157,6 +182,7 @@ jobs:
       - typecheck
       - format
       - providers-mock
+      - test
       - commitlint
     if: ${{ always() && github.event_name == 'pull_request' }}
     permissions:
@@ -172,6 +198,7 @@ jobs:
               typecheck: "${{ needs.typecheck.result }}",
               format: "${{ needs.format.result }}",
               providers: "${{ needs['providers-mock'].result }}",
+              test: "${{ needs.test.result }}",
               commitlint: "${{ needs.commitlint.result }}",
             };
             const fmt = (name, status) => `- ${name}: **${status}**`;
@@ -181,6 +208,7 @@ jobs:
               fmt("lint", results.lint),
               fmt("typecheck", results.typecheck),
               fmt("format", results.format),
+              fmt("test", results.test),
               fmt("providers:mock", results.providers),
               fmt("commitlint", results.commitlint),
             ].join("\n");

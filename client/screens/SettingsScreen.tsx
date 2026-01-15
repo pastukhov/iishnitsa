@@ -927,6 +927,17 @@ export default function SettingsScreen() {
                       </Pressable>
                     </View>
                     <InputField
+                      label="Server URL"
+                      value={server.url}
+                      onChangeText={(text) =>
+                        updateMCPServer(server.id, {
+                          url: text,
+                        })
+                      }
+                      placeholder="http://localhost:3000"
+                      keyboardType="url"
+                    />
+                    <InputField
                       label="Auth token (optional)"
                       value={server.token ?? ""}
                       onChangeText={(text) =>

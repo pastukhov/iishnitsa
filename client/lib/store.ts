@@ -423,12 +423,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   updateMCPServer: (id, updates) => {
     set((state) => {
-      const settings = {
-        ...state.settings,
-        mcpServers: state.settings.mcpServers.map((server) =>
-          server.id === id ? { ...server, ...updates } : server,
-        ),
-      };
+      const updatedServers = state.settings.mcpServers.map((server) =>
+        server.id === id ? { ...server, ...updates } : server,
+      );
+      const settings = updateActiveCollectionServers(
+        state.settings,
+        updatedServers,
+      );
       AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
       return { settings };
     });

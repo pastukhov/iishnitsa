@@ -18,7 +18,7 @@ function AppContent() {
 
   useEffect(() => {
     loadFromStorage();
-  }, []);
+  }, [loadFromStorage]);
 
   return (
     <NavigationContainer>

@@ -12,12 +12,12 @@ export interface MCPTool {
 }
 
 export interface MCPToolResult {
-  content: Array<{
+  content: {
     type: string;
     text?: string;
     data?: string;
     mimeType?: string;
-  }>;
+  }[];
   isError?: boolean;
 }
 
@@ -282,12 +282,12 @@ export function clearClientCache(serverId?: string): void {
 }
 
 export async function getToolsFromServers(servers: MCPServer[]): Promise<{
-  tools: Array<MCPTool & { serverName: string; serverId: string }>;
-  errors: Array<{ serverName: string; error: string }>;
+  tools: (MCPTool & { serverName: string; serverId: string })[];
+  errors: { serverName: string; error: string }[];
 }> {
   const enabledServers = servers.filter((s) => s.enabled);
-  const tools: Array<MCPTool & { serverName: string; serverId: string }> = [];
-  const errors: Array<{ serverName: string; error: string }> = [];
+  const tools: (MCPTool & { serverName: string; serverId: string })[] = [];
+  const errors: { serverName: string; error: string }[] = [];
 
   await Promise.all(
     enabledServers.map(async (server) => {
@@ -327,15 +327,15 @@ export async function executeToolCall(
 }
 
 export function mcpToolsToOpenAIFunctions(
-  tools: Array<MCPTool & { serverName: string; serverId: string }>,
-): Array<{
+  tools: (MCPTool & { serverName: string; serverId: string })[],
+): {
   type: "function";
   function: {
     name: string;
     description: string;
     parameters: any;
   };
-}> {
+}[] {
   return tools.map((tool) => ({
     type: "function" as const,
     function: {

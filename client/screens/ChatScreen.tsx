@@ -1,4 +1,10 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import {
   View,
   StyleSheet,
@@ -159,7 +165,7 @@ function EmptyState() {
 }
 
 export default function ChatScreen() {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const flatListRef = useRef<FlatList>(null);
@@ -177,11 +183,14 @@ export default function ChatScreen() {
   } = useChatStore();
 
   const currentChat = getCurrentChat();
-  const messages = currentChat?.messages || [];
+  const messages = useMemo(
+    () => currentChat?.messages || [],
+    [currentChat?.messages],
+  );
 
   useEffect(() => {
     loadFromStorage();
-  }, []);
+  }, [loadFromStorage]);
 
   useEffect(() => {
     if (messages.length > 0) {
