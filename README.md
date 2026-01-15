@@ -1,6 +1,7 @@
 # Иишница
 
 [![PR Checks](https://github.com/pastukhov/iishnitsa/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/pastukhov/iishnitsa/actions/workflows/pr-checks.yml)
+[![codecov](https://codecov.io/gh/pastukhov/iishnitsa/branch/main/graph/badge.svg)](https://codecov.io/gh/pastukhov/iishnitsa)
 [![APK](https://img.shields.io/badge/APK-latest-brightgreen)](https://github.com/pastukhov/iishnitsa/releases/download/apk-latest/iishnitsa.apk)
 
 Иишница — приложение с клиентом на Expo/React Native. Проект рассчитан на локальную разработку и сборку под разные окружения.
