@@ -135,7 +135,11 @@ export class MCPClient {
               }
               return parsed.result;
             }
-          } catch {}
+          } catch (e) {
+            if (e instanceof Error && e.message.startsWith("MCP error:")) {
+              throw e;
+            }
+          }
         }
       }
 

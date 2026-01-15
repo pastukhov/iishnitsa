@@ -708,6 +708,16 @@ describe("mcp-client", () => {
     });
 
     describe("SSE parsing edge cases", () => {
+      let dateNowSpy: jest.SpyInstance;
+
+      beforeEach(() => {
+        dateNowSpy = jest.spyOn(Date, "now").mockReturnValue(1);
+      });
+
+      afterEach(() => {
+        dateNowSpy.mockRestore();
+      });
+
       it("parses SSE with data prefix correctly", async () => {
         mockFetch
           .mockResolvedValueOnce({
