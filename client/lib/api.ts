@@ -16,14 +16,14 @@ import {
 interface ChatCompletionMessage {
   role: "user" | "assistant" | "system" | "tool";
   content: string | null;
-  tool_calls?: Array<{
+  tool_calls?: {
     id: string;
     type: "function";
     function: {
       name: string;
       arguments: string;
     };
-  }>;
+  }[];
   tool_call_id?: string;
 }
 
@@ -34,13 +34,6 @@ interface OpenAIFunction {
     description: string;
     parameters: any;
   };
-}
-
-interface ToolCallInfo {
-  serverId: string;
-  toolName: string;
-  args: Record<string, any>;
-  callId: string;
 }
 
 export async function sendChatMessage(
@@ -157,14 +150,14 @@ async function processConversation(
   }
 
   let fullContent = "";
-  let toolCalls: Array<{
+  let toolCalls: {
     id: string;
     type: "function";
     function: {
       name: string;
       arguments: string;
     };
-  }> = [];
+  }[] = [];
   let currentToolCallIndex = -1;
 
   const parseChunk = (chunk: string) => {

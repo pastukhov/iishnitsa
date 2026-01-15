@@ -1,7 +1,6 @@
 import React from "react";
 import {
   createDrawerNavigator,
-  DrawerContentScrollView,
   DrawerContentComponentProps,
 } from "@react-navigation/drawer";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
