@@ -36,16 +36,9 @@ npm run expo:dev
 
 - `npm run expo:dev` — запуск Expo dev-сервера.
 - `npm run expo:static:build` — сборка статического Expo-бандла.
-- `npm install eas-cli` — установка EAS CLI (разово, для сборок APK).
-- `./node_modules/.bin/eas login` — авторизация EAS CLI (разово).
-- `./node_modules/.bin/eas build --platform android --profile preview` — сборка APK через EAS.
 - `npm run lint` / `npm run lint:fix` — линтинг и автоисправления.
 - `npm run check:types` — проверка типов TypeScript.
-
-## EAS и MCP
-
-- Профили сборки задаются в `eas.json`; актуальный для APK — `preview`.
-- Для автоматизации доступны Expo MCP-инструменты (документация и EAS workflow-помощник).
+- `npm test` — запуск тестов.
 
 ## Настройка
 
@@ -65,7 +58,7 @@ npm run expo:dev
    push              pull_request        push to main          tag push
       │                   │                   │                   │
       ▼                   ▼                   ▼                   ▼
-  Auto PR            lint, types,        create tag           EAS build
+  Auto PR            lint, types,        create tag          Gradle build
                      tests, format        vX.Y.Z              + release
 ```
 
@@ -75,16 +68,15 @@ npm run expo:dev
 | -------------------------- | ---------------------- | ----------------------------------------------- |
 | **PR Checks**              | `pull_request` to main | Lint, typecheck, format, tests, commitlint      |
 | **Release**                | `push` to main         | Вычисляет версию, создаёт тег, запускает сборку |
-| **Build APK**              | `tag` push `v*`        | Собирает APK через EAS, публикует релиз         |
+| **Build APK**              | `tag` push `v*`        | Собирает APK через Gradle, публикует релиз      |
 | **Auto PR**                | `push` to branch       | Автоматически создаёт PR                        |
 | **Delete Merged Branches** | PR closed              | Удаляет ветку после merge                       |
 
 ### Секреты
 
-| Секрет          | Назначение                     |
-| --------------- | ------------------------------ |
-| `EXPO_TOKEN`    | Токен для EAS CLI (сборка APK) |
-| `CODECOV_TOKEN` | Токен для загрузки coverage    |
+| Секрет          | Назначение                  |
+| --------------- | --------------------------- |
+| `CODECOV_TOKEN` | Токен для загрузки coverage |
 
 ### Версионирование
 
