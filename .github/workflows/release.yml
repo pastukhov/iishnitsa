@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Compute next version
+        id: version
+        run: |
+          git fetch --tags --force
+          LAST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1)
+          if [ -z "$LAST_TAG" ]; then
+            BASE_VERSION=$(node -p "require('./app.json').expo.version")
+          else
+            BASE_VERSION=${LAST_TAG#v}
+          fi
+
+          # Install conventional-recommended-bump
+          npm install -g conventional-recommended-bump conventional-changelog-angular
+
+          BUMP_TYPE=$(conventional-recommended-bump -p angular 2>/dev/null || echo "patch")
+
+          NEXT_VERSION=$(node -e "
+            const [major, minor, patch] = '${BASE_VERSION}'.split('.').map(Number);
+            const bump = '${BUMP_TYPE}';
+            if (bump === 'major') console.log([major+1, 0, 0].join('.'));
+            else if (bump === 'minor') console.log([major, minor+1, 0].join('.'));
+            else console.log([major, minor, patch+1].join('.'));
+          ")
+
+          echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "Next version: $NEXT_VERSION (bump: $BUMP_TYPE)"
+
+      - name: Check if tag exists
+        id: check
+        run: |
+          if git rev-parse "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag ${{ steps.version.outputs.tag }} already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create and push tag
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Trigger APK build
+        if: steps.check.outputs.exists == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: "apk-build.yml",
+              ref: "${{ steps.version.outputs.tag }}",
+            });
+            console.log("Triggered APK build for ${{ steps.version.outputs.tag }}");

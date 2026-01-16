@@ -8,8 +8,7 @@
       { "context": "format", "app_id": 15368 },
       { "context": "providers-mock", "app_id": 15368 },
       { "context": "test", "app_id": 15368 },
-      { "context": "commitlint", "app_id": 15368 },
-      { "context": "branch-protection-check", "app_id": 15368 }
+      { "context": "commitlint", "app_id": 15368 }
     ]
   },
   "enforce_admins": true,
