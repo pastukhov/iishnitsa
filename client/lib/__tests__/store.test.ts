@@ -20,8 +20,6 @@ const resetStore = () => {
         providerId: "openai",
       },
       mcpServers: [],
-      mcpCollections: [],
-      activeMcpCollectionId: null,
       mcpEnabled: false,
       theme: "system",
     },
@@ -578,180 +576,166 @@ describe("useChatStore", () => {
     });
   });
 
-  describe("MCP Collection management", () => {
-    describe("addMCPCollection", () => {
-      it("adds new collection", () => {
-        const { addMCPCollection } = useChatStore.getState();
-
-        act(() => {
-          addMCPCollection("My Collection");
-        });
-
-        const collections = useChatStore.getState().settings.mcpCollections;
-        expect(collections).toHaveLength(1);
-        expect(collections[0].name).toBe("My Collection");
-        expect(collections[0].servers).toEqual([]);
-      });
-
-      it("adds collection with servers", () => {
-        const { addMCPCollection } = useChatStore.getState();
-        const servers: MCPServer[] = [
-          { id: "1", name: "Server 1", url: "http://s1.com", enabled: true },
-        ];
-
-        act(() => {
-          addMCPCollection("With Servers", servers);
-        });
-
-        expect(
-          useChatStore.getState().settings.mcpCollections[0].servers,
-        ).toHaveLength(1);
-      });
-    });
-
-    describe("updateMCPCollection", () => {
-      it("updates collection name", () => {
-        const { addMCPCollection, updateMCPCollection } =
+  describe("MCP YAML import/export", () => {
+    describe("exportMCPServersYAML", () => {
+      it("exports servers as YAML without tokens", () => {
+        const { addMCPServer, updateMCPServer, exportMCPServersYAML } =
           useChatStore.getState();
 
         act(() => {
-          addMCPCollection("Original");
-        });
-
-        const collectionId =
-          useChatStore.getState().settings.mcpCollections[0].id;
-
-        act(() => {
-          updateMCPCollection(collectionId, { name: "Updated" });
-        });
-
-        expect(useChatStore.getState().settings.mcpCollections[0].name).toBe(
-          "Updated",
-        );
-      });
-
-      it("updates active collection servers and syncs to mcpServers", () => {
-        const {
-          addMCPCollection,
-          setActiveMCPCollection,
-          updateMCPCollection,
-        } = useChatStore.getState();
-
-        act(() => {
-          addMCPCollection("Test Collection");
-        });
-
-        const collectionId =
-          useChatStore.getState().settings.mcpCollections[0].id;
-
-        act(() => {
-          setActiveMCPCollection(collectionId);
-        });
-
-        const newServers: MCPServer[] = [
-          { id: "1", name: "New Server", url: "http://new.com", enabled: true },
-        ];
-
-        act(() => {
-          updateMCPCollection(collectionId, { servers: newServers });
-        });
-
-        expect(useChatStore.getState().settings.mcpServers).toHaveLength(1);
-        expect(useChatStore.getState().settings.mcpServers[0].name).toBe(
-          "New Server",
-        );
-      });
-    });
-
-    describe("deleteMCPCollection", () => {
-      it("removes collection", () => {
-        const { addMCPCollection, deleteMCPCollection } =
-          useChatStore.getState();
-
-        act(() => {
-          addMCPCollection("To Delete");
-        });
-
-        const collectionId =
-          useChatStore.getState().settings.mcpCollections[0].id;
-
-        act(() => {
-          deleteMCPCollection(collectionId);
-        });
-
-        expect(useChatStore.getState().settings.mcpCollections).toHaveLength(0);
-      });
-
-      it("switches active collection when deleting active", () => {
-        const {
-          addMCPCollection,
-          setActiveMCPCollection,
-          deleteMCPCollection,
-        } = useChatStore.getState();
-
-        act(() => {
-          addMCPCollection("Collection 1");
-          addMCPCollection("Collection 2");
-        });
-
-        const collections = useChatStore.getState().settings.mcpCollections;
-
-        act(() => {
-          setActiveMCPCollection(collections[0].id);
-          deleteMCPCollection(collections[0].id);
-        });
-
-        expect(useChatStore.getState().settings.activeMcpCollectionId).toBe(
-          collections[1].id,
-        );
-      });
-    });
-
-    describe("setActiveMCPCollection", () => {
-      it("sets active collection and syncs servers", () => {
-        const { addMCPCollection, setActiveMCPCollection } =
-          useChatStore.getState();
-        const servers: MCPServer[] = [
-          { id: "1", name: "Server 1", url: "http://s1.com", enabled: true },
-        ];
-
-        act(() => {
-          addMCPCollection("With Servers", servers);
-        });
-
-        const collectionId =
-          useChatStore.getState().settings.mcpCollections[0].id;
-
-        act(() => {
-          setActiveMCPCollection(collectionId);
-        });
-
-        expect(useChatStore.getState().settings.activeMcpCollectionId).toBe(
-          collectionId,
-        );
-        expect(useChatStore.getState().settings.mcpServers).toHaveLength(1);
-      });
-
-      it("clears servers when setting null", () => {
-        const { addMCPCollection, setActiveMCPCollection, addMCPServer } =
-          useChatStore.getState();
-
-        act(() => {
-          addMCPCollection("Test");
-          setActiveMCPCollection(
-            useChatStore.getState().settings.mcpCollections[0].id,
-          );
           addMCPServer({
-            name: "Server",
-            url: "http://test.com",
+            name: "Server 1",
+            url: "http://s1.com",
+            enabled: true,
+            token: "secret-token",
+          });
+        });
+
+        const yaml = useChatStore.getState().exportMCPServersYAML();
+
+        expect(yaml).toContain("servers:");
+        expect(yaml).toContain("name: Server 1");
+        expect(yaml).toContain("url: http://s1.com");
+        expect(yaml).toContain("enabled: true");
+        expect(yaml).not.toContain("secret-token");
+        expect(yaml).not.toContain("token:");
+      });
+
+      it("exports empty servers list", () => {
+        const yaml = useChatStore.getState().exportMCPServersYAML();
+        expect(yaml).toContain("servers:");
+      });
+
+      it("exports multiple servers", () => {
+        const { addMCPServer, exportMCPServersYAML } = useChatStore.getState();
+
+        act(() => {
+          addMCPServer({
+            name: "Server 1",
+            url: "http://s1.com",
             enabled: true,
           });
-          setActiveMCPCollection(null);
+          addMCPServer({
+            name: "Server 2",
+            url: "http://s2.com",
+            enabled: false,
+          });
         });
 
-        expect(
-          useChatStore.getState().settings.activeMcpCollectionId,
-        ).toBeNull();
+        const yaml = useChatStore.getState().exportMCPServersYAML();
+
+        expect(yaml).toContain("Server 1");
+        expect(yaml).toContain("Server 2");
+        expect(yaml).toContain("http://s1.com");
+        expect(yaml).toContain("http://s2.com");
+      });
+    });
+
+    describe("importMCPServersYAML", () => {
+      it("imports servers from YAML", () => {
+        const { importMCPServersYAML } = useChatStore.getState();
+        const yaml = `servers:
+  - name: Imported Server
+    url: http://imported.com
+    enabled: true`;
+
+        act(() => {
+          importMCPServersYAML(yaml);
+        });
+
+        const servers = useChatStore.getState().settings.mcpServers;
+        expect(servers).toHaveLength(1);
+        expect(servers[0].name).toBe("Imported Server");
+        expect(servers[0].url).toBe("http://imported.com");
+        expect(servers[0].enabled).toBe(true);
+        expect(servers[0].id).toBeDefined();
+      });
+
+      it("replaces existing servers on import", () => {
+        const { addMCPServer, importMCPServersYAML } = useChatStore.getState();
+
+        act(() => {
+          addMCPServer({
+            name: "Old Server",
+            url: "http://old.com",
+            enabled: true,
+          });
+        });
+
+        const yaml = `servers:
+  - name: New Server
+    url: http://new.com`;
+
+        act(() => {
+          importMCPServersYAML(yaml);
+        });
+
+        const servers = useChatStore.getState().settings.mcpServers;
+        expect(servers).toHaveLength(1);
+        expect(servers[0].name).toBe("New Server");
+      });
+
+      it("defaults enabled to true if not specified", () => {
+        const { importMCPServersYAML } = useChatStore.getState();
+        const yaml = `servers:
+  - name: Server
+    url: http://test.com`;
+
+        act(() => {
+          importMCPServersYAML(yaml);
+        });
+
+        expect(useChatStore.getState().settings.mcpServers[0].enabled).toBe(
+          true,
+        );
+      });
+
+      it("preserves existing id if provided", () => {
+        const { importMCPServersYAML } = useChatStore.getState();
+        const yaml = `servers:
+  - id: custom-id
+    name: Server
+    url: http://test.com`;
+
+        act(() => {
+          importMCPServersYAML(yaml);
+        });
+
+        expect(useChatStore.getState().settings.mcpServers[0].id).toBe(
+          "custom-id",
+        );
+      });
+
+      it("throws error for invalid YAML format", () => {
+        const { importMCPServersYAML } = useChatStore.getState();
+
+        expect(() => {
+          importMCPServersYAML("name: just a name");
+        }).toThrow("Invalid YAML: expected { servers: [...] }");
+      });
+
+      it("throws error when servers is not an array", () => {
+        const { importMCPServersYAML } = useChatStore.getState();
+
+        expect(() => {
+          importMCPServersYAML("servers: not-an-array");
+        }).toThrow("Invalid YAML: expected { servers: [...] }");
+      });
+
+      it("persists to AsyncStorage", () => {
+        const { importMCPServersYAML } = useChatStore.getState();
+        const yaml = `servers:
+  - name: Server
+    url: http://test.com`;
+
+        act(() => {
+          importMCPServersYAML(yaml);
+        });
+
+        expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+          "@ai_agent_settings",
+          expect.stringContaining("mcpServers"),
+        );
       });
     });
   });
@@ -846,12 +830,13 @@ describe("useChatStore", () => {
       expect(useChatStore.getState().currentChatId).toBe("chat1");
     });
 
-    it("ensures collections are created from legacy settings", async () => {
+    it("migrates legacy settings with collections", async () => {
       const mockSettings = {
         mcpServers: [
           { id: "s1", name: "Server", url: "http://test.com", enabled: true },
         ],
-        mcpCollections: [],
+        mcpCollections: [{ id: "col1", name: "Old Collection", servers: [] }],
+        activeMcpCollectionId: "col1",
       };
 
       (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
@@ -862,54 +847,15 @@ describe("useChatStore", () => {
 
       await useChatStore.getState().loadFromStorage();
 
-      // Should create default collection with existing servers
-      expect(useChatStore.getState().settings.mcpCollections).toHaveLength(1);
-      expect(useChatStore.getState().settings.mcpCollections[0].name).toBe(
-        "Default",
-      );
-    });
-
-    it("resets invalid activeMcpCollectionId to first collection", async () => {
-      const mockSettings = {
-        mcpCollections: [{ id: "col1", name: "Collection 1", servers: [] }],
-        activeMcpCollectionId: "non-existent-id",
-      };
-
-      (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
-        if (key === "@ai_agent_settings")
-          return Promise.resolve(JSON.stringify(mockSettings));
-        return Promise.resolve(null);
-      });
-
-      await useChatStore.getState().loadFromStorage();
-
-      // Should reset to first collection
-      expect(useChatStore.getState().settings.activeMcpCollectionId).toBe(
-        "col1",
-      );
-    });
-
-    it("handles settings with valid activeMcpCollectionId", async () => {
-      const mockSettings = {
-        mcpCollections: [
-          { id: "col1", name: "Collection 1", servers: [] },
-          { id: "col2", name: "Collection 2", servers: [] },
-        ],
-        activeMcpCollectionId: "col2",
-      };
-
-      (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
-        if (key === "@ai_agent_settings")
-          return Promise.resolve(JSON.stringify(mockSettings));
-        return Promise.resolve(null);
-      });
-
-      await useChatStore.getState().loadFromStorage();
-
-      // Should keep the valid active collection
-      expect(useChatStore.getState().settings.activeMcpCollectionId).toBe(
-        "col2",
-      );
+      // Should have servers but no collections (migrated away)
+      const settings = useChatStore.getState().settings;
+      expect(settings.mcpServers).toHaveLength(1);
+      expect(
+        (settings as Record<string, unknown>).mcpCollections,
+      ).toBeUndefined();
+      expect(
+        (settings as Record<string, unknown>).activeMcpCollectionId,
+      ).toBeUndefined();
     });
   });
 });
