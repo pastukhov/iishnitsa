@@ -402,10 +402,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   exportMCPServersYAML: () => {
     const state = get();
-    const serversWithoutTokens = state.settings.mcpServers.map(
-      ({ token, ...server }) => server,
+    const serversForExport = state.settings.mcpServers.map(
+      ({ id, token, ...server }) => server,
     );
-    return YAML.stringify({ servers: serversWithoutTokens });
+    return YAML.stringify({ servers: serversForExport });
   },
 
   importMCPServersYAML: (yamlString: string) => {

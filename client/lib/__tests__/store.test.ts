@@ -599,6 +599,7 @@ describe("useChatStore", () => {
         expect(yaml).toContain("enabled: true");
         expect(yaml).not.toContain("secret-token");
         expect(yaml).not.toContain("token:");
+        expect(yaml).not.toContain("id:");
       });
 
       it("exports empty servers list", () => {
