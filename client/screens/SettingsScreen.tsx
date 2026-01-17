@@ -13,10 +13,12 @@ import {
   Platform,
   StyleProp,
   TextStyle,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Clipboard from "expo-clipboard";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -241,10 +243,8 @@ export default function SettingsScreen() {
     updateMCPServer,
     removeMCPServer,
     toggleMCPServer,
-    addMCPCollection,
-    updateMCPCollection,
-    deleteMCPCollection,
-    setActiveMCPCollection,
+    exportMCPServersYAML,
+    importMCPServersYAML,
   } = useChatStore();
 
   const [isTesting, setIsTesting] = useState(false);
@@ -263,11 +263,8 @@ export default function SettingsScreen() {
     success: boolean;
     message: string;
   } | null>(null);
-  const [newCollectionName, setNewCollectionName] = useState("");
-  const [editingCollectionId, setEditingCollectionId] = useState<string | null>(
-    null,
-  );
-  const [editingCollectionName, setEditingCollectionName] = useState("");
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importYaml, setImportYaml] = useState("");
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelStatus, setModelStatus] = useState<{
     loading: boolean;
@@ -279,11 +276,10 @@ export default function SettingsScreen() {
     [],
   );
   const uiLabels = {
-    testing: "Проверка...",
-    test: "Проверить соединение",
-    modelsLoading: "Загрузка моделей...",
-    connected: (count: number) =>
-      `Соединение установлено. Доступно моделей: ${count}.`,
+    testing: "Checking...",
+    test: "Test Connection",
+    modelsLoading: "Loading models...",
+    connected: (count: number) => `Connected. Available models: ${count}.`,
   };
 
   const providers = getProviders();
@@ -318,7 +314,7 @@ export default function SettingsScreen() {
       result.message ||
       (result.success
         ? uiLabels.connected(result.models?.length || 0)
-        : "Ошибка подключения.");
+        : "Connection failed.");
     if (result.success) {
       setModelOptions(result.models || []);
       setModelStatus({
@@ -417,59 +413,41 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleAddCollection = () => {
-    const trimmed = newCollectionName.trim();
-    if (!trimmed) return;
-    addMCPCollection(trimmed, settings.mcpServers);
-    setNewCollectionName("");
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  const handleExport = async () => {
+    try {
+      const yaml = exportMCPServersYAML();
+      await Clipboard.setStringAsync(yaml);
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      Alert.alert(
+        "Exported",
+        "MCP servers copied to clipboard (without tokens)",
+      );
+    } catch (error) {
+      Alert.alert("Error", "Failed to export servers");
     }
   };
 
-  const handleStartRenameCollection = (id: string, currentName: string) => {
-    setEditingCollectionId(id);
-    setEditingCollectionName(currentName);
+  const handleImport = () => {
+    setImportYaml("");
+    setShowImportModal(true);
   };
 
-  const handleSaveCollectionName = () => {
-    if (!editingCollectionId) return;
-    const trimmed = editingCollectionName.trim();
-    if (!trimmed) return;
-    updateMCPCollection(editingCollectionId, { name: trimmed });
-    setEditingCollectionId(null);
-    setEditingCollectionName("");
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  };
-
-  const handleDeleteCollection = (id: string, name: string) => {
-    Alert.alert(
-      "Delete MCP Collection",
-      `Are you sure you want to delete "${name}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            deleteMCPCollection(id);
-            if (Platform.OS !== "web") {
-              Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Warning,
-              );
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleSetActiveCollection = (id: string) => {
-    setActiveMCPCollection(id);
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const handleConfirmImport = () => {
+    try {
+      importMCPServersYAML(importYaml);
+      setShowImportModal(false);
+      setImportYaml("");
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      Alert.alert("Imported", "MCP servers imported successfully");
+    } catch (error) {
+      Alert.alert(
+        "Error",
+        error instanceof Error ? error.message : "Invalid YAML format",
+      );
     }
   };
 
@@ -672,181 +650,45 @@ export default function SettingsScreen() {
                   ]}
                 />
 
-                <View style={styles.collectionPanel}>
-                  <ThemedText style={styles.collectionTitle}>
-                    MCP Collections
-                  </ThemedText>
-                  {settings.mcpCollections.length > 0 ? (
-                    <SelectField
-                      label="Active collection"
-                      value={settings.activeMcpCollectionId || ""}
-                      options={settings.mcpCollections.map((collection) => ({
-                        label: `${collection.name} (${collection.servers.length})`,
-                        value: collection.id,
-                      }))}
-                      onSelect={(value) => handleSetActiveCollection(value)}
-                      placeholder="Select a collection"
-                    />
-                  ) : (
-                    <ThemedText
-                      style={[
-                        styles.helperText,
-                        { color: theme.textSecondary },
-                      ]}
-                    >
-                      No collections yet. Create one from your current servers.
-                    </ThemedText>
-                  )}
-
-                  <InputField
-                    label="New collection name"
-                    value={newCollectionName}
-                    onChangeText={setNewCollectionName}
-                    placeholder="My MCP setup"
-                  />
+                <View style={styles.importExportRow}>
                   <Pressable
-                    onPress={handleAddCollection}
-                    disabled={!newCollectionName.trim()}
+                    onPress={handleExport}
                     style={({ pressed }) => [
-                      styles.addCollectionButton,
+                      styles.importExportButton,
                       {
-                        backgroundColor: newCollectionName.trim()
-                          ? theme.primary
-                          : theme.surfaceVariant,
+                        borderColor: theme.primary,
                         opacity: pressed ? 0.8 : 1,
                       },
                     ]}
                   >
-                    <ThemedText style={{ color: theme.buttonText }}>
-                      Create from current
+                    <MaterialIcons
+                      name="file-upload"
+                      size={18}
+                      color={theme.primary}
+                    />
+                    <ThemedText style={{ color: theme.primary }}>
+                      Export
                     </ThemedText>
                   </Pressable>
-
-                  {settings.mcpCollections.map((collection) => (
-                    <View key={collection.id} style={styles.collectionItem}>
-                      <View style={styles.collectionRow}>
-                        <View style={styles.collectionInfo}>
-                          <ThemedText style={styles.collectionName}>
-                            {collection.name}
-                          </ThemedText>
-                          <ThemedText
-                            style={[
-                              styles.collectionMeta,
-                              { color: theme.textSecondary },
-                            ]}
-                          >
-                            {collection.servers.length} server
-                            {collection.servers.length === 1 ? "" : "s"}
-                          </ThemedText>
-                        </View>
-                        <View style={styles.collectionButtons}>
-                          <Pressable
-                            onPress={() =>
-                              handleSetActiveCollection(collection.id)
-                            }
-                            disabled={
-                              settings.activeMcpCollectionId === collection.id
-                            }
-                            style={({ pressed }) => [
-                              styles.collectionButton,
-                              { opacity: pressed ? 0.6 : 1 },
-                            ]}
-                          >
-                            <MaterialIcons
-                              name={
-                                settings.activeMcpCollectionId === collection.id
-                                  ? "check-circle"
-                                  : "check-circle-outline"
-                              }
-                              size={20}
-                              color={theme.primary}
-                            />
-                          </Pressable>
-                          <Pressable
-                            onPress={() =>
-                              handleStartRenameCollection(
-                                collection.id,
-                                collection.name,
-                              )
-                            }
-                            style={({ pressed }) => [
-                              styles.collectionButton,
-                              { opacity: pressed ? 0.6 : 1 },
-                            ]}
-                          >
-                            <MaterialIcons
-                              name="edit"
-                              size={20}
-                              color={theme.textSecondary}
-                            />
-                          </Pressable>
-                          <Pressable
-                            onPress={() =>
-                              handleDeleteCollection(
-                                collection.id,
-                                collection.name,
-                              )
-                            }
-                            style={({ pressed }) => [
-                              styles.collectionButton,
-                              { opacity: pressed ? 0.6 : 1 },
-                            ]}
-                          >
-                            <MaterialIcons
-                              name="delete-outline"
-                              size={20}
-                              color={theme.error}
-                            />
-                          </Pressable>
-                        </View>
-                      </View>
-
-                      {editingCollectionId === collection.id && (
-                        <View style={styles.collectionEdit}>
-                          <InputField
-                            label="Rename collection"
-                            value={editingCollectionName}
-                            onChangeText={setEditingCollectionName}
-                            placeholder={collection.name}
-                          />
-                          <View style={styles.collectionEditActions}>
-                            <Pressable
-                              onPress={() => {
-                                setEditingCollectionId(null);
-                                setEditingCollectionName("");
-                              }}
-                              style={({ pressed }) => [
-                                styles.cancelButton,
-                                {
-                                  borderColor: theme.outline,
-                                  opacity: pressed ? 0.8 : 1,
-                                },
-                              ]}
-                            >
-                              <ThemedText>Cancel</ThemedText>
-                            </Pressable>
-                            <Pressable
-                              onPress={handleSaveCollectionName}
-                              disabled={!editingCollectionName.trim()}
-                              style={({ pressed }) => [
-                                styles.addButton,
-                                {
-                                  backgroundColor: editingCollectionName.trim()
-                                    ? theme.primary
-                                    : theme.surfaceVariant,
-                                  opacity: pressed ? 0.8 : 1,
-                                },
-                              ]}
-                            >
-                              <ThemedText style={{ color: theme.buttonText }}>
-                                Save
-                              </ThemedText>
-                            </Pressable>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  ))}
+                  <Pressable
+                    onPress={handleImport}
+                    style={({ pressed }) => [
+                      styles.importExportButton,
+                      {
+                        borderColor: theme.primary,
+                        opacity: pressed ? 0.8 : 1,
+                      },
+                    ]}
+                  >
+                    <MaterialIcons
+                      name="file-download"
+                      size={18}
+                      color={theme.primary}
+                    />
+                    <ThemedText style={{ color: theme.primary }}>
+                      Import
+                    </ThemedText>
+                  </Pressable>
                 </View>
 
                 <View
@@ -1062,6 +904,79 @@ export default function SettingsScreen() {
           </View>
         </ScrollView>
       </ThemedView>
+
+      <Modal
+        visible={showImportModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowImportModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
+            <ThemedText style={styles.modalTitle}>
+              Import MCP Servers
+            </ThemedText>
+            <ThemedText
+              style={[styles.modalDescription, { color: theme.textSecondary }]}
+            >
+              Paste YAML configuration. This will replace all existing servers.
+            </ThemedText>
+            <TextInput
+              style={[
+                styles.importInput,
+                {
+                  backgroundColor: theme.inputBackground,
+                  borderColor: theme.outlineVariant,
+                  color: theme.text,
+                },
+              ]}
+              value={importYaml}
+              onChangeText={setImportYaml}
+              placeholder={`servers:\n  - name: My Server\n    url: https://example.com`}
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={() => setShowImportModal(false)}
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  {
+                    borderColor: theme.outline,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <ThemedText>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={handleConfirmImport}
+                disabled={!importYaml.trim()}
+                style={({ pressed }) => [
+                  styles.addButton,
+                  {
+                    backgroundColor: importYaml.trim()
+                      ? theme.primary
+                      : theme.surfaceVariant,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <ThemedText style={{ color: theme.buttonText }}>
+                  Import
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -1176,49 +1091,19 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     marginVertical: Spacing.md,
   },
-  collectionPanel: {
+  importExportRow: {
+    flexDirection: "row",
     gap: Spacing.md,
   },
-  collectionTitle: {
-    ...Typography.labelLarge,
-  },
-  collectionItem: {
-    marginTop: Spacing.sm,
-  },
-  collectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  collectionInfo: {
+  importExportButton: {
     flex: 1,
-    marginRight: Spacing.md,
-  },
-  collectionName: {
-    ...Typography.bodyLarge,
-  },
-  collectionMeta: {
-    ...Typography.bodySmall,
-  },
-  collectionButtons: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  collectionButton: {
-    padding: Spacing.sm,
-  },
-  collectionEdit: {
-    marginTop: Spacing.sm,
-  },
-  collectionEditActions: {
-    flexDirection: "row",
-    gap: Spacing.md,
-    marginTop: Spacing.sm,
-  },
-  addCollectionButton: {
-    alignItems: "center",
+    justifyContent: "center",
     padding: Spacing.md,
     borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    gap: Spacing.sm,
   },
   mcpServerRow: {
     flexDirection: "row",
@@ -1293,5 +1178,38 @@ const styles = StyleSheet.create({
   },
   addServerText: {
     ...Typography.labelLarge,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    padding: Spacing.lg,
+  },
+  modalContent: {
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    maxHeight: "80%",
+  },
+  modalTitle: {
+    ...Typography.titleLarge,
+    marginBottom: Spacing.sm,
+  },
+  modalDescription: {
+    ...Typography.bodyMedium,
+    marginBottom: Spacing.md,
+  },
+  importInput: {
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    padding: Spacing.md,
+    minHeight: 150,
+    textAlignVertical: "top",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    ...Typography.bodyMedium,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
   },
 });
