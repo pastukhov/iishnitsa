@@ -16,13 +16,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Checkout the repository code
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Install the requested Node.js version and enable npm caching
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -35,7 +33,16 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      # Install project dependencies using npm
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - name: Install dependencies
         run: npm ci
 
@@ -67,13 +74,13 @@ jobs:
           } > release-notes.md
           node -e 'const fs=require("fs"); const notes=fs.readFileSync("release-notes.md","utf8"); const tag=process.env.GITHUB_REF_NAME || "dev"; const content="export const releaseTag = " + JSON.stringify(tag) + ";\n" + "export const releaseNotes = " + JSON.stringify(notes) + ";\n"; fs.writeFileSync("client/constants/releaseNotes.ts", content);'
 
-      # Generate native Android project and build APK locally on the runner.
       - name: Prebuild Android project
         run: npx expo prebuild --platform android --non-interactive --clean
 
-      - name: Configure Gradle Maven mirror
+      - name: Configure Gradle
         run: |
           mkdir -p ~/.gradle
+          # Maven mirror for faster downloads
           cat > ~/.gradle/init.gradle <<'EOF'
           settingsEvaluated { settings ->
             settings.pluginManagement {
@@ -103,10 +110,21 @@ jobs:
           }
           EOF
 
+          # Gradle performance settings
+          cat > ~/.gradle/gradle.properties <<'EOF'
+          org.gradle.daemon=true
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.configureondemand=true
+          org.gradle.jvmargs=-Xmx4g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8 -XX:+UseParallelGC
+          kotlin.incremental=true
+          kotlin.daemon.jvmargs=-Xmx2g
+          EOF
+
       - name: Build APK
         run: |
           cd android
-          ./gradlew --init-script ~/.gradle/init.gradle assembleRelease
+          ./gradlew --init-script ~/.gradle/init.gradle assembleRelease --build-cache --parallel
           cd ..
           APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
           if [ ! -s "$APK_PATH" ]; then
