@@ -1,4 +1,10 @@
-import { Message, EndpointConfig, MCPServer } from "@/lib/store";
+import {
+  Message,
+  EndpointConfig,
+  MCPServer,
+  MessageAttachment,
+} from "@/lib/store";
+import { getImageDataUrl } from "@/lib/image-utils";
 import {
   getToolsFromServers,
   executeToolCall,
@@ -13,9 +19,13 @@ import {
   resolveBaseUrl,
 } from "@/lib/providers";
 
+type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 interface ChatCompletionMessage {
   role: "user" | "assistant" | "system" | "tool";
-  content: string | null;
+  content: string | ContentPart[] | null;
   tool_calls?: {
     id: string;
     type: "function";
@@ -25,6 +35,33 @@ interface ChatCompletionMessage {
     };
   }[];
   tool_call_id?: string;
+}
+
+async function buildMultimodalContent(
+  text: string,
+  attachments?: MessageAttachment[],
+): Promise<string | ContentPart[]> {
+  if (!attachments || attachments.length === 0) {
+    return text;
+  }
+
+  const parts: ContentPart[] = [];
+
+  if (text) {
+    parts.push({ type: "text", text });
+  }
+
+  for (const attachment of attachments) {
+    if (attachment.type === "image") {
+      const dataUrl = await getImageDataUrl(attachment);
+      parts.push({
+        type: "image_url",
+        image_url: { url: dataUrl },
+      });
+    }
+  }
+
+  return parts;
 }
 
 interface OpenAIFunction {
@@ -52,14 +89,23 @@ export async function sendChatMessage(
     });
   }
 
-  messages.forEach((msg) => {
-    if (msg.role !== "system" && msg.content) {
-      chatMessages.push({
-        role: msg.role,
-        content: msg.content,
-      });
+  for (const msg of messages) {
+    if (msg.role === "system") continue;
+    const hasContent = msg.content && msg.content.trim().length > 0;
+    const hasAttachments = msg.attachments && msg.attachments.length > 0;
+
+    if (!hasContent && !hasAttachments) continue;
+
+    if (msg.role === "user" && hasAttachments) {
+      const content = await buildMultimodalContent(
+        msg.content || "",
+        msg.attachments,
+      );
+      chatMessages.push({ role: msg.role, content });
+    } else {
+      chatMessages.push({ role: msg.role, content: msg.content });
     }
-  });
+  }
 
   let tools: OpenAIFunction[] = [];
   let mcpToolsMap: Map<

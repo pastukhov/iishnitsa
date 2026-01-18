@@ -2,11 +2,21 @@ import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import YAML from "yaml";
 
+export interface MessageAttachment {
+  id: string;
+  type: "image";
+  uri: string;
+  mimeType: string;
+  width?: number;
+  height?: number;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: string;
+  attachments?: MessageAttachment[];
 }
 
 export interface Chat {
@@ -62,7 +72,11 @@ interface ChatStore {
   createNewChat: () => void;
   selectChat: (chatId: string) => void;
   deleteChat: (chatId: string) => void;
-  addMessage: (message: Omit<Message, "id" | "timestamp">) => void;
+  addMessage: (
+    message: Omit<Message, "id" | "timestamp" | "attachments"> & {
+      attachments?: MessageAttachment[];
+    },
+  ) => void;
   updateLastAssistantMessage: (content: string) => void;
   getCurrentChat: () => Chat | null;
   updateSettings: (settings: Partial<Settings>) => void;
@@ -288,11 +302,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const updatedChats = state.chats.map((chat) => {
         if (chat.id === state.currentChatId) {
           const updatedMessages = [...chat.messages, newMessage];
-          const title =
-            chat.messages.length === 0 && message.role === "user"
-              ? message.content.slice(0, 50) +
-                (message.content.length > 50 ? "..." : "")
-              : chat.title;
+          let title = chat.title;
+          if (chat.messages.length === 0 && message.role === "user") {
+            if (message.content) {
+              title =
+                message.content.slice(0, 50) +
+                (message.content.length > 50 ? "..." : "");
+            } else if (message.attachments && message.attachments.length > 0) {
+              title = "[Image]";
+            }
+          }
           return {
             ...chat,
             messages: updatedMessages,
