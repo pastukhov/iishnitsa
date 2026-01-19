@@ -46,7 +46,11 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
   const handleDeleteChat = (chatId: string, title: string) => {
     Alert.alert("Delete Chat", `Delete "${title}"?`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => deleteChat(chatId) },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => deleteChat(chatId),
+      },
     ]);
   };
 
