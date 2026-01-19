@@ -13,7 +13,7 @@ import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 export default function AboutScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const displayName = "AI Agent";
+  const displayName = "Iishnitsa";
 
   const markdownStyles = {
     body: {

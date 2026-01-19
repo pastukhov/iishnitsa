@@ -180,7 +180,7 @@ function EmptyState() {
       <ThemedText
         style={[styles.emptySubtitle, { color: theme.textSecondary }]}
       >
-        Send a message to begin chatting with your AI agent
+        Send a message to begin chatting with Iishnitsa
       </ThemedText>
     </View>
   );
@@ -388,7 +388,7 @@ export default function ChatScreen() {
             ]}
           />
           <ThemedText style={styles.headerTitle} numberOfLines={1}>
-            {settings.endpoint.model || "AI Agent"}
+            {settings.endpoint.model || "Iishnitsa"}
           </ThemedText>
         </View>
 
@@ -489,7 +489,7 @@ export default function ChatScreen() {
             </Pressable>
             <TextInput
               style={[styles.input, { color: theme.text }]}
-              placeholder="Message AI agent..."
+              placeholder="Message Iishnitsa..."
               placeholderTextColor={theme.textSecondary}
               value={inputText}
               onChangeText={setInputText}

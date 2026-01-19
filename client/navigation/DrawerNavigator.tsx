@@ -75,7 +75,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
             />
           </View>
           <View style={styles.profileInfo}>
-            <ThemedText style={styles.appName}>AI Agent</ThemedText>
+            <ThemedText style={styles.appName}>Iishnitsa</ThemedText>
             <ThemedText
               style={[styles.subtitle, { color: theme.textSecondary }]}
             >
