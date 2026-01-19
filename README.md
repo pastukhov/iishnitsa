@@ -8,15 +8,24 @@
 
 ## Возможности
 
-- Единый интерфейс чата с настройками подключения.
-- Поддержка MCP-инструментов через конфиг в приложении.
-- Запуск мобильного клиента (Expo).
+- Единый интерфейс чата с поддержкой множества AI-провайдеров (OpenAI, Anthropic, Together, Mistral, Perplexity, DeepSeek, Groq, Yandex и др.)
+- Поддержка MCP-инструментов (Model Context Protocol) через конфиг в приложении
+- Прикрепление изображений к сообщениям
+- Тёмная и светлая темы
+- Персистентное хранение чатов и настроек
 
 ## Структура проекта
 
-- `client/` — мобильный клиент на Expo (точка входа: `client/App.tsx`).
-- `assets/` — статические ресурсы.
-- `scripts/` — вспомогательные скрипты сборки.
+- `client/` — мобильный клиент на Expo
+  - `App.tsx` — точка входа с провайдерами (React Query, Navigation, SafeArea)
+  - `lib/` — бизнес-логика (store, api, providers, mcp-client)
+  - `screens/` — экраны приложения (Chat, Settings, About)
+  - `navigation/` — настройка навигации (drawer)
+  - `components/` — переиспользуемые UI-компоненты
+  - `hooks/` — кастомные хуки (useTheme, useColorScheme)
+  - `constants/` — константы (theme, releaseNotes)
+- `scripts/` — вспомогательные скрипты сборки
+- `assets/` — статические ресурсы
 
 ## Быстрый старт
 
@@ -34,11 +43,29 @@ npm run expo:dev
 
 ## Основные команды
 
-- `npm run expo:dev` — запуск Expo dev-сервера.
-- `npm run expo:static:build` — сборка статического Expo-бандла.
-- `npm run lint` / `npm run lint:fix` — линтинг и автоисправления.
-- `npm run check:types` — проверка типов TypeScript.
-- `npm test` — запуск тестов.
+```bash
+# Разработка
+npm run expo:dev              # Запуск Expo dev-сервера
+
+# Качество кода
+npm run lint                  # ESLint проверка
+npm run lint:fix              # ESLint с автоисправлением
+npm run check:types           # Проверка типов TypeScript
+npm run check:format          # Проверка форматирования Prettier
+npm run format                # Автоформатирование кода
+
+# Тестирование
+npm test                      # Запуск Jest тестов
+npm run test:watch            # Тесты в watch-режиме
+npm run test:coverage         # Тесты с отчётом покрытия
+
+# Проверка провайдеров
+npm run check:providers       # Тест подключения к AI-провайдерам
+npm run check:providers:mock  # Тест с моками (для CI)
+
+# Сборка
+npm run expo:static:build     # Сборка статического бандла
+```
 
 ## Настройка
 
@@ -55,7 +82,7 @@ npm run expo:dev
 │   Branch    │────▶│             │────▶│             │────▶│             │
 └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
       │                   │                   │                   │
-   push              pull_request        push to main          tag push
+   push              pull_request         PR merged          workflow_dispatch
       │                   │                   │                   │
       ▼                   ▼                   ▼                   ▼
   Auto PR            lint, types,        create tag          Gradle build
@@ -64,13 +91,13 @@ npm run expo:dev
 
 ### Workflows
 
-| Workflow                   | Триггер                | Назначение                                      |
-| -------------------------- | ---------------------- | ----------------------------------------------- |
-| **PR Checks**              | `pull_request` to main | Lint, typecheck, format, tests, commitlint      |
-| **Release**                | `push` to main         | Вычисляет версию, создаёт тег, запускает сборку |
-| **Build APK**              | `tag` push `v*`        | Собирает APK через Gradle, публикует релиз      |
-| **Auto PR**                | `push` to branch       | Автоматически создаёт PR                        |
-| **Delete Merged Branches** | PR closed              | Удаляет ветку после merge                       |
+| Workflow                   | Триггер                          | Назначение                                      |
+| -------------------------- | -------------------------------- | ----------------------------------------------- |
+| **PR Checks**              | `pull_request` to main           | Lint, typecheck, format, tests, commitlint      |
+| **Release**                | `push` to main / merged PR       | Вычисляет версию, создаёт тег, запускает сборку |
+| **Build APK**              | triggered by Release             | Собирает APK через Gradle, публикует релиз      |
+| **Auto PR**                | `push` to branch                 | Автоматически создаёт PR                        |
+| **Delete Merged Branches** | PR merged                        | Удаляет ветку после merge                       |
 
 ### Секреты
 

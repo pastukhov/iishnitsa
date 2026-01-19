@@ -59,7 +59,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
 
       <View style={styles.content}>
         <ThemedText type="h1" style={styles.title}>
-          AI Agent hit a snag
+          Iishnitsa hit a snag
         </ThemedText>
 
         <ThemedText type="body" style={styles.message}>

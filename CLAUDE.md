@@ -19,12 +19,14 @@ npm run check:types       # TypeScript type check
 npm run check:format      # Prettier check
 npm run format            # Auto-format code
 
+# Testing
+npm run test              # Run Jest tests
+npm run test:watch        # Run tests in watch mode
+npm run test:coverage     # Run tests with coverage
+
 # Provider testing
 npm run check:providers        # Test AI provider connectivity (requires API keys in env)
 npm run check:providers:mock   # Test with mocked providers (for CI)
-
-# APK build (requires EAS setup)
-./node_modules/.bin/eas build --platform android --profile preview
 ```
 
 ## Architecture
@@ -32,10 +34,13 @@ npm run check:providers:mock   # Test with mocked providers (for CI)
 ### Directory Structure
 - `client/` — Expo/React Native mobile app
   - `App.tsx` — Root component with providers (React Query, Navigation, SafeArea)
-  - `lib/` — Core business logic
-  - `screens/` — Main app screens
+  - `lib/` — Core business logic (store, api, providers, mcp-client)
+  - `lib/__tests__/` — Unit tests for lib modules
+  - `screens/` — Main app screens (ChatScreen, SettingsScreen, AboutScreen)
   - `navigation/` — React Navigation setup (drawer-based)
-  - `components/` — Reusable UI components
+  - `components/` — Reusable UI components (ThemedText, ThemedView, Button, Card, etc.)
+  - `hooks/` — Custom React hooks (useTheme, useColorScheme, useScreenOptions)
+  - `constants/` — App constants (theme, releaseNotes)
 - `scripts/` — Build and CI helper scripts
 
 ### Key Modules
@@ -66,14 +71,20 @@ npm run check:providers:mock   # Test with mocked providers (for CI)
 
 - Commit messages: Conventional Commits (`feat:`, `fix:`, `chore:`, etc.)
 - Branch names: two words joined with hyphen (e.g., `mcp-collections`)
-- Path aliases: `@/*` → `./client/*`, `@shared/*` → `./shared/*`
-- Formatting: Prettier with double quotes, 2-space indent
+- Path aliases: `@/*` → `./client/*`
+- Formatting: Prettier (default settings)
 
 ## CI/CD
 
-- PR checks required before merge to `main`
-- Releases triggered by `vX.Y.Z` tags → EAS APK build
-- `EXPO_TOKEN` secret required for automated builds
+GitHub Actions workflows (`.github/workflows/`):
+- `pr-checks.yml` — Required checks before merge to `main` (lint, types, tests)
+- `release.yml` — Auto-creates version tags on push/merge to `main` using conventional commits
+- `apk-build.yml` — Builds APK via Gradle when triggered by release workflow
+- `auto-pr.yml` — Automation for PR management
+- `delete-merged-branches.yml` — Cleans up merged feature branches
+
+Notes:
+- APK builds use Gradle directly (not EAS)
 
 ## Feature Implementation Workflow
 
