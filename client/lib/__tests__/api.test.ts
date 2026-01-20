@@ -60,7 +60,13 @@ describe("api", () => {
         },
       ];
 
-      await sendChatMessage(mockMessages, mockEndpoint, onChunk, mcpServers, true);
+      await sendChatMessage(
+        mockMessages,
+        mockEndpoint,
+        onChunk,
+        mcpServers,
+        true,
+      );
 
       expect(agentCore.runAgentChat).toHaveBeenCalledWith(
         mockMessages,

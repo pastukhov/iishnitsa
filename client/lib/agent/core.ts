@@ -1,4 +1,9 @@
-import { Message, EndpointConfig, MCPServer, MessageAttachment } from "@/lib/store";
+import {
+  Message,
+  EndpointConfig,
+  MCPServer,
+  MessageAttachment,
+} from "@/lib/store";
 import { getImageDataUrl } from "@/lib/image-utils";
 import {
   getToolsFromServers,
@@ -245,7 +250,10 @@ export class AgentCore {
     enabled: boolean,
   ): Promise<{
     tools: OpenAIFunction[];
-    mcpToolsMap: Map<string, MCPTool & { serverName: string; serverId: string }>;
+    mcpToolsMap: Map<
+      string,
+      MCPTool & { serverName: string; serverId: string }
+    >;
   }> {
     const tools: OpenAIFunction[] = [];
     const mcpToolsMap: Map<
@@ -283,7 +291,10 @@ export class AgentCore {
     return { tools, mcpToolsMap };
   }
 
-  private emitToolStatus(toolCalls: ToolCall[], onChunk: (content: string) => void) {
+  private emitToolStatus(
+    toolCalls: ToolCall[],
+    onChunk: (content: string) => void,
+  ) {
     const toolNames = toolCalls.map((tc) => {
       const { toolName } = parseToolCallName(tc.function.name);
       return toolName;

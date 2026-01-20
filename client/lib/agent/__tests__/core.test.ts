@@ -42,7 +42,9 @@ describe("AgentCore", () => {
     );
 
     const driver = {
-      streamChat: jest.fn().mockResolvedValue({ fullContent: "", toolCalls: [] }),
+      streamChat: jest
+        .fn()
+        .mockResolvedValue({ fullContent: "", toolCalls: [] }),
     };
 
     const messages: Message[] = [
@@ -92,7 +94,7 @@ describe("AgentCore", () => {
       type: "function" as const,
       function: {
         name: "server1__tool",
-        arguments: "{\"input\":\"x\"}",
+        arguments: '{"input":"x"}',
       },
     };
 
@@ -150,11 +152,9 @@ describe("AgentCore", () => {
     });
 
     expect(driver.streamChat).toHaveBeenCalledTimes(2);
-    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
-      mockServer,
-      "tool",
-      { input: "x" },
-    );
+    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(mockServer, "tool", {
+      input: "x",
+    });
     expect(onChunk).toHaveBeenCalledWith(expect.stringContaining("Using tool"));
   });
 
@@ -220,5 +220,373 @@ describe("AgentCore", () => {
         mcpEnabled: true,
       }),
     ).rejects.toThrow("Maximum tool call depth exceeded");
+  });
+
+  it("skips tool loading when servers are disabled", async () => {
+    const driver = {
+      streamChat: jest
+        .fn()
+        .mockResolvedValue({ fullContent: "Done", toolCalls: [] }),
+    };
+
+    const agent = new AgentCore({ driver });
+
+    await agent.runChat({
+      messages: [
+        { id: "1", role: "user", content: "Hi", timestamp: Date.now() },
+      ],
+      endpoint: mockEndpoint,
+      onChunk: jest.fn(),
+      mcpServers: [{ ...mockServer, enabled: false }],
+      mcpEnabled: true,
+    });
+
+    expect(mcpClient.getToolsFromServers).not.toHaveBeenCalled();
+  });
+
+  it("warns when MCP server returns errors", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation();
+
+    (mcpClient.getToolsFromServers as jest.Mock).mockResolvedValueOnce({
+      tools: [],
+      errors: [{ serverName: "Test Server", error: "Timeout" }],
+    });
+
+    const driver = {
+      streamChat: jest
+        .fn()
+        .mockResolvedValue({ fullContent: "Done", toolCalls: [] }),
+    };
+
+    const agent = new AgentCore({ driver });
+
+    await agent.runChat({
+      messages: [
+        { id: "1", role: "user", content: "Hi", timestamp: Date.now() },
+      ],
+      endpoint: mockEndpoint,
+      onChunk: jest.fn(),
+      mcpServers: [mockServer],
+      mcpEnabled: true,
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      "MCP server errors:",
+      expect.arrayContaining([expect.objectContaining({ error: "Timeout" })]),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("handles unknown tool", async () => {
+    const toolCalls = [
+      {
+        id: "call_1",
+        type: "function" as const,
+        function: {
+          name: "server1__missing",
+          arguments: "{}",
+        },
+      },
+    ];
+
+    (mcpClient.getToolsFromServers as jest.Mock).mockResolvedValueOnce({
+      tools: [],
+      errors: [],
+    });
+
+    (mcpClient.mcpToolsToOpenAIFunctions as jest.Mock).mockReturnValueOnce([]);
+
+    (mcpClient.parseToolCallName as jest.Mock).mockReturnValue({
+      serverId: "server1",
+      toolName: "missing",
+    });
+
+    const driver = {
+      streamChat: jest
+        .fn()
+        .mockResolvedValueOnce({ fullContent: "", toolCalls })
+        .mockResolvedValueOnce({ fullContent: "Done", toolCalls: [] }),
+    };
+
+    const agent = new AgentCore({ driver });
+
+    await agent.runChat({
+      messages: [
+        { id: "1", role: "user", content: "Hi", timestamp: Date.now() },
+      ],
+      endpoint: mockEndpoint,
+      onChunk: jest.fn(),
+      mcpServers: [mockServer],
+      mcpEnabled: true,
+    });
+
+    const secondCall = (driver.streamChat as jest.Mock).mock.calls[1][0];
+    const toolMessage = secondCall.messages.find(
+      (msg: Message) => msg.role === "tool",
+    );
+
+    expect(toolMessage.content).toBe('Error: Unknown tool "server1__missing"');
+  });
+
+  it("formats tool results and handles execution errors", async () => {
+    const toolCalls = [
+      {
+        id: "call_empty",
+        type: "function" as const,
+        function: {
+          name: "server1__empty",
+          arguments: "{bad json",
+        },
+      },
+      {
+        id: "call_image",
+        type: "function" as const,
+        function: {
+          name: "server1__image",
+          arguments: "{}",
+        },
+      },
+      {
+        id: "call_weird",
+        type: "function" as const,
+        function: {
+          name: "server1__weird",
+          arguments: "{}",
+        },
+      },
+      {
+        id: "call_fail",
+        type: "function" as const,
+        function: {
+          name: "server1__fail",
+          arguments: "{}",
+        },
+      },
+    ];
+
+    (mcpClient.getToolsFromServers as jest.Mock).mockResolvedValueOnce({
+      tools: [
+        {
+          name: "empty",
+          description: "Empty tool",
+          inputSchema: { type: "object" },
+          serverName: "Test Server",
+          serverId: "server1",
+        },
+        {
+          name: "image",
+          description: "Image tool",
+          inputSchema: { type: "object" },
+          serverName: "Test Server",
+          serverId: "server1",
+        },
+        {
+          name: "weird",
+          description: "Weird tool",
+          inputSchema: { type: "object" },
+          serverName: "Test Server",
+          serverId: "server1",
+        },
+        {
+          name: "fail",
+          description: "Fail tool",
+          inputSchema: { type: "object" },
+          serverName: "Test Server",
+          serverId: "server1",
+        },
+      ],
+      errors: [],
+    });
+
+    (mcpClient.mcpToolsToOpenAIFunctions as jest.Mock).mockReturnValueOnce([
+      {
+        type: "function",
+        function: {
+          name: "server1__empty",
+          description: "[Test Server] Empty tool",
+          parameters: { type: "object" },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "server1__image",
+          description: "[Test Server] Image tool",
+          parameters: { type: "object" },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "server1__weird",
+          description: "[Test Server] Weird tool",
+          parameters: { type: "object" },
+        },
+      },
+      {
+        type: "function",
+        function: {
+          name: "server1__fail",
+          description: "[Test Server] Fail tool",
+          parameters: { type: "object" },
+        },
+      },
+    ]);
+
+    (mcpClient.parseToolCallName as jest.Mock).mockImplementation(
+      (name: string) => ({
+        serverId: "server1",
+        toolName: name.split("__")[1],
+      }),
+    );
+
+    (mcpClient.executeToolCall as jest.Mock)
+      .mockResolvedValueOnce({ content: [] })
+      .mockResolvedValueOnce({
+        content: [{ type: "image", data: "base64", mimeType: "image/jpeg" }],
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "unknown", data: { foo: "bar" } }],
+      })
+      .mockRejectedValueOnce(new Error("Boom"));
+
+    const driver = {
+      streamChat: jest
+        .fn()
+        .mockResolvedValueOnce({ fullContent: "", toolCalls })
+        .mockResolvedValueOnce({ fullContent: "Done", toolCalls: [] }),
+    };
+
+    const agent = new AgentCore({ driver });
+
+    await agent.runChat({
+      messages: [
+        { id: "1", role: "user", content: "Hi", timestamp: Date.now() },
+      ],
+      endpoint: mockEndpoint,
+      onChunk: jest.fn(),
+      mcpServers: [mockServer],
+      mcpEnabled: true,
+    });
+
+    expect(mcpClient.executeToolCall).toHaveBeenCalledWith(
+      mockServer,
+      "empty",
+      {},
+    );
+
+    const secondCall = (driver.streamChat as jest.Mock).mock.calls[1][0];
+    const toolMessages = secondCall.messages.filter(
+      (msg: Message) => msg.role === "tool",
+    );
+
+    expect(toolMessages[0].content).toBe("No result");
+    expect(toolMessages[1].content).toBe("[Image: image/jpeg]");
+    expect(toolMessages[2].content).toBe(
+      JSON.stringify({ type: "unknown", data: { foo: "bar" } }),
+    );
+    expect(toolMessages[3].content).toBe("Error executing tool: Boom");
+  });
+
+  it("handles missing server for tool", async () => {
+    const toolCalls = [
+      {
+        id: "call_1",
+        type: "function" as const,
+        function: {
+          name: "server1__tool",
+          arguments: "{}",
+        },
+      },
+    ];
+
+    (mcpClient.getToolsFromServers as jest.Mock).mockResolvedValueOnce({
+      tools: [
+        {
+          name: "tool",
+          description: "Tool",
+          inputSchema: { type: "object" },
+          serverName: "Test Server",
+          serverId: "server1",
+        },
+      ],
+      errors: [],
+    });
+
+    (mcpClient.mcpToolsToOpenAIFunctions as jest.Mock).mockReturnValueOnce([
+      {
+        type: "function",
+        function: {
+          name: "server1__tool",
+          description: "[Test Server] Tool",
+          parameters: { type: "object" },
+        },
+      },
+    ]);
+
+    (mcpClient.parseToolCallName as jest.Mock).mockReturnValue({
+      serverId: "missing",
+      toolName: "tool",
+    });
+
+    const driver = {
+      streamChat: jest
+        .fn()
+        .mockResolvedValueOnce({ fullContent: "", toolCalls })
+        .mockResolvedValueOnce({ fullContent: "Done", toolCalls: [] }),
+    };
+
+    const agent = new AgentCore({ driver });
+
+    await agent.runChat({
+      messages: [
+        { id: "1", role: "user", content: "Hi", timestamp: Date.now() },
+      ],
+      endpoint: mockEndpoint,
+      onChunk: jest.fn(),
+      mcpServers: [mockServer],
+      mcpEnabled: true,
+    });
+
+    const secondCall = (driver.streamChat as jest.Mock).mock.calls[1][0];
+    const toolMessage = secondCall.messages.find(
+      (msg: Message) => msg.role === "tool",
+    );
+
+    expect(toolMessage.content).toBe(
+      "Error: Server not found for tool server1__tool",
+    );
+  });
+
+  it("handles tool loading failure", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation();
+
+    (mcpClient.getToolsFromServers as jest.Mock).mockRejectedValueOnce(
+      new Error("Network down"),
+    );
+
+    const driver = {
+      streamChat: jest
+        .fn()
+        .mockResolvedValue({ fullContent: "Done", toolCalls: [] }),
+    };
+
+    const agent = new AgentCore({ driver });
+
+    await agent.runChat({
+      messages: [
+        { id: "1", role: "user", content: "Hi", timestamp: Date.now() },
+      ],
+      endpoint: mockEndpoint,
+      onChunk: jest.fn(),
+      mcpServers: [mockServer],
+      mcpEnabled: true,
+    });
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Failed to fetch MCP tools:",
+      expect.any(Error),
+    );
+    errorSpy.mockRestore();
   });
 });
