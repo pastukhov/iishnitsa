@@ -45,6 +45,12 @@ jest.mock("expo-file-system/legacy", () => ({
   EncodingType: { Base64: "base64" },
 }));
 
+// Mock expo-localization
+jest.mock("expo-localization", () => ({
+  locale: "ru-RU",
+  getLocales: jest.fn(() => [{ languageTag: "ru-RU" }]),
+}));
+
 // Mock NetInfo
 jest.mock("@react-native-community/netinfo", () => ({
   addEventListener: jest.fn(() => jest.fn()),
