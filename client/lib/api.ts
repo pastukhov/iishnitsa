@@ -2,22 +2,6 @@ import { Message, EndpointConfig, MCPServer } from "@/lib/store";
 import { getToolsFromServers } from "@/lib/mcp-client";
 import { fetchProviderModels } from "@/lib/providers";
 import { runAgentChat } from "@/lib/agent/core";
-import {
-  enqueueChatRequest,
-  flushQueuedChatRequests,
-} from "@/lib/offline-queue";
-
-const NETWORK_ERROR_HINTS = [
-  "Network request failed",
-  "Failed to fetch",
-  "NetworkError",
-  "Request failed",
-];
-
-function isNetworkError(error: any): boolean {
-  const message = error?.message || "";
-  return NETWORK_ERROR_HINTS.some((hint) => message.includes(hint));
-}
 
 export async function sendChatMessage(
   messages: Message[],
@@ -25,53 +9,16 @@ export async function sendChatMessage(
   onChunk: (content: string) => void,
   mcpServers: MCPServer[] = [],
   mcpEnabled: boolean = false,
-  options?: {
-    queueOnFailure?: boolean;
-    chatId?: string | null;
-    onQueued?: (id: string) => void;
-  },
+  chatPrompt?: string,
 ): Promise<void> {
-  try {
-    await runAgentChat(messages, endpoint, onChunk, mcpServers, mcpEnabled);
-  } catch (error: any) {
-    if (options?.queueOnFailure && isNetworkError(error)) {
-      const queued = await enqueueChatRequest({
-        chatId: options.chatId,
-        messages,
-        endpoint,
-        mcpServers,
-        mcpEnabled,
-      });
-      options?.onQueued?.(queued.id);
-      return;
-    }
-    throw error;
-  }
-}
-
-export async function flushQueuedChatMessages(options: {
-  chatId?: string | null;
-  onChunk: (content: string) => void;
-  onItemStart?: () => void;
-  onItemFinish?: () => void;
-}): Promise<{ processed: number; failed: number; remaining: number }> {
-  return await flushQueuedChatRequests({
-    filter: (item) => !options.chatId || item.payload.chatId === options.chatId,
-    handler: async (payload) => {
-      options.onItemStart?.();
-      try {
-        await runAgentChat(
-          payload.messages,
-          payload.endpoint,
-          options.onChunk,
-          payload.mcpServers,
-          payload.mcpEnabled,
-        );
-      } finally {
-        options.onItemFinish?.();
-      }
-    },
-  });
+  await runAgentChat(
+    messages,
+    endpoint,
+    onChunk,
+    mcpServers,
+    mcpEnabled,
+    chatPrompt,
+  );
 }
 
 export async function testConnection(endpoint: EndpointConfig): Promise<{

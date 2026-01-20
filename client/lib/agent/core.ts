@@ -1,4 +1,10 @@
-import { Message, EndpointConfig, MCPServer } from "@/lib/store";
+import {
+  Message,
+  EndpointConfig,
+  MCPServer,
+  MessageAttachment,
+} from "@/lib/store";
+import { getImageDataUrl } from "@/lib/image-utils";
 import {
   getToolsFromServers,
   executeToolCall,
@@ -8,22 +14,42 @@ import {
   MCPToolResult,
 } from "@/lib/mcp-client";
 import {
-  registerMcpTools,
-  getRegisteredTools,
-  markToolFailure,
-} from "@/lib/mcp-registry";
-import {
   AgentState,
   AgentDecision,
   ChatCompletionMessage,
+  ContentPart,
   OpenAIFunction,
   ToolCall,
 } from "@/lib/agent/types";
 import { OpenAICompatibleDriver } from "@/lib/agent/openai-driver";
 import { decideAgentAction } from "@/lib/agent/decision-engine";
-import { buildAgentContext } from "@/lib/agent/context-manager";
-import { MemoryStore } from "@/lib/agent/memory";
-import { createTraceId, logAgentEvent } from "@/lib/agent/observability";
+
+async function buildMultimodalContent(
+  text: string,
+  attachments?: MessageAttachment[],
+): Promise<string | ContentPart[]> {
+  if (!attachments || attachments.length === 0) {
+    return text;
+  }
+
+  const parts: ContentPart[] = [];
+
+  if (text) {
+    parts.push({ type: "text", text });
+  }
+
+  for (const attachment of attachments) {
+    if (attachment.type === "image") {
+      const dataUrl = await getImageDataUrl(attachment);
+      parts.push({
+        type: "image_url",
+        image_url: { url: dataUrl },
+      });
+    }
+  }
+
+  return parts;
+}
 
 function formatToolResult(result: MCPToolResult): string {
   if (!result.content || result.content.length === 0) {
@@ -49,6 +75,7 @@ interface AgentRunInput {
   onChunk: (content: string) => void;
   mcpServers: MCPServer[];
   mcpEnabled: boolean;
+  chatPrompt?: string;
 }
 
 interface AgentContext {
@@ -61,8 +88,6 @@ interface AgentContext {
   contextBuilt: boolean;
   toolsLoaded: boolean;
   decision?: AgentDecision;
-  memoryStore: MemoryStore;
-  traceId: string;
 }
 
 export class AgentCore {
@@ -87,6 +112,7 @@ export class AgentCore {
     onChunk,
     mcpServers,
     mcpEnabled,
+    chatPrompt,
   }: AgentRunInput): Promise<void> {
     const context: AgentContext = {
       rawMessages: messages,
@@ -97,18 +123,9 @@ export class AgentCore {
       depth: 0,
       contextBuilt: false,
       toolsLoaded: false,
-      memoryStore: new MemoryStore(),
-      traceId: createTraceId(),
     };
 
     this.state = "RECEIVE_INPUT";
-    logAgentEvent("info", "agent_start", {
-      traceId: context.traceId,
-      messageCount: messages.length,
-      providerId: endpoint.providerId,
-      model: endpoint.model,
-      mcpEnabled,
-    });
 
     while (this.state !== "IDLE") {
       switch (this.state) {
@@ -118,11 +135,11 @@ export class AgentCore {
         }
         case "BUILD_CONTEXT": {
           if (!context.contextBuilt) {
-            context.chatMessages = await buildAgentContext({
-              messages: context.rawMessages,
+            context.chatMessages = await this.buildChatMessages(
+              context.rawMessages,
               endpoint,
-              memoryStore: context.memoryStore,
-            });
+              chatPrompt,
+            );
             context.contextBuilt = true;
           }
 
@@ -150,43 +167,21 @@ export class AgentCore {
             tools: context.tools,
             mcpEnabled,
           });
-          logAgentEvent("info", "agent_decision", {
-            traceId: context.traceId,
-            model: context.decision.model,
-            mode: context.decision.mode,
-            toolChoice: context.decision.toolChoice,
-            reason: context.decision.reason,
-          });
           this.state = "ACT";
           break;
         }
         case "ACT": {
           const decisionTools =
             context.decision?.toolChoice === "auto" ? context.tools : [];
-          const llmStart = Date.now();
-          const { fullContent, toolCalls, usage } =
-            await this.driver.streamChat({
-              endpoint,
-              messages: context.chatMessages,
-              tools: decisionTools,
-              onChunk,
-              decision: context.decision,
-            });
-          const llmDurationMs = Date.now() - llmStart;
-          logAgentEvent("info", "llm_response", {
-            traceId: context.traceId,
-            providerId: endpoint.providerId,
-            model: context.decision?.model || endpoint.model,
-            durationMs: llmDurationMs,
-            toolCalls: toolCalls.length,
-            tokens: usage || null,
+          const { fullContent, toolCalls } = await this.driver.streamChat({
+            endpoint,
+            messages: context.chatMessages,
+            tools: decisionTools,
+            onChunk,
+            decision: context.decision,
           });
 
           if (toolCalls.length === 0) {
-            logAgentEvent("info", "agent_complete", {
-              traceId: context.traceId,
-              messageCount: context.chatMessages.length,
-            });
             this.state = "IDLE";
             break;
           }
@@ -207,7 +202,6 @@ export class AgentCore {
             context.pendingToolCalls,
             context.mcpToolsMap,
             mcpServers,
-            context.traceId,
           );
           this.state = "UPDATE_STATE";
           break;
@@ -231,12 +225,41 @@ export class AgentCore {
   private async buildChatMessages(
     messages: Message[],
     endpoint: EndpointConfig,
+    chatPrompt?: string,
   ): Promise<ChatCompletionMessage[]> {
-    return await buildAgentContext({
-      messages,
-      endpoint,
-      memoryStore: new MemoryStore(),
-    });
+    const chatMessages: ChatCompletionMessage[] = [];
+
+    const promptParts = [
+      endpoint.systemPrompt?.trim(),
+      chatPrompt?.trim(),
+    ].filter(Boolean);
+
+    if (promptParts.length > 0) {
+      chatMessages.push({
+        role: "system",
+        content: promptParts.join("\n\n"),
+      });
+    }
+
+    for (const msg of messages) {
+      if (msg.role === "system") continue;
+      const hasContent = msg.content && msg.content.trim().length > 0;
+      const hasAttachments = msg.attachments && msg.attachments.length > 0;
+
+      if (!hasContent && !hasAttachments) continue;
+
+      if (msg.role === "user" && hasAttachments) {
+        const content = await buildMultimodalContent(
+          msg.content || "",
+          msg.attachments,
+        );
+        chatMessages.push({ role: msg.role, content });
+      } else {
+        chatMessages.push({ role: msg.role, content: msg.content });
+      }
+    }
+
+    return chatMessages;
   }
 
   private async loadTools(
@@ -273,16 +296,8 @@ export class AgentCore {
       }
 
       if (fetchedTools.length > 0) {
-        registerMcpTools(fetchedTools);
-      }
-
-      const registeredTools = getRegisteredTools({
-        serverIds: enabledServers.map((server) => server.id),
-      }).map((entry) => entry.tool);
-
-      if (registeredTools.length > 0) {
-        tools.push(...mcpToolsToOpenAIFunctions(registeredTools));
-        registeredTools.forEach((tool) => {
+        tools.push(...mcpToolsToOpenAIFunctions(fetchedTools));
+        fetchedTools.forEach((tool) => {
           mcpToolsMap.set(`${tool.serverId}__${tool.name}`, tool);
         });
       }
@@ -317,7 +332,6 @@ export class AgentCore {
       MCPTool & { serverName: string; serverId: string }
     >,
     mcpServers: MCPServer[],
-    traceId: string,
   ): Promise<void> {
     for (const toolCall of toolCalls) {
       const { serverId, toolName } = parseToolCallName(toolCall.function.name);
@@ -327,10 +341,8 @@ export class AgentCore {
       let result: string;
       if (!toolInfo) {
         result = `Error: Unknown tool "${toolCall.function.name}"`;
-        markToolFailure(serverId, toolName);
       } else if (!server) {
         result = `Error: Server not found for tool ${toolCall.function.name}`;
-        markToolFailure(serverId, toolName);
       } else {
         try {
           let args: Record<string, any> = {};
@@ -338,25 +350,10 @@ export class AgentCore {
             args = JSON.parse(toolCall.function.arguments);
           } catch {}
 
-          const toolStart = Date.now();
           const toolResult = await executeToolCall(server, toolName, args);
           result = formatToolResult(toolResult);
-          logAgentEvent("info", "tool_result", {
-            traceId,
-            tool: toolName,
-            serverId,
-            durationMs: Date.now() - toolStart,
-            isError: toolResult.isError || false,
-          });
         } catch (error: any) {
           result = `Error executing tool: ${error.message}`;
-          markToolFailure(serverId, toolName);
-          logAgentEvent("warn", "tool_error", {
-            traceId,
-            tool: toolName,
-            serverId,
-            error: error.message,
-          });
         }
       }
 
@@ -376,7 +373,15 @@ export async function runAgentChat(
   onChunk: (content: string) => void,
   mcpServers: MCPServer[] = [],
   mcpEnabled: boolean = false,
+  chatPrompt?: string,
 ): Promise<void> {
   const agent = new AgentCore();
-  await agent.runChat({ messages, endpoint, onChunk, mcpServers, mcpEnabled });
+  await agent.runChat({
+    messages,
+    endpoint,
+    onChunk,
+    mcpServers,
+    mcpEnabled,
+    chatPrompt,
+  });
 }

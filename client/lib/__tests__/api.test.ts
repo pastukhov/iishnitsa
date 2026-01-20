@@ -57,6 +57,7 @@ describe("api", () => {
         onChunk,
         [],
         false,
+        undefined,
       );
     });
 
@@ -85,6 +86,7 @@ describe("api", () => {
         onChunk,
         mcpServers,
         true,
+        undefined,
       );
     });
 

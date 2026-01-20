@@ -14,6 +14,13 @@
 - Тёмная и светлая темы
 - Персистентное хранение чатов и настроек
 
+## Промпты
+
+Коллекция промптов для выбора при старте чата синхронизируется из репозитория
+[awesome-ai-prompts](https://github.com/0x2e-Tech/awesome-ai-prompts) и
+генерируется скриптом `npm run sync:prompts`. Данные сохраняются в
+`client/lib/prompts-data.ts` и используются через `client/lib/prompts.ts`.
+
 ## Структура проекта
 
 - `client/` — мобильный клиент на Expo
@@ -62,6 +69,9 @@ npm run test:coverage         # Тесты с отчётом покрытия
 # Проверка провайдеров
 npm run check:providers       # Тест подключения к AI-провайдерам
 npm run check:providers:mock  # Тест с моками (для CI)
+
+# Промпты
+npm run sync:prompts          # Синхронизация списка промптов
 
 # Сборка
 npm run expo:static:build     # Сборка статического бандла
