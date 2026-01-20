@@ -23,6 +23,7 @@ import { OpenAICompatibleDriver } from "@/lib/agent/openai-driver";
 import { decideAgentAction } from "@/lib/agent/decision-engine";
 import { buildAgentContext } from "@/lib/agent/context-manager";
 import { MemoryStore } from "@/lib/agent/memory";
+import { createTraceId, logAgentEvent } from "@/lib/agent/observability";
 
 function formatToolResult(result: MCPToolResult): string {
   if (!result.content || result.content.length === 0) {
@@ -61,6 +62,7 @@ interface AgentContext {
   toolsLoaded: boolean;
   decision?: AgentDecision;
   memoryStore: MemoryStore;
+  traceId: string;
 }
 
 export class AgentCore {
@@ -96,9 +98,17 @@ export class AgentCore {
       contextBuilt: false,
       toolsLoaded: false,
       memoryStore: new MemoryStore(),
+      traceId: createTraceId(),
     };
 
     this.state = "RECEIVE_INPUT";
+    logAgentEvent("info", "agent_start", {
+      traceId: context.traceId,
+      messageCount: messages.length,
+      providerId: endpoint.providerId,
+      model: endpoint.model,
+      mcpEnabled,
+    });
 
     while (this.state !== "IDLE") {
       switch (this.state) {
@@ -140,21 +150,43 @@ export class AgentCore {
             tools: context.tools,
             mcpEnabled,
           });
+          logAgentEvent("info", "agent_decision", {
+            traceId: context.traceId,
+            model: context.decision.model,
+            mode: context.decision.mode,
+            toolChoice: context.decision.toolChoice,
+            reason: context.decision.reason,
+          });
           this.state = "ACT";
           break;
         }
         case "ACT": {
           const decisionTools =
             context.decision?.toolChoice === "auto" ? context.tools : [];
-          const { fullContent, toolCalls } = await this.driver.streamChat({
-            endpoint,
-            messages: context.chatMessages,
-            tools: decisionTools,
-            onChunk,
-            decision: context.decision,
+          const llmStart = Date.now();
+          const { fullContent, toolCalls, usage } =
+            await this.driver.streamChat({
+              endpoint,
+              messages: context.chatMessages,
+              tools: decisionTools,
+              onChunk,
+              decision: context.decision,
+            });
+          const llmDurationMs = Date.now() - llmStart;
+          logAgentEvent("info", "llm_response", {
+            traceId: context.traceId,
+            providerId: endpoint.providerId,
+            model: context.decision?.model || endpoint.model,
+            durationMs: llmDurationMs,
+            toolCalls: toolCalls.length,
+            tokens: usage || null,
           });
 
           if (toolCalls.length === 0) {
+            logAgentEvent("info", "agent_complete", {
+              traceId: context.traceId,
+              messageCount: context.chatMessages.length,
+            });
             this.state = "IDLE";
             break;
           }
@@ -175,6 +207,7 @@ export class AgentCore {
             context.pendingToolCalls,
             context.mcpToolsMap,
             mcpServers,
+            context.traceId,
           );
           this.state = "UPDATE_STATE";
           break;
@@ -284,6 +317,7 @@ export class AgentCore {
       MCPTool & { serverName: string; serverId: string }
     >,
     mcpServers: MCPServer[],
+    traceId: string,
   ): Promise<void> {
     for (const toolCall of toolCalls) {
       const { serverId, toolName } = parseToolCallName(toolCall.function.name);
@@ -304,11 +338,25 @@ export class AgentCore {
             args = JSON.parse(toolCall.function.arguments);
           } catch {}
 
+          const toolStart = Date.now();
           const toolResult = await executeToolCall(server, toolName, args);
           result = formatToolResult(toolResult);
+          logAgentEvent("info", "tool_result", {
+            traceId,
+            tool: toolName,
+            serverId,
+            durationMs: Date.now() - toolStart,
+            isError: toolResult.isError || false,
+          });
         } catch (error: any) {
           result = `Error executing tool: ${error.message}`;
           markToolFailure(serverId, toolName);
+          logAgentEvent("warn", "tool_error", {
+            traceId,
+            tool: toolName,
+            serverId,
+            error: error.message,
+          });
         }
       }
 
