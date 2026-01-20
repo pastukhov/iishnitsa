@@ -32,7 +32,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { AttachedImage } from "@/components/AttachedImage";
 import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { useChatStore, Message, MessageAttachment } from "@/lib/store";
-import { sendChatMessage } from "@/lib/api";
+import { sendChatMessage, flushQueuedChatMessages } from "@/lib/api";
 import {
   pickImageFromLibrary,
   pickImageFromCamera,
@@ -218,6 +218,33 @@ export default function ChatScreen() {
   }, [loadFromStorage]);
 
   useEffect(() => {
+    const flushQueued = async () => {
+      if (!currentChat?.id || isStreaming) return;
+      await flushQueuedChatMessages({
+        chatId: currentChat.id,
+        onChunk: (chunk) => {
+          updateLastAssistantMessage(chunk);
+        },
+        onItemStart: () => {
+          addMessage({ role: "assistant", content: "" });
+          setIsStreaming(true);
+        },
+        onItemFinish: () => {
+          setIsStreaming(false);
+        },
+      });
+    };
+
+    flushQueued();
+  }, [
+    currentChat?.id,
+    isStreaming,
+    addMessage,
+    updateLastAssistantMessage,
+    setIsStreaming,
+  ]);
+
+  useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
@@ -274,6 +301,15 @@ export default function ChatScreen() {
         },
         settings.mcpServers,
         settings.mcpEnabled,
+        {
+          queueOnFailure: true,
+          chatId: currentChat?.id,
+          onQueued: () => {
+            updateLastAssistantMessage(
+              "Queued. Will retry when you're back online.",
+            );
+          },
+        },
       );
     } catch (error: any) {
       updateLastAssistantMessage(
@@ -287,6 +323,7 @@ export default function ChatScreen() {
     pendingAttachments,
     isStreaming,
     messages,
+    currentChat?.id,
     settings,
     addMessage,
     updateLastAssistantMessage,

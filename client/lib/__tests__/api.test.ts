@@ -1,8 +1,14 @@
-import { sendChatMessage, testConnection, testMCPServer } from "../api";
+import {
+  sendChatMessage,
+  flushQueuedChatMessages,
+  testConnection,
+  testMCPServer,
+} from "../api";
 import { Message, EndpointConfig, MCPServer } from "../store";
 import * as mcpClient from "../mcp-client";
 import * as providers from "../providers";
 import * as agentCore from "../agent/core";
+import * as offlineQueue from "../offline-queue";
 
 jest.mock("../mcp-client", () => ({
   getToolsFromServers: jest.fn(),
@@ -14,6 +20,11 @@ jest.mock("../providers", () => ({
 
 jest.mock("../agent/core", () => ({
   runAgentChat: jest.fn(),
+}));
+
+jest.mock("../offline-queue", () => ({
+  enqueueChatRequest: jest.fn(),
+  flushQueuedChatRequests: jest.fn(),
 }));
 
 describe("api", () => {
@@ -85,6 +96,31 @@ describe("api", () => {
       await expect(
         sendChatMessage(mockMessages, mockEndpoint, jest.fn()),
       ).rejects.toThrow("Agent failed");
+    });
+
+    it("queues on network failure when enabled", async () => {
+      (agentCore.runAgentChat as jest.Mock).mockRejectedValueOnce(
+        new Error("Network request failed"),
+      );
+      (offlineQueue.enqueueChatRequest as jest.Mock).mockResolvedValueOnce({
+        id: "queued-1",
+      });
+
+      const onQueued = jest.fn();
+      await sendChatMessage(mockMessages, mockEndpoint, jest.fn(), [], false, {
+        queueOnFailure: true,
+        chatId: "chat-1",
+        onQueued,
+      });
+
+      expect(offlineQueue.enqueueChatRequest).toHaveBeenCalledWith({
+        chatId: "chat-1",
+        messages: mockMessages,
+        endpoint: mockEndpoint,
+        mcpServers: [],
+        mcpEnabled: false,
+      });
+      expect(onQueued).toHaveBeenCalledWith("queued-1");
     });
   });
 
@@ -205,6 +241,26 @@ describe("api", () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toBe("Connection error: Network error");
+    });
+  });
+
+  describe("flushQueuedChatMessages", () => {
+    it("delegates to offline queue flush", async () => {
+      (offlineQueue.flushQueuedChatRequests as jest.Mock).mockResolvedValueOnce(
+        {
+          processed: 1,
+          failed: 0,
+          remaining: 0,
+        },
+      );
+
+      const result = await flushQueuedChatMessages({
+        chatId: "chat-1",
+        onChunk: jest.fn(),
+      });
+
+      expect(offlineQueue.flushQueuedChatRequests).toHaveBeenCalled();
+      expect(result.processed).toBe(1);
     });
   });
 });
