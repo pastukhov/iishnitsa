@@ -37,7 +37,27 @@ export interface OpenAIFunction {
   };
 }
 
+export type AgentMode = "chat" | "tool" | "observe";
+
+export interface ModelCapabilities {
+  supportsVision: boolean;
+  supportsTools: boolean;
+  supportsAudio: boolean;
+  supportsStreaming: boolean;
+  maxContextTokens?: number;
+}
+
+export interface ModelCatalogEntry {
+  model: string;
+  providerId: string;
+  capabilities: ModelCapabilities;
+  priority?: number;
+}
+
 export interface AgentDecision {
   model: string;
   toolChoice?: "auto" | "none";
+  mode: AgentMode;
+  capabilities: ModelCapabilities;
+  reason?: string;
 }
