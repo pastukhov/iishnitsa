@@ -25,7 +25,6 @@ import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import Markdown from "react-native-markdown-display";
-import NetInfo from "@react-native-community/netinfo";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -33,7 +32,9 @@ import { ThemedView } from "@/components/ThemedView";
 import { AttachedImage } from "@/components/AttachedImage";
 import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { useChatStore, Message, MessageAttachment } from "@/lib/store";
-import { sendChatMessage, flushQueuedChatMessages } from "@/lib/api";
+import { sendChatMessage } from "@/lib/api";
+import { PromptSelectorModal } from "@/components/PromptSelectorModal";
+import { SystemPrompt, getPromptById } from "@/lib/prompts";
 import {
   pickImageFromLibrary,
   pickImageFromCamera,
@@ -196,7 +197,7 @@ export default function ChatScreen() {
   const [pendingAttachments, setPendingAttachments] = useState<
     MessageAttachment[]
   >([]);
-  const [isOnline, setIsOnline] = useState(true);
+  const [promptSelectorVisible, setPromptSelectorVisible] = useState(false);
 
   const {
     getCurrentChat,
@@ -207,52 +208,32 @@ export default function ChatScreen() {
     settings,
     loadFromStorage,
     clearCurrentChat,
+    setChatPromptSelection,
   } = useChatStore();
 
   const currentChat = getCurrentChat();
-  const messages = useMemo(
-    () => currentChat?.messages || [],
-    [currentChat?.messages],
-  );
+  const messages = useMemo(() => currentChat?.messages || [], [currentChat]);
+  const selectedPrompt = useMemo(() => {
+    if (!currentChat) return null;
+    if (currentChat.promptSelection !== "preset" || !currentChat.promptId) {
+      return null;
+    }
+    return getPromptById(currentChat.promptId) || null;
+  }, [currentChat]);
 
   useEffect(() => {
     loadFromStorage();
   }, [loadFromStorage]);
 
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      setIsOnline(Boolean(state.isConnected));
-    });
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    const flushQueued = async () => {
-      if (!currentChat?.id || isStreaming || !isOnline) return;
-      await flushQueuedChatMessages({
-        chatId: currentChat.id,
-        onChunk: (chunk) => {
-          updateLastAssistantMessage(chunk);
-        },
-        onItemStart: () => {
-          addMessage({ role: "assistant", content: "" });
-          setIsStreaming(true);
-        },
-        onItemFinish: () => {
-          setIsStreaming(false);
-        },
-      });
-    };
-
-    flushQueued();
-  }, [
-    currentChat?.id,
-    isStreaming,
-    isOnline,
-    addMessage,
-    updateLastAssistantMessage,
-    setIsStreaming,
-  ]);
+    if (!currentChat) return;
+    if (
+      currentChat.messages.length === 0 &&
+      currentChat.promptSelection === "unset"
+    ) {
+      setPromptSelectorVisible(true);
+    }
+  }, [currentChat]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -311,15 +292,7 @@ export default function ChatScreen() {
         },
         settings.mcpServers,
         settings.mcpEnabled,
-        {
-          queueOnFailure: true,
-          chatId: currentChat?.id,
-          onQueued: () => {
-            updateLastAssistantMessage(
-              "Queued. Will retry when you're back online.",
-            );
-          },
-        },
+        selectedPrompt?.prompt,
       );
     } catch (error: any) {
       updateLastAssistantMessage(
@@ -333,11 +306,11 @@ export default function ChatScreen() {
     pendingAttachments,
     isStreaming,
     messages,
-    currentChat?.id,
     settings,
     addMessage,
     updateLastAssistantMessage,
     setIsStreaming,
+    selectedPrompt?.prompt,
   ]);
 
   const handleClearChat = () => {
@@ -400,6 +373,34 @@ export default function ChatScreen() {
       ]);
     }
   }, [handlePickImage]);
+
+  const handlePromptSelect = useCallback(
+    (prompt: SystemPrompt | null) => {
+      if (!currentChat) return;
+      if (prompt) {
+        setChatPromptSelection(currentChat.id, {
+          mode: "preset",
+          promptId: prompt.id,
+        });
+      } else {
+        setChatPromptSelection(currentChat.id, {
+          mode: "none",
+          promptId: null,
+        });
+      }
+      setPromptSelectorVisible(false);
+    },
+    [currentChat, setChatPromptSelection],
+  );
+
+  const handlePromptClose = useCallback(() => {
+    if (!currentChat) return;
+    setChatPromptSelection(currentChat.id, {
+      mode: "none",
+      promptId: null,
+    });
+    setPromptSelectorVisible(false);
+  }, [currentChat, setChatPromptSelection]);
 
   return (
     <ThemedView style={styles.container}>
@@ -578,6 +579,11 @@ export default function ChatScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
+      <PromptSelectorModal
+        visible={promptSelectorVisible}
+        onClose={handlePromptClose}
+        onSelect={handlePromptSelect}
+      />
     </ThemedView>
   );
 }

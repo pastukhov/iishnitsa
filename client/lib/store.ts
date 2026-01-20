@@ -25,6 +25,8 @@ export interface Chat {
   messages: Message[];
   createdAt: string;
   updatedAt: string;
+  promptSelection?: "unset" | "none" | "preset";
+  promptId?: string | null;
 }
 
 export interface EndpointConfig {
@@ -81,6 +83,10 @@ interface ChatStore {
   getCurrentChat: () => Chat | null;
   updateSettings: (settings: Partial<Settings>) => void;
   updateEndpoint: (endpoint: Partial<EndpointConfig>) => void;
+  setChatPromptSelection: (
+    chatId: string,
+    selection: { mode: "none" | "preset"; promptId?: string | null },
+  ) => void;
   addMCPServer: (server: Omit<MCPServer, "id">) => void;
   updateMCPServer: (id: string, updates: Partial<MCPServer>) => void;
   removeMCPServer: (id: string) => void;
@@ -206,6 +212,8 @@ const createNewChatObject = (): Chat => ({
   messages: [],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
+  promptSelection: "unset",
+  promptId: null,
 });
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -223,7 +231,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         AsyncStorage.getItem(STORAGE_KEYS.SETTINGS),
       ]);
 
-      const chats = chatsJson ? JSON.parse(chatsJson) : [];
+      const rawChats = chatsJson ? JSON.parse(chatsJson) : [];
+      const chats = rawChats.map((chat: Chat) => ({
+        ...chat,
+        promptSelection: chat.promptSelection ?? "unset",
+        promptId: chat.promptId ?? null,
+      }));
       const currentChatId = currentChatJson || null;
       const parsedSettings = settingsJson ? JSON.parse(settingsJson) : null;
       const settings = parsedSettings
@@ -367,6 +380,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       };
       AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
       return { settings };
+    });
+  },
+
+  setChatPromptSelection: (chatId, selection) => {
+    set((state) => {
+      const updatedChats = state.chats.map((chat) => {
+        if (chat.id !== chatId) return chat;
+        return {
+          ...chat,
+          promptSelection: selection.mode,
+          promptId:
+            selection.mode === "preset" ? selection.promptId || null : null,
+          updatedAt: new Date().toISOString(),
+        };
+      });
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(updatedChats));
+      return { chats: updatedChats };
     });
   },
 
