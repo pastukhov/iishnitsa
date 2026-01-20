@@ -11,6 +11,7 @@
     "check:types": "tsc --noEmit",
     "check:providers": "node scripts/check-providers.js",
     "check:providers:mock": "MOCK_PROVIDERS=1 node scripts/check-providers.js",
+    "sync:prompts": "node scripts/sync-prompts.js",
     "check:format": "prettier --check \"**/*.{js,ts,tsx,css,json}\"",
     "format": "prettier --write \"**/*.{js,ts,tsx,css,json}\"",
     "test": "jest",

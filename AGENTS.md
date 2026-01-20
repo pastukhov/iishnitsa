@@ -8,6 +8,7 @@
 ## Build, Test, and Development Commands
 - `npm run expo:dev`: start the Expo dev server for the mobile client in local Replit-style env.
 - `npm run expo:static:build`: build the static Expo bundle (uses `scripts/build.js`).
+- `npm run sync:prompts`: sync and generate the prompt catalog from awesome-ai-prompts.
 - `npm install eas-cli`: install EAS CLI (one-time setup for APK builds).
 - `./node_modules/.bin/eas login`: authenticate EAS CLI (one-time setup for APK builds).
 - `./node_modules/.bin/eas build --platform android --profile preview`: build an Android APK.
