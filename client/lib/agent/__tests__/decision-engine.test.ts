@@ -104,4 +104,70 @@ describe("decideAgentAction", () => {
     expect(decision.model).toBe("vision-model");
     expect(decision.reason).toBe("fallback_model_selected");
   });
+
+  it("disables tool usage when the selected model lacks tool support", () => {
+    registerModel({
+      providerId: "custom",
+      model: "model-default",
+      capabilities: {
+        supportsVision: false,
+        supportsTools: false,
+        supportsAudio: false,
+        supportsStreaming: true,
+      },
+    });
+
+    const decision = decideAgentAction({
+      endpoint,
+      messages: baseMessages,
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "tool",
+            description: "Tool",
+            parameters: {},
+          },
+        },
+      ],
+      mcpEnabled: true,
+    });
+
+    expect(decision.toolChoice).toBe("none");
+    expect(decision.mode).toBe("chat");
+  });
+
+  it("falls back when the endpoint model lacks streaming", () => {
+    registerModel({
+      providerId: "custom",
+      model: "model-default",
+      capabilities: {
+        supportsVision: false,
+        supportsTools: true,
+        supportsAudio: false,
+        supportsStreaming: false,
+      },
+    });
+    registerModel({
+      providerId: "custom",
+      model: "streaming-model",
+      capabilities: {
+        supportsVision: false,
+        supportsTools: true,
+        supportsAudio: false,
+        supportsStreaming: true,
+      },
+      priority: 5,
+    });
+
+    const decision = decideAgentAction({
+      endpoint,
+      messages: baseMessages,
+      tools: [],
+      mcpEnabled: false,
+    });
+
+    expect(decision.model).toBe("streaming-model");
+    expect(decision.reason).toBe("fallback_model_selected");
+  });
 });
