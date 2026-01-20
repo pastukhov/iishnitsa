@@ -7,6 +7,7 @@ export interface QueuedChatPayload {
   endpoint: EndpointConfig;
   mcpServers: MCPServer[];
   mcpEnabled: boolean;
+  chatPrompt?: string;
 }
 
 export interface QueuedChatRequest {
