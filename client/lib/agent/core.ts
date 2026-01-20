@@ -15,12 +15,14 @@ import {
 } from "@/lib/mcp-client";
 import {
   AgentState,
+  AgentDecision,
   ChatCompletionMessage,
   ContentPart,
   OpenAIFunction,
   ToolCall,
 } from "@/lib/agent/types";
 import { OpenAICompatibleDriver } from "@/lib/agent/openai-driver";
+import { decideAgentAction } from "@/lib/agent/decision-engine";
 
 async function buildMultimodalContent(
   text: string,
@@ -84,6 +86,7 @@ interface AgentContext {
   depth: number;
   contextBuilt: boolean;
   toolsLoaded: boolean;
+  decision?: AgentDecision;
 }
 
 export class AgentCore {
@@ -155,19 +158,24 @@ export class AgentCore {
           break;
         }
         case "DECIDE": {
+          context.decision = decideAgentAction({
+            endpoint,
+            messages: context.rawMessages,
+            tools: context.tools,
+            mcpEnabled,
+          });
           this.state = "ACT";
           break;
         }
         case "ACT": {
+          const decisionTools =
+            context.decision?.toolChoice === "auto" ? context.tools : [];
           const { fullContent, toolCalls } = await this.driver.streamChat({
             endpoint,
             messages: context.chatMessages,
-            tools: context.tools,
+            tools: decisionTools,
             onChunk,
-            decision: {
-              model: endpoint.model,
-              toolChoice: context.tools.length > 0 ? "auto" : "none",
-            },
+            decision: context.decision,
           });
 
           if (toolCalls.length === 0) {
