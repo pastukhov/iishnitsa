@@ -124,6 +124,59 @@ describe("api", () => {
       });
       expect(onQueued).toHaveBeenCalledWith("queued-1");
     });
+
+    it("queues chat prompt when provided", async () => {
+      (agentCore.runAgentChat as jest.Mock).mockRejectedValueOnce(
+        new Error("Network request failed"),
+      );
+      (offlineQueue.enqueueChatRequest as jest.Mock).mockResolvedValueOnce({
+        id: "queued-2",
+      });
+
+      await sendChatMessage(mockMessages, mockEndpoint, jest.fn(), [], false, {
+        queueOnFailure: true,
+        chatId: "chat-2",
+        chatPrompt: "Prompt text",
+      });
+
+      expect(offlineQueue.enqueueChatRequest).toHaveBeenCalledWith({
+        chatId: "chat-2",
+        messages: mockMessages,
+        endpoint: mockEndpoint,
+        mcpServers: [],
+        mcpEnabled: false,
+        chatPrompt: "Prompt text",
+      });
+    });
+
+    it("passes chat prompt to agent core", async () => {
+      const onChunk = jest.fn();
+
+      await sendChatMessage(mockMessages, mockEndpoint, onChunk, [], false, {
+        chatPrompt: "Prompt text",
+      });
+
+      expect(agentCore.runAgentChat).toHaveBeenCalledWith(
+        mockMessages,
+        mockEndpoint,
+        onChunk,
+        [],
+        false,
+        "Prompt text",
+      );
+    });
+
+    it("rethrows network errors when queue disabled", async () => {
+      (agentCore.runAgentChat as jest.Mock).mockRejectedValueOnce(
+        new Error("Network request failed"),
+      );
+
+      await expect(
+        sendChatMessage(mockMessages, mockEndpoint, jest.fn(), [], false, {
+          queueOnFailure: false,
+        }),
+      ).rejects.toThrow("Network request failed");
+    });
   });
 
   describe("testConnection", () => {
