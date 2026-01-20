@@ -14,6 +14,7 @@ module.exports = {
   collectCoverageFrom: [
     "client/lib/**/*.{ts,tsx}",
     "!client/lib/**/*.d.ts",
+    "!client/lib/prompts-data.ts",
     "!**/node_modules/**",
   ],
   coverageThreshold: {

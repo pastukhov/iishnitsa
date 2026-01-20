@@ -25,6 +25,7 @@ import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import Markdown from "react-native-markdown-display";
+import NetInfo from "@react-native-community/netinfo";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -32,7 +33,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { AttachedImage } from "@/components/AttachedImage";
 import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { useChatStore, Message, MessageAttachment } from "@/lib/store";
-import { sendChatMessage } from "@/lib/api";
+import { sendChatMessage, flushQueuedChatMessages } from "@/lib/api";
 import { PromptSelectorModal } from "@/components/PromptSelectorModal";
 import { SystemPrompt, getPromptById } from "@/lib/prompts";
 import {
@@ -198,6 +199,7 @@ export default function ChatScreen() {
     MessageAttachment[]
   >([]);
   const [promptSelectorVisible, setPromptSelectorVisible] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
 
   const {
     getCurrentChat,
@@ -224,6 +226,41 @@ export default function ChatScreen() {
   useEffect(() => {
     loadFromStorage();
   }, [loadFromStorage]);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsOnline(Boolean(state.isConnected));
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const flushQueued = async () => {
+      if (!currentChat?.id || isStreaming || !isOnline) return;
+      await flushQueuedChatMessages({
+        chatId: currentChat.id,
+        onChunk: (chunk) => {
+          updateLastAssistantMessage(chunk);
+        },
+        onItemStart: () => {
+          addMessage({ role: "assistant", content: "" });
+          setIsStreaming(true);
+        },
+        onItemFinish: () => {
+          setIsStreaming(false);
+        },
+      });
+    };
+
+    flushQueued();
+  }, [
+    currentChat?.id,
+    isStreaming,
+    isOnline,
+    addMessage,
+    updateLastAssistantMessage,
+    setIsStreaming,
+  ]);
 
   useEffect(() => {
     if (!currentChat) return;
@@ -292,7 +329,16 @@ export default function ChatScreen() {
         },
         settings.mcpServers,
         settings.mcpEnabled,
-        selectedPrompt?.prompt,
+        {
+          queueOnFailure: true,
+          chatId: currentChat?.id,
+          onQueued: () => {
+            updateLastAssistantMessage(
+              "Queued. Will retry when you're back online.",
+            );
+          },
+          chatPrompt: selectedPrompt?.prompt,
+        },
       );
     } catch (error: any) {
       updateLastAssistantMessage(
@@ -306,6 +352,7 @@ export default function ChatScreen() {
     pendingAttachments,
     isStreaming,
     messages,
+    currentChat?.id,
     settings,
     addMessage,
     updateLastAssistantMessage,
