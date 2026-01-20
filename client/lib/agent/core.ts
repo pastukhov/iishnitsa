@@ -1,10 +1,4 @@
-import {
-  Message,
-  EndpointConfig,
-  MCPServer,
-  MessageAttachment,
-} from "@/lib/store";
-import { getImageDataUrl } from "@/lib/image-utils";
+import { Message, EndpointConfig, MCPServer } from "@/lib/store";
 import {
   getToolsFromServers,
   executeToolCall,
@@ -14,42 +8,21 @@ import {
   MCPToolResult,
 } from "@/lib/mcp-client";
 import {
+  registerMcpTools,
+  getRegisteredTools,
+  markToolFailure,
+} from "@/lib/mcp-registry";
+import {
   AgentState,
   AgentDecision,
   ChatCompletionMessage,
-  ContentPart,
   OpenAIFunction,
   ToolCall,
 } from "@/lib/agent/types";
 import { OpenAICompatibleDriver } from "@/lib/agent/openai-driver";
 import { decideAgentAction } from "@/lib/agent/decision-engine";
-
-async function buildMultimodalContent(
-  text: string,
-  attachments?: MessageAttachment[],
-): Promise<string | ContentPart[]> {
-  if (!attachments || attachments.length === 0) {
-    return text;
-  }
-
-  const parts: ContentPart[] = [];
-
-  if (text) {
-    parts.push({ type: "text", text });
-  }
-
-  for (const attachment of attachments) {
-    if (attachment.type === "image") {
-      const dataUrl = await getImageDataUrl(attachment);
-      parts.push({
-        type: "image_url",
-        image_url: { url: dataUrl },
-      });
-    }
-  }
-
-  return parts;
-}
+import { buildAgentContext } from "@/lib/agent/context-manager";
+import { MemoryStore } from "@/lib/agent/memory";
 
 function formatToolResult(result: MCPToolResult): string {
   if (!result.content || result.content.length === 0) {
@@ -87,6 +60,7 @@ interface AgentContext {
   contextBuilt: boolean;
   toolsLoaded: boolean;
   decision?: AgentDecision;
+  memoryStore: MemoryStore;
 }
 
 export class AgentCore {
@@ -121,6 +95,7 @@ export class AgentCore {
       depth: 0,
       contextBuilt: false,
       toolsLoaded: false,
+      memoryStore: new MemoryStore(),
     };
 
     this.state = "RECEIVE_INPUT";
@@ -133,10 +108,11 @@ export class AgentCore {
         }
         case "BUILD_CONTEXT": {
           if (!context.contextBuilt) {
-            context.chatMessages = await this.buildChatMessages(
-              context.rawMessages,
+            context.chatMessages = await buildAgentContext({
+              messages: context.rawMessages,
               endpoint,
-            );
+              memoryStore: context.memoryStore,
+            });
             context.contextBuilt = true;
           }
 
@@ -223,34 +199,11 @@ export class AgentCore {
     messages: Message[],
     endpoint: EndpointConfig,
   ): Promise<ChatCompletionMessage[]> {
-    const chatMessages: ChatCompletionMessage[] = [];
-
-    if (endpoint.systemPrompt) {
-      chatMessages.push({
-        role: "system",
-        content: endpoint.systemPrompt,
-      });
-    }
-
-    for (const msg of messages) {
-      if (msg.role === "system") continue;
-      const hasContent = msg.content && msg.content.trim().length > 0;
-      const hasAttachments = msg.attachments && msg.attachments.length > 0;
-
-      if (!hasContent && !hasAttachments) continue;
-
-      if (msg.role === "user" && hasAttachments) {
-        const content = await buildMultimodalContent(
-          msg.content || "",
-          msg.attachments,
-        );
-        chatMessages.push({ role: msg.role, content });
-      } else {
-        chatMessages.push({ role: msg.role, content: msg.content });
-      }
-    }
-
-    return chatMessages;
+    return await buildAgentContext({
+      messages,
+      endpoint,
+      memoryStore: new MemoryStore(),
+    });
   }
 
   private async loadTools(
@@ -287,8 +240,16 @@ export class AgentCore {
       }
 
       if (fetchedTools.length > 0) {
-        tools.push(...mcpToolsToOpenAIFunctions(fetchedTools));
-        fetchedTools.forEach((tool) => {
+        registerMcpTools(fetchedTools);
+      }
+
+      const registeredTools = getRegisteredTools({
+        serverIds: enabledServers.map((server) => server.id),
+      }).map((entry) => entry.tool);
+
+      if (registeredTools.length > 0) {
+        tools.push(...mcpToolsToOpenAIFunctions(registeredTools));
+        registeredTools.forEach((tool) => {
           mcpToolsMap.set(`${tool.serverId}__${tool.name}`, tool);
         });
       }
@@ -332,8 +293,10 @@ export class AgentCore {
       let result: string;
       if (!toolInfo) {
         result = `Error: Unknown tool "${toolCall.function.name}"`;
+        markToolFailure(serverId, toolName);
       } else if (!server) {
         result = `Error: Server not found for tool ${toolCall.function.name}`;
+        markToolFailure(serverId, toolName);
       } else {
         try {
           let args: Record<string, any> = {};
@@ -345,6 +308,7 @@ export class AgentCore {
           result = formatToolResult(toolResult);
         } catch (error: any) {
           result = `Error executing tool: ${error.message}`;
+          markToolFailure(serverId, toolName);
         }
       }
 

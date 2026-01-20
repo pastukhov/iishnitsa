@@ -2,6 +2,7 @@ import { AgentCore } from "../core";
 import { EndpointConfig, MCPServer, Message } from "@/lib/store";
 import * as mcpClient from "@/lib/mcp-client";
 import * as imageUtils from "@/lib/image-utils";
+import { clearMcpRegistry } from "@/lib/mcp-registry";
 
 jest.mock("@/lib/mcp-client", () => ({
   getToolsFromServers: jest.fn(),
@@ -34,6 +35,7 @@ describe("AgentCore", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    clearMcpRegistry();
   });
 
   it("builds chat context with system prompt and attachments", async () => {
