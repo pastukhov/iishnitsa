@@ -3,6 +3,7 @@ import {
   getPromptById,
   getPromptsByCategory,
   searchPrompts,
+  localizePrompt,
   getLocalizedPromptById,
 } from "@/lib/prompts";
 
@@ -45,5 +46,15 @@ describe("prompts", () => {
     const localized = getLocalizedPromptById("weekly-planning-coach", "ru");
     expect(localized?.title).toBe("🧠 Коуч по еженедельному планированию");
     expect(localized?.category).toBe("Лучшие промпты");
+  });
+
+  it("keeps original prompt when locale missing", () => {
+    const original = getPromptById("weekly-planning-coach");
+    expect(original).toBeDefined();
+    if (!original) return;
+
+    const localized = localizePrompt(original, "fr");
+    expect(localized.title).toBe(original.title);
+    expect(localized.category).toBe(original.category);
   });
 });
