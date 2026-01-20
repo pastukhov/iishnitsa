@@ -3,6 +3,7 @@ import { buildAuthHeaders, resolveBaseUrl } from "@/lib/providers";
 import {
   AgentDecision,
   ChatCompletionMessage,
+  LLMUsage,
   OpenAIFunction,
   ToolCall,
 } from "@/lib/agent/types";
@@ -20,7 +21,11 @@ export class OpenAICompatibleDriver {
     tools: OpenAIFunction[];
     onChunk: (content: string) => void;
     decision?: AgentDecision;
-  }): Promise<{ fullContent: string; toolCalls: ToolCall[] }> {
+  }): Promise<{
+    fullContent: string;
+    toolCalls: ToolCall[];
+    usage?: LLMUsage;
+  }> {
     const baseUrl = resolveBaseUrl(endpoint.providerId, endpoint.baseUrl);
     const url = `${baseUrl}/chat/completions`;
 
@@ -59,6 +64,7 @@ export class OpenAICompatibleDriver {
     let fullContent = "";
     let toolCalls: ToolCall[] = [];
     let currentToolCallIndex = -1;
+    let usage: LLMUsage | undefined;
 
     const parseChunk = (chunk: string) => {
       const lines = chunk.split("\n").filter((line) => line.trim() !== "");
@@ -73,6 +79,13 @@ export class OpenAICompatibleDriver {
         try {
           const json = JSON.parse(data);
           const delta = json.choices?.[0]?.delta;
+          if (json.usage) {
+            usage = {
+              promptTokens: json.usage.prompt_tokens,
+              completionTokens: json.usage.completion_tokens,
+              totalTokens: json.usage.total_tokens,
+            };
+          }
 
           if (delta?.content) {
             fullContent += delta.content;
@@ -139,10 +152,17 @@ export class OpenAICompatibleDriver {
               },
             }));
           }
+          if (json.usage) {
+            usage = {
+              promptTokens: json.usage.prompt_tokens,
+              completionTokens: json.usage.completion_tokens,
+              totalTokens: json.usage.total_tokens,
+            };
+          }
         } catch {}
       }
     }
 
-    return { fullContent, toolCalls };
+    return { fullContent, toolCalls, usage };
   }
 }

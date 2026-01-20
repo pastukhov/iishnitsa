@@ -54,6 +54,12 @@ export interface ModelCatalogEntry {
   priority?: number;
 }
 
+export interface LLMUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
 export interface AgentDecision {
   model: string;
   toolChoice?: "auto" | "none";
