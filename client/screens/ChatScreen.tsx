@@ -25,6 +25,7 @@ import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import Markdown from "react-native-markdown-display";
+import NetInfo from "@react-native-community/netinfo";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -195,6 +196,7 @@ export default function ChatScreen() {
   const [pendingAttachments, setPendingAttachments] = useState<
     MessageAttachment[]
   >([]);
+  const [isOnline, setIsOnline] = useState(true);
 
   const {
     getCurrentChat,
@@ -218,8 +220,15 @@ export default function ChatScreen() {
   }, [loadFromStorage]);
 
   useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsOnline(Boolean(state.isConnected));
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     const flushQueued = async () => {
-      if (!currentChat?.id || isStreaming) return;
+      if (!currentChat?.id || isStreaming || !isOnline) return;
       await flushQueuedChatMessages({
         chatId: currentChat.id,
         onChunk: (chunk) => {
@@ -239,6 +248,7 @@ export default function ChatScreen() {
   }, [
     currentChat?.id,
     isStreaming,
+    isOnline,
     addMessage,
     updateLastAssistantMessage,
     setIsStreaming,

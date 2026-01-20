@@ -45,6 +45,12 @@ jest.mock("expo-file-system/legacy", () => ({
   EncodingType: { Base64: "base64" },
 }));
 
+// Mock NetInfo
+jest.mock("@react-native-community/netinfo", () => ({
+  addEventListener: jest.fn(() => jest.fn()),
+  fetch: jest.fn(() => Promise.resolve({ isConnected: true })),
+}));
+
 // Global fetch mock
 global.fetch = jest.fn();
 
