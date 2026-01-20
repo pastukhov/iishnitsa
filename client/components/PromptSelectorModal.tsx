@@ -16,7 +16,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
-import { SystemPrompt, PROMPT_CATEGORIES, searchPrompts } from "@/lib/prompts";
+import { SystemPrompt, searchPrompts } from "@/lib/prompts";
+import { getDeviceLanguageCode } from "@/lib/locale";
 
 interface PromptSelectorModalProps {
   visible: boolean;
@@ -37,15 +38,19 @@ export function PromptSelectorModal({
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState("");
+  const languageCode = useMemo(() => getDeviceLanguageCode(), []);
 
   const sections = useMemo((): SectionData[] => {
-    const filteredPrompts = searchPrompts(searchQuery);
+    const filteredPrompts = searchPrompts(searchQuery, languageCode);
+    const categories = Array.from(
+      new Set(filteredPrompts.map((prompt) => prompt.category)),
+    );
 
-    return PROMPT_CATEGORIES.map((category) => ({
+    return categories.map((category) => ({
       title: category,
       data: filteredPrompts.filter((p) => p.category === category),
-    })).filter((section) => section.data.length > 0);
-  }, [searchQuery]);
+    }));
+  }, [languageCode, searchQuery]);
 
   const handleSelect = (prompt: SystemPrompt | null) => {
     if (Platform.OS !== "web") {
