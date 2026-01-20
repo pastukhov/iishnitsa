@@ -26,6 +26,7 @@ import { ThemedView } from "@/components/ThemedView";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useChatStore } from "@/lib/store";
 import { testConnection, testMCPServer } from "@/lib/api";
+import { MemoryEntry, MemoryStore } from "@/lib/agent/memory";
 import {
   ProviderId,
   formatAuthHeaderLabel,
@@ -60,7 +61,7 @@ function InputField({
   placeholder?: string;
   secureTextEntry?: boolean;
   multiline?: boolean;
-  keyboardType?: "default" | "url";
+  keyboardType?: "default" | "url" | "numeric" | "decimal-pad";
   editable?: boolean;
   inputStyle?: StyleProp<TextStyle>;
   scrollEnabled?: boolean;
@@ -271,6 +272,10 @@ export default function SettingsScreen() {
     message?: string;
     error?: string;
   } | null>(null);
+  const [showMemoryModal, setShowMemoryModal] = useState(false);
+  const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const memoryStore = useMemo(() => new MemoryStore(), []);
   const systemPromptHeight = useMemo(
     () => Math.max(120, Math.floor(Dimensions.get("window").height / 3)),
     [],
@@ -425,6 +430,7 @@ export default function SettingsScreen() {
         "MCP servers copied to clipboard (without tokens)",
       );
     } catch (error) {
+      console.warn("Failed to export MCP servers:", error);
       Alert.alert("Error", "Failed to export servers");
     }
   };
@@ -457,6 +463,62 @@ export default function SettingsScreen() {
       providerId,
       baseUrl: providerId === "custom" ? "" : provider.baseUrl,
     });
+  };
+
+  const handleMemoryLimitChange = (text: string) => {
+    const parsed = Math.floor(Number(text));
+    if (Number.isFinite(parsed) && parsed > 0) {
+      updateSettings({ memoryLimit: parsed });
+    }
+  };
+
+  const handleMemoryImportanceChange = (text: string) => {
+    const parsed = Number(text);
+    if (!Number.isFinite(parsed)) return;
+    const clamped = Math.max(0, Math.min(1, parsed));
+    updateSettings({ memoryMinImportance: clamped });
+  };
+
+  const handleMemoryTtlChange = (text: string) => {
+    const parsed = Math.floor(Number(text));
+    if (!Number.isFinite(parsed)) return;
+    const clamped = Math.max(1, Math.min(365, parsed));
+    updateSettings({ memorySummaryTtlDays: clamped });
+  };
+
+  const handleViewMemories = async () => {
+    setMemoryLoading(true);
+    try {
+      const entries = await memoryStore.listMemories();
+      setMemoryEntries(entries);
+      setShowMemoryModal(true);
+    } finally {
+      setMemoryLoading(false);
+    }
+  };
+
+  const handleClearMemories = () => {
+    Alert.alert(
+      "Clear Memory",
+      "This will remove all saved memories from this device.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: async () => {
+            await memoryStore.clear();
+            setMemoryEntries([]);
+            setShowMemoryModal(false);
+          },
+        },
+      ],
+    );
+  };
+
+  const formatMemoryTimestamp = (entry: MemoryEntry) => {
+    const date = new Date(entry.createdAt);
+    return date.toISOString().slice(0, 10);
   };
 
   return (
@@ -902,6 +964,115 @@ export default function SettingsScreen() {
               </>
             )}
           </View>
+
+          <SectionHeader title="Memory & Context" />
+          <View
+            style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
+          >
+            <ToggleRow
+              label="Enable memory"
+              description="Store key facts and summaries for future chats"
+              value={settings.memoryEnabled}
+              onValueChange={(value) =>
+                updateSettings({ memoryEnabled: value })
+              }
+            />
+
+            {settings.memoryEnabled && (
+              <>
+                <View
+                  style={[
+                    styles.divider,
+                    { backgroundColor: theme.outlineVariant },
+                  ]}
+                />
+                <ToggleRow
+                  label="Save explicit memories"
+                  description={
+                    'Store details when you say "remember ..." or "zapomni ..."'
+                  }
+                  value={settings.memoryAutoSave}
+                  onValueChange={(value) =>
+                    updateSettings({ memoryAutoSave: value })
+                  }
+                />
+                <ToggleRow
+                  label="Auto-summarize chats"
+                  description="Create short summaries after replies"
+                  value={settings.memoryAutoSummary}
+                  onValueChange={(value) =>
+                    updateSettings({ memoryAutoSummary: value })
+                  }
+                />
+                <InputField
+                  label="Summary TTL (days)"
+                  value={String(settings.memorySummaryTtlDays)}
+                  onChangeText={handleMemoryTtlChange}
+                  placeholder="30"
+                  keyboardType="numeric"
+                />
+                <InputField
+                  label="Memory limit"
+                  value={String(settings.memoryLimit)}
+                  onChangeText={handleMemoryLimitChange}
+                  placeholder="8"
+                  keyboardType="numeric"
+                />
+                <InputField
+                  label="Minimum importance"
+                  value={String(settings.memoryMinImportance)}
+                  onChangeText={handleMemoryImportanceChange}
+                  placeholder="0.5"
+                  keyboardType="decimal-pad"
+                />
+                <View style={styles.memoryActions}>
+                  <Pressable
+                    onPress={handleViewMemories}
+                    disabled={memoryLoading}
+                    style={({ pressed }) => [
+                      styles.memoryActionButton,
+                      {
+                        borderColor: theme.primary,
+                        opacity: pressed ? 0.8 : 1,
+                      },
+                    ]}
+                  >
+                    {memoryLoading ? (
+                      <ActivityIndicator size="small" color={theme.primary} />
+                    ) : (
+                      <MaterialIcons
+                        name="list"
+                        size={18}
+                        color={theme.primary}
+                      />
+                    )}
+                    <ThemedText style={{ color: theme.primary }}>
+                      View memories
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleClearMemories}
+                    style={({ pressed }) => [
+                      styles.memoryClearButton,
+                      {
+                        borderColor: theme.error,
+                        opacity: pressed ? 0.8 : 1,
+                      },
+                    ]}
+                  >
+                    <MaterialIcons
+                      name="delete-outline"
+                      size={18}
+                      color={theme.error}
+                    />
+                    <ThemedText style={{ color: theme.error }}>
+                      Clear memory
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </View>
         </ScrollView>
       </ThemedView>
 
@@ -971,6 +1142,91 @@ export default function SettingsScreen() {
               >
                 <ThemedText style={{ color: theme.buttonText }}>
                   Import
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showMemoryModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowMemoryModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
+            <ThemedText style={styles.modalTitle}>Saved Memories</ThemedText>
+            <ScrollView style={styles.memoryList} showsVerticalScrollIndicator>
+              {memoryEntries.length === 0 ? (
+                <ThemedText
+                  style={[
+                    styles.modalDescription,
+                    { color: theme.textSecondary },
+                  ]}
+                >
+                  No memories saved yet.
+                </ThemedText>
+              ) : (
+                memoryEntries.map((entry) => (
+                  <View
+                    key={entry.id}
+                    style={[
+                      styles.memoryItem,
+                      { borderColor: theme.outlineVariant },
+                    ]}
+                  >
+                    <View style={styles.memoryItemHeader}>
+                      <ThemedText style={styles.memoryType}>
+                        {entry.type}
+                      </ThemedText>
+                      <ThemedText
+                        style={[
+                          styles.memoryDate,
+                          { color: theme.textSecondary },
+                        ]}
+                      >
+                        {formatMemoryTimestamp(entry)}
+                      </ThemedText>
+                    </View>
+                    <ThemedText style={styles.memoryContent}>
+                      {entry.content}
+                    </ThemedText>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={() => setShowMemoryModal(false)}
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  {
+                    borderColor: theme.outline,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <ThemedText>Close</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={handleClearMemories}
+                style={({ pressed }) => [
+                  styles.addButton,
+                  {
+                    backgroundColor: theme.error,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <ThemedText style={{ color: theme.buttonText }}>
+                  Clear All
                 </ThemedText>
               </Pressable>
             </View>
@@ -1178,6 +1434,56 @@ const styles = StyleSheet.create({
   },
   addServerText: {
     ...Typography.labelLarge,
+  },
+  memoryActions: {
+    flexDirection: "row",
+    gap: Spacing.md,
+  },
+  memoryActionButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    gap: Spacing.sm,
+  },
+  memoryClearButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    gap: Spacing.sm,
+  },
+  memoryList: {
+    maxHeight: 320,
+    marginBottom: Spacing.lg,
+  },
+  memoryItem: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  memoryItemHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: Spacing.xs,
+  },
+  memoryType: {
+    ...Typography.labelMedium,
+    textTransform: "capitalize",
+  },
+  memoryDate: {
+    ...Typography.bodySmall,
+  },
+  memoryContent: {
+    ...Typography.bodyMedium,
   },
   modalOverlay: {
     flex: 1,

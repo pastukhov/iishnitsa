@@ -2,6 +2,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type MemoryType = "user" | "task" | "fact" | "system";
 
+export interface MemorySettings {
+  enabled: boolean;
+  autoSave: boolean;
+  autoSummary: boolean;
+  limit: number;
+  minImportance: number;
+  summaryTtlMs?: number;
+}
+
 export interface MemoryEntry {
   id: string;
   type: MemoryType;
@@ -124,5 +133,11 @@ export class MemoryStore {
   async clear(): Promise<void> {
     this.cache = [];
     await this.persist();
+  }
+
+  async listMemories(): Promise<MemoryEntry[]> {
+    await this.loadIfNeeded();
+    await this.purgeExpired();
+    return [...this.cache].sort((a, b) => b.createdAt - a.createdAt);
   }
 }
