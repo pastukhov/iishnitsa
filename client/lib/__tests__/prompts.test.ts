@@ -1,4 +1,9 @@
-import { SYSTEM_PROMPTS, getPromptById, searchPrompts } from "@/lib/prompts";
+import {
+  SYSTEM_PROMPTS,
+  getPromptById,
+  getPromptsByCategory,
+  searchPrompts,
+} from "@/lib/prompts";
 
 describe("prompts", () => {
   it("loads prompt catalog", () => {
@@ -22,5 +27,16 @@ describe("prompts", () => {
     const tag = promptWithTag.tags[0];
     const results = searchPrompts(tag);
     expect(results.some((prompt) => prompt.id === promptWithTag.id)).toBe(true);
+  });
+
+  it("returns all prompts for empty query", () => {
+    const results = searchPrompts("");
+    expect(results.length).toBe(SYSTEM_PROMPTS.length);
+  });
+
+  it("filters prompts by category", () => {
+    const sample = SYSTEM_PROMPTS[0];
+    const results = getPromptsByCategory(sample.category);
+    expect(results.some((prompt) => prompt.id === sample.id)).toBe(true);
   });
 });
