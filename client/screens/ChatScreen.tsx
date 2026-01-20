@@ -35,7 +35,8 @@ import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { useChatStore, Message, MessageAttachment } from "@/lib/store";
 import { sendChatMessage, flushQueuedChatMessages } from "@/lib/api";
 import { PromptSelectorModal } from "@/components/PromptSelectorModal";
-import { SystemPrompt, getPromptById } from "@/lib/prompts";
+import { SystemPrompt, getLocalizedPromptById } from "@/lib/prompts";
+import { getDeviceLanguageCode } from "@/lib/locale";
 import {
   pickImageFromLibrary,
   pickImageFromCamera,
@@ -214,14 +215,15 @@ export default function ChatScreen() {
   } = useChatStore();
 
   const currentChat = getCurrentChat();
+  const languageCode = useMemo(() => getDeviceLanguageCode(), []);
   const messages = useMemo(() => currentChat?.messages || [], [currentChat]);
   const selectedPrompt = useMemo(() => {
     if (!currentChat) return null;
     if (currentChat.promptSelection !== "preset" || !currentChat.promptId) {
       return null;
     }
-    return getPromptById(currentChat.promptId) || null;
-  }, [currentChat]);
+    return getLocalizedPromptById(currentChat.promptId, languageCode) || null;
+  }, [currentChat, languageCode]);
 
   useEffect(() => {
     loadFromStorage();
