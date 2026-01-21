@@ -6,6 +6,7 @@ import { MemoryEntry, MemoryStore } from "@/lib/agent/memory";
 interface ContextBuildInput {
   messages: Message[];
   endpoint: EndpointConfig;
+  chatPrompt?: string;
   memoryStore?: MemoryStore;
   memoryLimit?: number;
   memoryMinImportance?: number;
@@ -72,16 +73,22 @@ async function buildConversationMessages(
 export async function buildAgentContext({
   messages,
   endpoint,
+  chatPrompt,
   memoryStore,
   memoryLimit,
   memoryMinImportance,
 }: ContextBuildInput): Promise<ChatCompletionMessage[]> {
   const chatMessages: ChatCompletionMessage[] = [];
 
-  if (endpoint.systemPrompt) {
+  const promptParts = [
+    endpoint.systemPrompt?.trim(),
+    chatPrompt?.trim(),
+  ].filter(Boolean);
+
+  if (promptParts.length > 0) {
     chatMessages.push({
       role: "system",
-      content: endpoint.systemPrompt,
+      content: promptParts.join("\n\n"),
     });
   }
 

@@ -2,6 +2,7 @@ import { Message, EndpointConfig, MCPServer } from "@/lib/store";
 import { getToolsFromServers } from "@/lib/mcp-client";
 import { fetchProviderModels } from "@/lib/providers";
 import { runAgentChat } from "@/lib/agent/core";
+import { MemorySettings } from "@/lib/agent/memory";
 import {
   enqueueChatRequest,
   flushQueuedChatRequests,
@@ -30,6 +31,7 @@ export async function sendChatMessage(
     chatId?: string | null;
     onQueued?: (id: string) => void;
     chatPrompt?: string;
+    memorySettings?: MemorySettings;
   },
 ): Promise<void> {
   try {
@@ -40,6 +42,7 @@ export async function sendChatMessage(
       mcpServers,
       mcpEnabled,
       options?.chatPrompt,
+      options?.memorySettings,
     );
   } catch (error: any) {
     if (options?.queueOnFailure && isNetworkError(error)) {
@@ -49,6 +52,7 @@ export async function sendChatMessage(
         endpoint,
         mcpServers,
         mcpEnabled,
+        memorySettings: options.memorySettings,
         ...(options.chatPrompt !== undefined
           ? { chatPrompt: options.chatPrompt }
           : {}),
@@ -66,6 +70,7 @@ export async function flushQueuedChatMessages(options: {
   onChunk: (content: string) => void;
   onItemStart?: () => void;
   onItemFinish?: () => void;
+  memorySettings?: MemorySettings;
 }): Promise<{ processed: number; failed: number; remaining: number }> {
   return await flushQueuedChatRequests({
     filter: (item) => !options.chatId || item.payload.chatId === options.chatId,
@@ -79,6 +84,7 @@ export async function flushQueuedChatMessages(options: {
           payload.mcpServers,
           payload.mcpEnabled,
           payload.chatPrompt,
+          payload.memorySettings ?? options.memorySettings,
         );
       } finally {
         options.onItemFinish?.();

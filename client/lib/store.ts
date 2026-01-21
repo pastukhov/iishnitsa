@@ -27,6 +27,7 @@ export interface Chat {
   updatedAt: string;
   promptSelection?: "unset" | "none" | "preset";
   promptId?: string | null;
+  memorySummaryEnabled?: boolean;
 }
 
 export interface EndpointConfig {
@@ -61,6 +62,12 @@ export interface Settings {
   mcpServers: MCPServer[];
   mcpEnabled: boolean;
   theme: "light" | "dark" | "system";
+  memoryEnabled: boolean;
+  memoryAutoSave: boolean;
+  memoryAutoSummary: boolean;
+  memoryLimit: number;
+  memoryMinImportance: number;
+  memorySummaryTtlDays: number;
 }
 
 interface ChatStore {
@@ -87,6 +94,7 @@ interface ChatStore {
     chatId: string,
     selection: { mode: "none" | "preset"; promptId?: string | null },
   ) => void;
+  setChatMemorySummary: (chatId: string, enabled: boolean) => void;
   addMCPServer: (server: Omit<MCPServer, "id">) => void;
   updateMCPServer: (id: string, updates: Partial<MCPServer>) => void;
   removeMCPServer: (id: string) => void;
@@ -190,6 +198,12 @@ Always ensure:
   mcpServers: [],
   mcpEnabled: false,
   theme: "system",
+  memoryEnabled: true,
+  memoryAutoSave: true,
+  memoryAutoSummary: false,
+  memoryLimit: 8,
+  memoryMinImportance: 0.5,
+  memorySummaryTtlDays: 30,
 };
 
 const generateId = () => {
@@ -214,6 +228,7 @@ const createNewChatObject = (): Chat => ({
   updatedAt: new Date().toISOString(),
   promptSelection: "unset",
   promptId: null,
+  memorySummaryEnabled: true,
 });
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -236,6 +251,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         ...chat,
         promptSelection: chat.promptSelection ?? "unset",
         promptId: chat.promptId ?? null,
+        memorySummaryEnabled: chat.memorySummaryEnabled ?? true,
       }));
       const currentChatId = currentChatJson || null;
       const parsedSettings = settingsJson ? JSON.parse(settingsJson) : null;
@@ -392,6 +408,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           promptSelection: selection.mode,
           promptId:
             selection.mode === "preset" ? selection.promptId || null : null,
+          updatedAt: new Date().toISOString(),
+        };
+      });
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(updatedChats));
+      return { chats: updatedChats };
+    });
+  },
+
+  setChatMemorySummary: (chatId, enabled) => {
+    set((state) => {
+      const updatedChats = state.chats.map((chat) => {
+        if (chat.id !== chatId) return chat;
+        return {
+          ...chat,
+          memorySummaryEnabled: enabled,
           updatedAt: new Date().toISOString(),
         };
       });

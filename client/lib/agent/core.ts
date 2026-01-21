@@ -1,10 +1,4 @@
-import {
-  Message,
-  EndpointConfig,
-  MCPServer,
-  MessageAttachment,
-} from "@/lib/store";
-import { getImageDataUrl } from "@/lib/image-utils";
+import { Message, EndpointConfig, MCPServer } from "@/lib/store";
 import {
   getToolsFromServers,
   executeToolCall,
@@ -13,43 +7,17 @@ import {
   MCPTool,
   MCPToolResult,
 } from "@/lib/mcp-client";
+import { buildAgentContext } from "@/lib/agent/context-manager";
+import { MemorySettings, MemoryStore, MemoryType } from "@/lib/agent/memory";
 import {
   AgentState,
   AgentDecision,
   ChatCompletionMessage,
-  ContentPart,
   OpenAIFunction,
   ToolCall,
 } from "@/lib/agent/types";
 import { OpenAICompatibleDriver } from "@/lib/agent/openai-driver";
 import { decideAgentAction } from "@/lib/agent/decision-engine";
-
-async function buildMultimodalContent(
-  text: string,
-  attachments?: MessageAttachment[],
-): Promise<string | ContentPart[]> {
-  if (!attachments || attachments.length === 0) {
-    return text;
-  }
-
-  const parts: ContentPart[] = [];
-
-  if (text) {
-    parts.push({ type: "text", text });
-  }
-
-  for (const attachment of attachments) {
-    if (attachment.type === "image") {
-      const dataUrl = await getImageDataUrl(attachment);
-      parts.push({
-        type: "image_url",
-        image_url: { url: dataUrl },
-      });
-    }
-  }
-
-  return parts;
-}
 
 function formatToolResult(result: MCPToolResult): string {
   if (!result.content || result.content.length === 0) {
@@ -69,6 +37,9 @@ function formatToolResult(result: MCPToolResult): string {
     .join("\n");
 }
 
+const SUMMARY_MAX_MESSAGES = 12;
+const SUMMARY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 interface AgentRunInput {
   messages: Message[];
   endpoint: EndpointConfig;
@@ -87,6 +58,7 @@ interface AgentContext {
   depth: number;
   contextBuilt: boolean;
   toolsLoaded: boolean;
+  lastAssistantMessage?: string;
   decision?: AgentDecision;
 }
 
@@ -94,16 +66,44 @@ export class AgentCore {
   private state: AgentState = "IDLE";
   private maxDepth: number;
   private driver: OpenAICompatibleDriver;
+  private memoryStore: MemoryStore;
+  private memoryLimit?: number;
+  private memoryMinImportance?: number;
+  private memoryEnabled: boolean;
+  private memoryAutoSave: boolean;
+  private memoryAutoSummary: boolean;
+  private memorySummaryTtlMs: number;
 
   constructor({
     maxDepth = 10,
     driver = new OpenAICompatibleDriver(),
+    memoryStore = new MemoryStore(),
+    memoryLimit,
+    memoryMinImportance,
+    memoryEnabled = true,
+    memoryAutoSave = true,
+    memoryAutoSummary = false,
+    memorySummaryTtlMs = SUMMARY_TTL_MS,
   }: {
     maxDepth?: number;
     driver?: OpenAICompatibleDriver;
+    memoryStore?: MemoryStore;
+    memoryLimit?: number;
+    memoryMinImportance?: number;
+    memoryEnabled?: boolean;
+    memoryAutoSave?: boolean;
+    memoryAutoSummary?: boolean;
+    memorySummaryTtlMs?: number;
   } = {}) {
     this.maxDepth = maxDepth;
     this.driver = driver;
+    this.memoryStore = memoryStore;
+    this.memoryLimit = memoryLimit;
+    this.memoryMinImportance = memoryMinImportance;
+    this.memoryEnabled = memoryEnabled;
+    this.memoryAutoSave = memoryAutoSave;
+    this.memoryAutoSummary = memoryAutoSummary;
+    this.memorySummaryTtlMs = memorySummaryTtlMs;
   }
 
   async runChat({
@@ -135,11 +135,16 @@ export class AgentCore {
         }
         case "BUILD_CONTEXT": {
           if (!context.contextBuilt) {
-            context.chatMessages = await this.buildChatMessages(
-              context.rawMessages,
+            context.chatMessages = await buildAgentContext({
+              messages: context.rawMessages,
               endpoint,
               chatPrompt,
-            );
+              memoryStore: this.memoryEnabled ? this.memoryStore : undefined,
+              memoryLimit: this.memoryEnabled ? this.memoryLimit : undefined,
+              memoryMinImportance: this.memoryEnabled
+                ? this.memoryMinImportance
+                : undefined,
+            });
             context.contextBuilt = true;
           }
 
@@ -182,6 +187,7 @@ export class AgentCore {
           });
 
           if (toolCalls.length === 0) {
+            context.lastAssistantMessage = fullContent || "";
             this.state = "IDLE";
             break;
           }
@@ -220,46 +226,14 @@ export class AgentCore {
         }
       }
     }
-  }
 
-  private async buildChatMessages(
-    messages: Message[],
-    endpoint: EndpointConfig,
-    chatPrompt?: string,
-  ): Promise<ChatCompletionMessage[]> {
-    const chatMessages: ChatCompletionMessage[] = [];
-
-    const promptParts = [
-      endpoint.systemPrompt?.trim(),
-      chatPrompt?.trim(),
-    ].filter(Boolean);
-
-    if (promptParts.length > 0) {
-      chatMessages.push({
-        role: "system",
-        content: promptParts.join("\n\n"),
+    if (this.memoryEnabled && context.lastAssistantMessage) {
+      await this.persistMemories({
+        messages: context.rawMessages,
+        assistantMessage: context.lastAssistantMessage,
+        endpoint,
       });
     }
-
-    for (const msg of messages) {
-      if (msg.role === "system") continue;
-      const hasContent = msg.content && msg.content.trim().length > 0;
-      const hasAttachments = msg.attachments && msg.attachments.length > 0;
-
-      if (!hasContent && !hasAttachments) continue;
-
-      if (msg.role === "user" && hasAttachments) {
-        const content = await buildMultimodalContent(
-          msg.content || "",
-          msg.attachments,
-        );
-        chatMessages.push({ role: msg.role, content });
-      } else {
-        chatMessages.push({ role: msg.role, content: msg.content });
-      }
-    }
-
-    return chatMessages;
   }
 
   private async loadTools(
@@ -365,6 +339,159 @@ export class AgentCore {
       messages.push(toolResultMessage);
     }
   }
+
+  private getLatestUserMessage(messages: Message[]): Message | undefined {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === "user") return messages[i];
+    }
+    return undefined;
+  }
+
+  private truncateText(text: string, maxLength: number): string {
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, maxLength).trim()}...`;
+  }
+
+  private formatMessageForSummary(message: Message): string {
+    const base = message.content?.trim() || "";
+    const attachmentCount = message.attachments?.length || 0;
+    const attachmentNote =
+      attachmentCount > 0
+        ? ` [${attachmentCount} image${attachmentCount > 1 ? "s" : ""}]`
+        : "";
+    const combined = `${base}${attachmentNote}`.trim();
+    return combined || "[attachment]";
+  }
+
+  private extractExplicitMemory(text: string): {
+    type: MemoryType;
+    content: string;
+  } | null {
+    const patterns: { regex: RegExp; type: MemoryType }[] = [
+      { regex: /^\s*(please\s+)?remember( that)?[:\s]+/i, type: "user" },
+      { regex: /^\s*пожалуйста\s+запомни( что)?[:\s]+/i, type: "user" },
+      { regex: /^\s*запомни( что)?[:\s]+/i, type: "user" },
+    ];
+
+    for (const pattern of patterns) {
+      if (pattern.regex.test(text)) {
+        const content = text.replace(pattern.regex, "").trim();
+        if (!content) return null;
+        return {
+          type: pattern.type,
+          content: this.truncateText(content, 400),
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private buildSummaryInput(
+    messages: Message[],
+    assistantMessage: string,
+  ): string {
+    const recentMessages = messages.slice(-SUMMARY_MAX_MESSAGES);
+    const lines = recentMessages.map((message) => {
+      const formatted = this.truncateText(
+        this.formatMessageForSummary(message),
+        300,
+      );
+      return `${message.role}: ${formatted}`;
+    });
+
+    if (assistantMessage.trim()) {
+      lines.push(
+        `assistant: ${this.truncateText(assistantMessage.trim(), 600)}`,
+      );
+    }
+
+    return lines.join("\n");
+  }
+
+  private async createConversationSummary(
+    messages: Message[],
+    assistantMessage: string,
+    endpoint: EndpointConfig,
+  ): Promise<string | null> {
+    if (!assistantMessage.trim()) return null;
+    if (messages.length < 2) return null;
+
+    const conversation = this.buildSummaryInput(messages, assistantMessage);
+    if (!conversation.trim()) return null;
+
+    try {
+      const { fullContent } = await this.driver.streamChat({
+        endpoint,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Summarize the conversation in 1-2 sentences for long-term memory. Focus on stable facts, preferences, and ongoing tasks. Avoid sensitive or transient details. Output plain text only.",
+          },
+          { role: "user", content: `Conversation:\n${conversation}` },
+        ],
+        tools: [],
+        onChunk: () => {},
+      });
+
+      const summary = fullContent?.trim();
+      return summary ? this.truncateText(summary, 600) : null;
+    } catch (error) {
+      console.warn("Failed to summarize conversation for memory:", error);
+      return null;
+    }
+  }
+
+  private async persistMemories({
+    messages,
+    assistantMessage,
+    endpoint,
+  }: {
+    messages: Message[];
+    assistantMessage: string;
+    endpoint: EndpointConfig;
+  }): Promise<void> {
+    if (!this.memoryAutoSave && !this.memoryAutoSummary) return;
+
+    if (this.memoryAutoSave) {
+      const lastUserMessage = this.getLatestUserMessage(messages);
+      if (lastUserMessage?.content) {
+        const memory = this.extractExplicitMemory(lastUserMessage.content);
+        if (memory) {
+          try {
+            await this.memoryStore.addMemory({
+              type: memory.type,
+              content: memory.content,
+              importance: 0.9,
+            });
+          } catch (error) {
+            console.warn("Failed to store explicit memory:", error);
+          }
+        }
+      }
+    }
+
+    if (this.memoryAutoSummary) {
+      const summary = await this.createConversationSummary(
+        messages,
+        assistantMessage,
+        endpoint,
+      );
+      if (summary) {
+        try {
+          await this.memoryStore.addMemory({
+            type: "task",
+            content: summary,
+            importance: 0.6,
+            ttlMs: this.memorySummaryTtlMs,
+          });
+        } catch (error) {
+          console.warn("Failed to store summary memory:", error);
+        }
+      }
+    }
+  }
 }
 
 export async function runAgentChat(
@@ -374,8 +501,20 @@ export async function runAgentChat(
   mcpServers: MCPServer[] = [],
   mcpEnabled: boolean = false,
   chatPrompt?: string,
+  memorySettings?: MemorySettings,
 ): Promise<void> {
-  const agent = new AgentCore();
+  const agent = new AgentCore(
+    memorySettings
+      ? {
+          memoryEnabled: memorySettings.enabled,
+          memoryAutoSave: memorySettings.autoSave,
+          memoryAutoSummary: memorySettings.autoSummary,
+          memoryLimit: memorySettings.limit,
+          memoryMinImportance: memorySettings.minImportance,
+          memorySummaryTtlMs: memorySettings.summaryTtlMs,
+        }
+      : undefined,
+  );
   await agent.runChat({
     messages,
     endpoint,
