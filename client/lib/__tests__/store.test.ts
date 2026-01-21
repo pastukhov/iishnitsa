@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useChatStore, Chat, MCPServer } from "../store";
+import { useChatStore } from "../store";
 
 // Simple act replacement for state updates
 const act = <T>(fn: () => T): T => {
@@ -161,7 +161,7 @@ describe("useChatStore", () => {
     });
 
     it("selects next chat when deleting current", () => {
-      const { createNewChat, deleteChat, selectChat } = useChatStore.getState();
+      const { createNewChat, deleteChat } = useChatStore.getState();
 
       act(() => {
         createNewChat();
@@ -325,12 +325,8 @@ describe("useChatStore", () => {
     });
 
     it("does not affect other chats", () => {
-      const {
-        createNewChat,
-        addMessage,
-        selectChat,
-        updateLastAssistantMessage,
-      } = useChatStore.getState();
+      const { createNewChat, addMessage, updateLastAssistantMessage } =
+        useChatStore.getState();
 
       act(() => {
         createNewChat();
@@ -357,7 +353,7 @@ describe("useChatStore", () => {
 
   describe("getCurrentChat", () => {
     it("returns current chat", () => {
-      const { createNewChat, getCurrentChat } = useChatStore.getState();
+      const { createNewChat } = useChatStore.getState();
 
       act(() => {
         createNewChat();
@@ -392,7 +388,7 @@ describe("useChatStore", () => {
     });
 
     it("does not affect other chats", () => {
-      const { createNewChat, addMessage, selectChat, clearCurrentChat } =
+      const { createNewChat, addMessage, clearCurrentChat } =
         useChatStore.getState();
 
       act(() => {
@@ -585,8 +581,7 @@ describe("useChatStore", () => {
   describe("MCP YAML import/export", () => {
     describe("exportMCPServersYAML", () => {
       it("exports servers as YAML without tokens", () => {
-        const { addMCPServer, updateMCPServer, exportMCPServersYAML } =
-          useChatStore.getState();
+        const { addMCPServer } = useChatStore.getState();
 
         act(() => {
           addMCPServer({
@@ -629,7 +624,7 @@ describe("useChatStore", () => {
           });
         });
 
-        const yaml = useChatStore.getState().exportMCPServersYAML();
+        const yaml = exportMCPServersYAML();
 
         expect(yaml).toContain("Server 1");
         expect(yaml).toContain("Server 2");

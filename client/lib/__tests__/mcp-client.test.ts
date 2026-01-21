@@ -559,8 +559,8 @@ describe("mcp-client", () => {
         });
 
         const client = new MCPClient(mockServer);
-        // This will trigger initialization which parses SSE
-        // The test verifies no errors are thrown
+        await client.initialize();
+        expect(client.isInitialized()).toBe(true);
       });
     });
 
