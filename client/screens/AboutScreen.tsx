@@ -9,11 +9,13 @@ import { useTheme } from "@/hooks/useTheme";
 import { appInfo } from "@/lib/app-info";
 import { releaseNotes, releaseTag } from "@/constants/releaseNotes";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
+import { useTranslations } from "@/lib/translations";
 
 export default function AboutScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const displayName = "Iishnitsa";
+  const t = useTranslations();
+  const displayName = t.appName;
 
   const markdownStyles = {
     body: {
@@ -74,7 +76,7 @@ export default function AboutScreen() {
 
         <View style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: theme.primary }]}>
-            Release Notes
+            {t.releaseNotes}
           </ThemedText>
           <Markdown style={markdownStyles}>{releaseNotes}</Markdown>
         </View>

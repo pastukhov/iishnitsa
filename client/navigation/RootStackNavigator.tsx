@@ -5,6 +5,7 @@ import SettingsScreen from "@/screens/SettingsScreen";
 import AboutScreen from "@/screens/AboutScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useTheme } from "@/hooks/useTheme";
+import { getTranslations } from "@/lib/translations";
 
 export type RootStackParamList = {
   Main: undefined;
@@ -17,6 +18,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function RootStackNavigator() {
   const screenOptions = useScreenOptions({ transparent: false });
   const { theme } = useTheme();
+  const t = getTranslations();
 
   return (
     <Stack.Navigator screenOptions={screenOptions}>
@@ -30,7 +32,7 @@ export default function RootStackNavigator() {
         component={SettingsScreen}
         options={{
           presentation: "modal",
-          headerTitle: "Settings",
+          headerTitle: t.settings,
           headerStyle: {
             backgroundColor: theme.backgroundRoot,
           },
@@ -42,7 +44,7 @@ export default function RootStackNavigator() {
         component={AboutScreen}
         options={{
           presentation: "modal",
-          headerTitle: "About",
+          headerTitle: t.about,
           headerStyle: {
             backgroundColor: theme.backgroundRoot,
           },

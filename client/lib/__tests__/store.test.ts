@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useChatStore } from "../store";
+import { getTranslations } from "../translations";
 
 // Simple act replacement for state updates
 const act = <T>(fn: () => T): T => {
@@ -63,7 +64,7 @@ describe("useChatStore", () => {
       const state = useChatStore.getState();
       expect(state.chats).toHaveLength(1);
       expect(state.currentChatId).toBe(state.chats[0].id);
-      expect(state.chats[0].title).toBe("New Chat");
+      expect(state.chats[0].title).toBe(getTranslations().newChat);
       expect(state.chats[0].messages).toEqual([]);
     });
 
@@ -252,7 +253,7 @@ describe("useChatStore", () => {
       });
 
       const chat = useChatStore.getState().chats[0];
-      expect(chat.title).toBe("New Chat");
+      expect(chat.title).toBe(getTranslations().newChat);
     });
 
     it("does not update title after first message", () => {
@@ -384,7 +385,7 @@ describe("useChatStore", () => {
 
       const chat = useChatStore.getState().chats[0];
       expect(chat.messages).toEqual([]);
-      expect(chat.title).toBe("New Chat");
+      expect(chat.title).toBe(getTranslations().newChat);
     });
 
     it("does not affect other chats", () => {

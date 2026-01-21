@@ -4,7 +4,14 @@ import {
   DrawerContentComponentProps,
 } from "@react-navigation/drawer";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { View, StyleSheet, Pressable, FlatList, Alert } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  FlatList,
+  Alert,
+  Image,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/useTheme";
@@ -14,6 +21,7 @@ import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import ChatScreen from "@/screens/ChatScreen";
 import { useChatStore } from "@/lib/store";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { useTranslations } from "@/lib/translations";
 
 export type DrawerParamList = {
   Chat: { chatId?: string };
@@ -24,6 +32,7 @@ const Drawer = createDrawerNavigator<DrawerParamList>();
 function CustomDrawerContent(props: DrawerContentComponentProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const t = useTranslations();
   const { chats, currentChatId, createNewChat, selectChat, deleteChat } =
     useChatStore();
   const rootNavigation =
@@ -44,10 +53,10 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
   };
 
   const handleDeleteChat = (chatId: string, title: string) => {
-    Alert.alert("Delete Chat", `Delete "${title}"?`, [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t.deleteChat, `${t.delete} "${title}"?`, [
+      { text: t.cancel, style: "cancel" },
       {
-        text: "Delete",
+        text: t.delete,
         style: "destructive",
         onPress: () => deleteChat(chatId),
       },
@@ -66,7 +75,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         minute: "2-digit",
       });
     } else if (diffDays === 1) {
-      return "Yesterday";
+      return t.yesterday;
     } else if (diffDays < 7) {
       return date.toLocaleDateString([], { weekday: "short" });
     } else {
@@ -79,18 +88,18 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
       <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
         <View style={styles.profileRow}>
           <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-            <MaterialIcons
-              name="smart-toy"
-              size={24}
-              color={theme.buttonText}
+            <Image
+              source={require("../../assets/images/icon.png")}
+              style={styles.avatarImage}
+              resizeMode="contain"
             />
           </View>
           <View style={styles.profileInfo}>
-            <ThemedText style={styles.appName}>Iishnitsa</ThemedText>
+            <ThemedText style={styles.appName}>{t.appName}</ThemedText>
             <ThemedText
               style={[styles.subtitle, { color: theme.textSecondary }]}
             >
-              Chat with AI
+              {t.appSubtitle}
             </ThemedText>
           </View>
         </View>
@@ -105,12 +114,12 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
       >
         <MaterialIcons name="add" size={20} color={theme.buttonText} />
         <ThemedText style={[styles.newChatText, { color: theme.buttonText }]}>
-          New Chat
+          {t.newChat}
         </ThemedText>
       </Pressable>
 
       <ThemedText style={[styles.sectionTitle, { color: theme.textSecondary }]}>
-        Recent Chats
+        {t.recentChats}
       </ThemedText>
 
       <FlatList
@@ -182,7 +191,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
             <ThemedText
               style={[styles.emptyText, { color: theme.textSecondary }]}
             >
-              No chats yet
+              {t.noChatsYet}
             </ThemedText>
           </View>
         }
@@ -206,7 +215,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
           <ThemedText
             style={[styles.footerText, { color: theme.textSecondary }]}
           >
-            About
+            {t.about}
           </ThemedText>
         </Pressable>
         <Pressable
@@ -224,7 +233,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
           <ThemedText
             style={[styles.footerText, { color: theme.textSecondary }]}
           >
-            Settings
+            {t.settings}
           </ThemedText>
         </Pressable>
       </View>
@@ -271,6 +280,11 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     justifyContent: "center",
     alignItems: "center",
+  },
+  avatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.full,
   },
   profileInfo: {
     marginLeft: Spacing.md,

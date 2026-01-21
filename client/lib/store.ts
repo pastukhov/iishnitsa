@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import YAML from "yaml";
+import { getTranslations } from "@/lib/translations";
 
 export interface MessageAttachment {
   id: string;
@@ -220,9 +221,14 @@ const migrateSettings = (
   return rest;
 };
 
+const getDefaultChatTitle = (): string => {
+  const t = getTranslations();
+  return t.newChat;
+};
+
 const createNewChatObject = (): Chat => ({
   id: generateId(),
-  title: "New Chat",
+  title: getDefaultChatTitle(),
   messages: [],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -519,7 +525,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           return {
             ...chat,
             messages: [],
-            title: "New Chat",
+            title: getDefaultChatTitle(),
             updatedAt: new Date().toISOString(),
           };
         }
