@@ -5,6 +5,7 @@ const loadAppInfo = (constantsMock: any) => {
     default: constantsMock,
   }));
   jest.unmock("@/lib/app-info");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require("@/lib/app-info").appInfo;
 };
 

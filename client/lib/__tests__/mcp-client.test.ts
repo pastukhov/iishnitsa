@@ -549,18 +549,25 @@ describe("mcp-client", () => {
 
     describe("SSE response parsing", () => {
       it("parses SSE formatted response", async () => {
+        const requestId = 1700000000000;
+        const nowSpy = jest.spyOn(Date, "now").mockReturnValue(requestId);
+
         mockFetch.mockResolvedValueOnce({
           ok: true,
           headers: new Map([["content-type", "text/event-stream"]]),
           text: () =>
             Promise.resolve(
-              `data: {"jsonrpc":"2.0","id":${Date.now()},"result":{"protocolVersion":"2024-11-05"}}\n`,
+              `data: {"jsonrpc":"2.0","id":${requestId},"result":{"protocolVersion":"2024-11-05"}}\n`,
             ),
         });
 
         const client = new MCPClient(mockServer);
-        // This will trigger initialization which parses SSE
-        // The test verifies no errors are thrown
+        try {
+          await client.initialize();
+          expect(client.isInitialized()).toBe(true);
+        } finally {
+          nowSpy.mockRestore();
+        }
       });
     });
 
