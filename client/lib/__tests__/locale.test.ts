@@ -4,6 +4,7 @@ const loadLanguageCode = (localizationMock: any) => {
     __esModule: true,
     ...localizationMock,
   }));
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require("@/lib/locale").getDeviceLanguageCode();
 };
 
