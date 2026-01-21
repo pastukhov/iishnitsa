@@ -58,6 +58,7 @@ describe("api", () => {
         [],
         false,
         undefined,
+        undefined,
       );
     });
 
@@ -86,6 +87,7 @@ describe("api", () => {
         onChunk,
         mcpServers,
         true,
+        undefined,
         undefined,
       );
     });
@@ -121,6 +123,7 @@ describe("api", () => {
         endpoint: mockEndpoint,
         mcpServers: [],
         mcpEnabled: false,
+        memorySettings: undefined,
       });
       expect(onQueued).toHaveBeenCalledWith("queued-1");
     });
@@ -146,6 +149,7 @@ describe("api", () => {
         mcpServers: [],
         mcpEnabled: false,
         chatPrompt: "Prompt text",
+        memorySettings: undefined,
       });
     });
 
@@ -163,6 +167,32 @@ describe("api", () => {
         [],
         false,
         "Prompt text",
+        undefined,
+      );
+    });
+
+    it("passes memory settings to agent core", async () => {
+      const onChunk = jest.fn();
+      const memorySettings = {
+        enabled: true,
+        autoSave: true,
+        autoSummary: true,
+        limit: 6,
+        minImportance: 0.4,
+      };
+
+      await sendChatMessage(mockMessages, mockEndpoint, onChunk, [], false, {
+        memorySettings,
+      });
+
+      expect(agentCore.runAgentChat).toHaveBeenCalledWith(
+        mockMessages,
+        mockEndpoint,
+        onChunk,
+        [],
+        false,
+        undefined,
+        memorySettings,
       );
     });
 

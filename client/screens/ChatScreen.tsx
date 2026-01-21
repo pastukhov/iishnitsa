@@ -17,6 +17,8 @@ import {
   ScrollView,
   Alert,
   ActionSheetIOS,
+  Modal,
+  Switch,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, DrawerActions } from "@react-navigation/native";
@@ -201,6 +203,7 @@ export default function ChatScreen() {
   >([]);
   const [promptSelectorVisible, setPromptSelectorVisible] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [chatOptionsVisible, setChatOptionsVisible] = useState(false);
 
   const {
     getCurrentChat,
@@ -212,6 +215,7 @@ export default function ChatScreen() {
     loadFromStorage,
     clearCurrentChat,
     setChatPromptSelection,
+    setChatMemorySummary,
   } = useChatStore();
 
   const currentChat = getCurrentChat();
@@ -224,6 +228,7 @@ export default function ChatScreen() {
     }
     return getLocalizedPromptById(currentChat.promptId, languageCode) || null;
   }, [currentChat, languageCode]);
+  const memorySummaryEnabled = currentChat?.memorySummaryEnabled ?? true;
 
   useEffect(() => {
     loadFromStorage();
@@ -251,6 +256,15 @@ export default function ChatScreen() {
         onItemFinish: () => {
           setIsStreaming(false);
         },
+        memorySettings: {
+          enabled: settings.memoryEnabled,
+          autoSave: settings.memoryAutoSave,
+          autoSummary:
+            settings.memoryAutoSummary && Boolean(memorySummaryEnabled),
+          limit: settings.memoryLimit,
+          minImportance: settings.memoryMinImportance,
+          summaryTtlMs: settings.memorySummaryTtlDays * 24 * 60 * 60 * 1000,
+        },
       });
     };
 
@@ -262,6 +276,13 @@ export default function ChatScreen() {
     addMessage,
     updateLastAssistantMessage,
     setIsStreaming,
+    settings.memoryEnabled,
+    settings.memoryAutoSave,
+    settings.memoryAutoSummary,
+    settings.memoryLimit,
+    settings.memoryMinImportance,
+    settings.memorySummaryTtlDays,
+    memorySummaryEnabled,
   ]);
 
   useEffect(() => {
@@ -339,6 +360,15 @@ export default function ChatScreen() {
               "Queued. Will retry when you're back online.",
             );
           },
+          memorySettings: {
+            enabled: settings.memoryEnabled,
+            autoSave: settings.memoryAutoSave,
+            autoSummary:
+              settings.memoryAutoSummary && Boolean(memorySummaryEnabled),
+            limit: settings.memoryLimit,
+            minImportance: settings.memoryMinImportance,
+            summaryTtlMs: settings.memorySummaryTtlDays * 24 * 60 * 60 * 1000,
+          },
           chatPrompt: selectedPrompt?.prompt,
         },
       );
@@ -360,6 +390,7 @@ export default function ChatScreen() {
     updateLastAssistantMessage,
     setIsStreaming,
     selectedPrompt?.prompt,
+    memorySummaryEnabled,
   ]);
 
   const handleClearChat = () => {
@@ -375,6 +406,11 @@ export default function ChatScreen() {
 
   const openSettings = () => {
     (navigation as any).navigate("Settings");
+  };
+
+  const handleToggleSummary = (enabled: boolean) => {
+    if (!currentChat) return;
+    setChatMemorySummary(currentChat.id, enabled);
   };
 
   const handleRemoveAttachment = useCallback(
@@ -491,6 +527,15 @@ export default function ChatScreen() {
 
         <View style={styles.headerRight}>
           <Pressable
+            onPress={() => setChatOptionsVisible(true)}
+            style={({ pressed }) => [
+              styles.headerButton,
+              { opacity: pressed ? 0.6 : 1 },
+            ]}
+          >
+            <MaterialIcons name="tune" size={24} color={theme.text} />
+          </Pressable>
+          <Pressable
             onPress={handleClearChat}
             style={({ pressed }) => [
               styles.headerButton,
@@ -510,6 +555,60 @@ export default function ChatScreen() {
           </Pressable>
         </View>
       </View>
+
+      <Modal
+        visible={chatOptionsVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setChatOptionsVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
+            <ThemedText style={styles.modalTitle}>Chat Options</ThemedText>
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleInfo}>
+                <ThemedText style={styles.toggleLabel}>
+                  Auto-summarize this chat
+                </ThemedText>
+                <ThemedText
+                  style={[
+                    styles.toggleDescription,
+                    { color: theme.textSecondary },
+                  ]}
+                >
+                  Controls whether summaries are saved for this chat.
+                </ThemedText>
+              </View>
+              <Switch
+                value={memorySummaryEnabled}
+                onValueChange={handleToggleSummary}
+                trackColor={{
+                  false: theme.surfaceVariant,
+                  true: theme.primary,
+                }}
+                thumbColor={theme.surface}
+              />
+            </View>
+            <Pressable
+              onPress={() => setChatOptionsVisible(false)}
+              style={({ pressed }) => [
+                styles.closeButton,
+                {
+                  borderColor: theme.outline,
+                  opacity: pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <ThemedText>Close</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
@@ -773,5 +872,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginLeft: Spacing.sm,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    justifyContent: "center",
+    padding: Spacing.lg,
+  },
+  modalContent: {
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+  },
+  modalTitle: {
+    ...Typography.titleMedium,
+    marginBottom: Spacing.md,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: Spacing.lg,
+  },
+  toggleInfo: {
+    flex: 1,
+    marginRight: Spacing.lg,
+  },
+  toggleLabel: {
+    ...Typography.bodyLarge,
+  },
+  toggleDescription: {
+    ...Typography.bodySmall,
+    marginTop: Spacing.xs,
+  },
+  closeButton: {
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
   },
 });

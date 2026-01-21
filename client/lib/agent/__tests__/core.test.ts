@@ -560,6 +560,155 @@ describe("AgentCore", () => {
     );
   });
 
+  it("stores explicit memory when user asks to remember", async () => {
+    const driver = {
+      streamChat: jest
+        .fn()
+        .mockResolvedValue({ fullContent: "Sure.", toolCalls: [] }),
+    };
+    const memoryStore = {
+      getRelevantMemories: jest.fn().mockResolvedValue([]),
+      addMemory: jest.fn().mockResolvedValue({ id: "mem1" }),
+    };
+
+    const agent = new AgentCore({
+      driver,
+      memoryStore: memoryStore as any,
+      memoryEnabled: true,
+      memoryAutoSave: true,
+      memoryAutoSummary: false,
+    });
+
+    await agent.runChat({
+      messages: [
+        {
+          id: "1",
+          role: "user",
+          content: "Remember that my name is Alex",
+          timestamp: Date.now(),
+        },
+      ],
+      endpoint: mockEndpoint,
+      onChunk: jest.fn(),
+      mcpServers: [],
+      mcpEnabled: false,
+    });
+
+    expect(memoryStore.addMemory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "user",
+        content: "my name is Alex",
+        importance: 0.9,
+      }),
+    );
+  });
+
+  it("skips explicit memory when auto-save is disabled", async () => {
+    const driver = {
+      streamChat: jest
+        .fn()
+        .mockResolvedValue({ fullContent: "Ok.", toolCalls: [] }),
+    };
+    const memoryStore = {
+      getRelevantMemories: jest.fn().mockResolvedValue([]),
+      addMemory: jest.fn().mockResolvedValue({ id: "mem2" }),
+    };
+
+    const agent = new AgentCore({
+      driver,
+      memoryStore: memoryStore as any,
+      memoryEnabled: true,
+      memoryAutoSave: false,
+      memoryAutoSummary: false,
+    });
+
+    await agent.runChat({
+      messages: [
+        {
+          id: "1",
+          role: "user",
+          content: "Remember that I like espresso",
+          timestamp: Date.now(),
+        },
+      ],
+      endpoint: mockEndpoint,
+      onChunk: jest.fn(),
+      mcpServers: [],
+      mcpEnabled: false,
+    });
+
+    expect(memoryStore.addMemory).not.toHaveBeenCalled();
+  });
+
+  it("stores summary memory when auto-summary is enabled", async () => {
+    const driver = {
+      streamChat: jest.fn().mockImplementation(({ messages }) => {
+        const systemContent = messages?.[0]?.content || "";
+        if (
+          typeof systemContent === "string" &&
+          systemContent.includes("Summarize the conversation")
+        ) {
+          return Promise.resolve({
+            fullContent: "User prefers tea.",
+            toolCalls: [],
+          });
+        }
+        return Promise.resolve({ fullContent: "Sure.", toolCalls: [] });
+      }),
+    };
+    const memoryStore = {
+      getRelevantMemories: jest.fn().mockResolvedValue([]),
+      addMemory: jest.fn().mockResolvedValue({ id: "mem3" }),
+    };
+
+    const agent = new AgentCore({
+      driver,
+      memoryStore: memoryStore as any,
+      memoryEnabled: true,
+      memoryAutoSave: false,
+      memoryAutoSummary: true,
+      memorySummaryTtlMs: 12345,
+    });
+
+    await agent.runChat({
+      messages: [
+        {
+          id: "1",
+          role: "user",
+          content: "I like tea",
+          timestamp: Date.now(),
+          attachments: [
+            {
+              id: "img1",
+              type: "image",
+              uri: "file://image.png",
+              mimeType: "image/png",
+            },
+          ],
+        },
+        {
+          id: "2",
+          role: "assistant",
+          content: "Noted.",
+          timestamp: Date.now(),
+        },
+      ],
+      endpoint: mockEndpoint,
+      onChunk: jest.fn(),
+      mcpServers: [],
+      mcpEnabled: false,
+    });
+
+    expect(memoryStore.addMemory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "task",
+        content: "User prefers tea.",
+        importance: 0.6,
+        ttlMs: 12345,
+      }),
+    );
+  });
+
   it("handles tool loading failure", async () => {
     const errorSpy = jest.spyOn(console, "error").mockImplementation();
 
