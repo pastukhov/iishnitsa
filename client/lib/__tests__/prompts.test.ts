@@ -451,4 +451,51 @@ describe("prompts", () => {
       expect(searchPrompts("sometag")).toEqual([]);
     });
   });
+
+  it("returns all unique tags sorted", () => {
+    const tags = getAllTags();
+    expect(tags.length).toBeGreaterThan(0);
+    expect(tags).toEqual([...new Set(tags)].sort());
+  });
+
+  it("returns top tags by frequency", () => {
+    const topTags = getTopTags(5);
+    expect(topTags.length).toBeLessThanOrEqual(5);
+    expect(topTags.length).toBeGreaterThan(0);
+  });
+
+  it("filters prompts by tag", () => {
+    const allTags = getAllTags();
+    if (allTags.length === 0) return;
+
+    const tag = allTags[0];
+    const results = getPromptsByTag(tag);
+    expect(results.length).toBeGreaterThan(0);
+    results.forEach((prompt) => {
+      expect(prompt.tags).toContain(tag);
+    });
+  });
+
+  it("returns prompts by ids in correct order", () => {
+    const ids = SYSTEM_PROMPTS.slice(0, 3).map((p) => p.id);
+    const results = getPromptsByIds(ids);
+    expect(results.length).toBe(3);
+    results.forEach((prompt) => {
+      expect(ids).toContain(prompt.id);
+    });
+  });
+
+  it("filters prompts by ids ignoring non-existent", () => {
+    const validId = SYSTEM_PROMPTS[0].id;
+    const results = getPromptsByIds([validId, "non-existent-id"]);
+    expect(results.length).toBe(1);
+    expect(results[0].id).toBe(validId);
+  });
+
+  it("localizes prompts returned by ids", () => {
+    const id = "weekly-planning-coach";
+    const results = getPromptsByIds([id], "ru");
+    expect(results.length).toBe(1);
+    expect(results[0].title).toBe("🧠 Коуч по еженедельному планированию");
+  });
 });
