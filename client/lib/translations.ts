@@ -28,6 +28,16 @@ export const TRANSLATIONS = {
 
     // About screen
     releaseNotes: "Release Notes",
+
+    // Prompt selector
+    selectPrompt: "Select Prompt",
+    searchPrompts: "Search prompts...",
+    startWithoutPrompt: "Start without prompt",
+    noPromptsFound: "No prompts found",
+    favoritePrompts: "Favorites",
+    recentPrompts: "Recent",
+    allPrompts: "All Prompts",
+    searchResults: "Search Results",
   },
   ru: {
     // App identity
@@ -51,6 +61,16 @@ export const TRANSLATIONS = {
 
     // About screen
     releaseNotes: "История изменений",
+
+    // Prompt selector
+    selectPrompt: "Выбрать промпт",
+    searchPrompts: "Поиск промптов...",
+    startWithoutPrompt: "Начать без промпта",
+    noPromptsFound: "Промпты не найдены",
+    favoritePrompts: "Избранное",
+    recentPrompts: "Недавние",
+    allPrompts: "Все промпты",
+    searchResults: "Результаты поиска",
   },
 };
 

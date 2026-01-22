@@ -7,6 +7,7 @@ import {
   TextInput,
   SectionList,
   Platform,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -16,8 +17,16 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
-import { SystemPrompt, searchPrompts } from "@/lib/prompts";
+import {
+  SystemPrompt,
+  searchPrompts,
+  getTopTags,
+  getPromptsByTag,
+  getPromptsByIds,
+} from "@/lib/prompts";
 import { getDeviceLanguageCode } from "@/lib/locale";
+import { useChatStore } from "@/lib/store";
+import { useTranslations } from "@/lib/translations";
 
 interface PromptSelectorModalProps {
   visible: boolean;
@@ -37,31 +46,96 @@ export function PromptSelectorModal({
 }: PromptSelectorModalProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  const t = useTranslations();
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const languageCode = useMemo(() => getDeviceLanguageCode(), []);
 
-  const sections = useMemo((): SectionData[] => {
-    const filteredPrompts = searchPrompts(searchQuery, languageCode);
-    const categories = Array.from(
-      new Set(filteredPrompts.map((prompt) => prompt.category)),
-    );
+  const {
+    settings: { favoritePromptIds, recentPromptIds },
+    toggleFavoritePrompt,
+    addRecentPrompt,
+  } = useChatStore();
 
-    return categories.map((category) => ({
-      title: category,
-      data: filteredPrompts.filter((p) => p.category === category),
-    }));
-  }, [languageCode, searchQuery]);
+  const topTags = useMemo(() => getTopTags(10), []);
+
+  const sections = useMemo((): SectionData[] => {
+    const results: SectionData[] = [];
+
+    let filtered = searchQuery
+      ? searchPrompts(searchQuery, languageCode)
+      : selectedTag
+        ? getPromptsByTag(selectedTag, languageCode)
+        : searchPrompts("", languageCode);
+
+    if (!searchQuery) {
+      if (favoritePromptIds.length > 0) {
+        const favs = getPromptsByIds(favoritePromptIds, languageCode).filter(
+          (p) => filtered.some((f) => f.id === p.id),
+        );
+        if (favs.length > 0) {
+          results.push({ title: `⭐ ${t.favoritePrompts}`, data: favs });
+        }
+      }
+
+      if (recentPromptIds.length > 0) {
+        const recents = getPromptsByIds(recentPromptIds, languageCode)
+          .filter((p) => !favoritePromptIds.includes(p.id))
+          .filter((p) => filtered.some((f) => f.id === p.id));
+        if (recents.length > 0) {
+          results.push({ title: `🕐 ${t.recentPrompts}`, data: recents });
+        }
+      }
+    }
+
+    const remaining = filtered.filter(
+      (p) =>
+        !favoritePromptIds.includes(p.id) && !recentPromptIds.includes(p.id),
+    );
+    if (remaining.length > 0) {
+      const title = selectedTag
+        ? `#${selectedTag}`
+        : searchQuery
+          ? t.searchResults
+          : t.allPrompts;
+      results.push({ title, data: remaining });
+    }
+
+    return results;
+  }, [
+    languageCode,
+    searchQuery,
+    selectedTag,
+    favoritePromptIds,
+    recentPromptIds,
+    t,
+  ]);
 
   const handleSelect = (prompt: SystemPrompt | null) => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+    if (prompt) {
+      addRecentPrompt(prompt.id);
+    }
     setSearchQuery("");
+    setSelectedTag(null);
     onSelect(prompt);
+  };
+
+  const handleToggleFavorite = (promptId: string, e: unknown) => {
+    if (typeof e === "object" && e !== null && "stopPropagation" in e) {
+      (e as { stopPropagation: () => void }).stopPropagation();
+    }
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    toggleFavoritePrompt(promptId);
   };
 
   const handleClose = () => {
     setSearchQuery("");
+    setSelectedTag(null);
     onClose();
   };
 
@@ -83,7 +157,7 @@ export function PromptSelectorModal({
           ]}
         >
           <View style={styles.header}>
-            <ThemedText style={styles.title}>Select Prompt</ThemedText>
+            <ThemedText style={styles.title}>{t.selectPrompt}</ThemedText>
             <Pressable
               onPress={handleClose}
               style={({ pressed }) => [
@@ -111,7 +185,7 @@ export function PromptSelectorModal({
             />
             <TextInput
               style={[styles.searchInput, { color: theme.text }]}
-              placeholder="Search prompts..."
+              placeholder={t.searchPrompts}
               placeholderTextColor={theme.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -127,6 +201,73 @@ export function PromptSelectorModal({
               </Pressable>
             )}
           </View>
+
+          {topTags.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.tagFilterContainer}
+              contentContainerStyle={styles.tagFilterContent}
+            >
+              <Pressable
+                style={[
+                  styles.tagChip,
+                  {
+                    backgroundColor:
+                      selectedTag === null ? theme.primary : theme.surface,
+                    borderColor:
+                      selectedTag === null
+                        ? theme.primary
+                        : theme.outlineVariant,
+                  },
+                ]}
+                onPress={() => setSelectedTag(null)}
+              >
+                <ThemedText
+                  style={[
+                    styles.tagChipText,
+                    {
+                      color:
+                        selectedTag === null ? theme.buttonText : theme.text,
+                    },
+                  ]}
+                >
+                  All
+                </ThemedText>
+              </Pressable>
+              {topTags.map((tag) => (
+                <Pressable
+                  key={tag}
+                  style={[
+                    styles.tagChip,
+                    {
+                      backgroundColor:
+                        selectedTag === tag ? theme.primary : theme.surface,
+                      borderColor:
+                        selectedTag === tag
+                          ? theme.primary
+                          : theme.outlineVariant,
+                    },
+                  ]}
+                  onPress={() =>
+                    setSelectedTag(selectedTag === tag ? null : tag)
+                  }
+                >
+                  <ThemedText
+                    style={[
+                      styles.tagChipText,
+                      {
+                        color:
+                          selectedTag === tag ? theme.buttonText : theme.text,
+                      },
+                    ]}
+                  >
+                    {tag.replace(/_/g, " ")}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
 
           <Pressable
             style={({ pressed }) => [
@@ -146,7 +287,7 @@ export function PromptSelectorModal({
               color={theme.primary}
             />
             <ThemedText style={[styles.noneButtonText, { color: theme.text }]}>
-              Start without prompt
+              {t.startWithoutPrompt}
             </ThemedText>
             <MaterialIcons
               name="chevron-right"
@@ -168,40 +309,75 @@ export function PromptSelectorModal({
                 {section.title}
               </ThemedText>
             )}
-            renderItem={({ item }) => (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.promptItem,
-                  {
-                    backgroundColor: pressed
-                      ? theme.surfaceVariant
-                      : theme.surface,
-                    borderColor: theme.outlineVariant,
-                  },
-                ]}
-                onPress={() => handleSelect(item)}
-              >
-                <View style={styles.promptContent}>
-                  <ThemedText style={styles.promptTitle}>
-                    {item.title}
-                  </ThemedText>
-                  <ThemedText
-                    style={[
-                      styles.promptPreview,
-                      { color: theme.textSecondary },
-                    ]}
-                    numberOfLines={2}
+            renderItem={({ item }) => {
+              const isFavorite = favoritePromptIds.includes(item.id);
+              return (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.promptItem,
+                    {
+                      backgroundColor: pressed
+                        ? theme.surfaceVariant
+                        : theme.surface,
+                      borderColor: theme.outlineVariant,
+                    },
+                  ]}
+                  onPress={() => handleSelect(item)}
+                >
+                  <View style={styles.promptContent}>
+                    <ThemedText style={styles.promptTitle}>
+                      {item.title}
+                    </ThemedText>
+                    {item.tags && item.tags.length > 0 && (
+                      <View style={styles.tagPillsContainer}>
+                        {item.tags.slice(0, 3).map((tag) => (
+                          <View
+                            key={tag}
+                            style={[
+                              styles.tagPill,
+                              { backgroundColor: theme.surfaceVariant },
+                            ]}
+                          >
+                            <ThemedText
+                              style={[
+                                styles.tagPillText,
+                                { color: theme.textSecondary },
+                              ]}
+                            >
+                              {tag.replace(/_/g, " ")}
+                            </ThemedText>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                    <ThemedText
+                      style={[
+                        styles.promptPreview,
+                        { color: theme.textSecondary },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {item.prompt.slice(0, 150)}...
+                    </ThemedText>
+                  </View>
+                  <Pressable
+                    style={styles.starButton}
+                    onPress={(e) => handleToggleFavorite(item.id, e)}
                   >
-                    {item.prompt.slice(0, 100)}...
-                  </ThemedText>
-                </View>
-                <MaterialIcons
-                  name="chevron-right"
-                  size={20}
-                  color={theme.textSecondary}
-                />
-              </Pressable>
-            )}
+                    <MaterialIcons
+                      name={isFavorite ? "star" : "star-border"}
+                      size={24}
+                      color={isFavorite ? theme.primary : theme.textSecondary}
+                    />
+                  </Pressable>
+                  <MaterialIcons
+                    name="chevron-right"
+                    size={20}
+                    color={theme.textSecondary}
+                  />
+                </Pressable>
+              );
+            }}
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <MaterialIcons
@@ -212,7 +388,7 @@ export function PromptSelectorModal({
                 <ThemedText
                   style={[styles.emptyText, { color: theme.textSecondary }]}
                 >
-                  No prompts found
+                  {t.noPromptsFound}
                 </ThemedText>
               </View>
             }
@@ -313,5 +489,42 @@ const styles = StyleSheet.create({
   emptyText: {
     ...Typography.bodyMedium,
     marginTop: Spacing.md,
+  },
+  tagFilterContainer: {
+    marginBottom: Spacing.md,
+  },
+  tagFilterContent: {
+    paddingHorizontal: Spacing.xs,
+    gap: Spacing.sm,
+  },
+  tagChip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  tagChipText: {
+    ...Typography.labelMedium,
+    textTransform: "capitalize",
+  },
+  tagPillsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  tagPill: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.xs,
+  },
+  tagPillText: {
+    fontSize: 10,
+    textTransform: "capitalize",
+  },
+  starButton: {
+    padding: Spacing.sm,
+    marginLeft: Spacing.xs,
   },
 });

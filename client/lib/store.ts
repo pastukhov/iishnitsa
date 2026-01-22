@@ -69,6 +69,8 @@ export interface Settings {
   memoryLimit: number;
   memoryMinImportance: number;
   memorySummaryTtlDays: number;
+  favoritePromptIds: string[];
+  recentPromptIds: string[];
 }
 
 interface ChatStore {
@@ -104,6 +106,8 @@ interface ChatStore {
   importMCPServersYAML: (yaml: string) => void;
   setIsStreaming: (isStreaming: boolean) => void;
   clearCurrentChat: () => void;
+  toggleFavoritePrompt: (promptId: string) => void;
+  addRecentPrompt: (promptId: string) => void;
 }
 
 const STORAGE_KEYS = {
@@ -205,6 +209,8 @@ Always ensure:
   memoryLimit: 8,
   memoryMinImportance: 0.5,
   memorySummaryTtlDays: 30,
+  favoritePromptIds: [],
+  recentPromptIds: [],
 };
 
 const generateId = () => {
@@ -534,6 +540,38 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(updatedChats));
       return { chats: updatedChats };
+    });
+  },
+
+  toggleFavoritePrompt: (promptId) => {
+    set((state) => {
+      const { favoritePromptIds } = state.settings;
+      const isFavorite = favoritePromptIds.includes(promptId);
+      const updatedFavorites = isFavorite
+        ? favoritePromptIds.filter((id) => id !== promptId)
+        : [...favoritePromptIds, promptId];
+
+      const settings = {
+        ...state.settings,
+        favoritePromptIds: updatedFavorites,
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  addRecentPrompt: (promptId) => {
+    set((state) => {
+      const { recentPromptIds } = state.settings;
+      const filteredRecents = recentPromptIds.filter((id) => id !== promptId);
+      const updatedRecents = [promptId, ...filteredRecents].slice(0, 10);
+
+      const settings = {
+        ...state.settings,
+        recentPromptIds: updatedRecents,
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
     });
   },
 }));
