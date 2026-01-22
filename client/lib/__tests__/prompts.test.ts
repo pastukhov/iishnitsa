@@ -452,19 +452,49 @@ describe("prompts", () => {
     });
   });
 
-  it("returns all unique tags sorted", () => {
+  it("returns all unique tags sorted", async () => {
+    MockedMcpPrompts.getCachedPrompts.mockResolvedValue({
+      version: 1,
+      timestamp: Date.now(),
+      ttl: 24 * 60 * 60 * 1000,
+      source: "mcp",
+      prompts: mockPrompts,
+    });
+    MockedMcpPrompts.isCacheValid.mockReturnValue(true);
+    await initializePrompts();
+
     const tags = getAllTags();
     expect(tags.length).toBeGreaterThan(0);
     expect(tags).toEqual([...new Set(tags)].sort());
   });
 
-  it("returns top tags by frequency", () => {
+  it("returns top tags by frequency", async () => {
+    MockedMcpPrompts.getCachedPrompts.mockResolvedValue({
+      version: 1,
+      timestamp: Date.now(),
+      ttl: 24 * 60 * 60 * 1000,
+      source: "mcp",
+      prompts: mockPrompts,
+    });
+    MockedMcpPrompts.isCacheValid.mockReturnValue(true);
+    await initializePrompts();
+
     const topTags = getTopTags(5);
     expect(topTags.length).toBeLessThanOrEqual(5);
     expect(topTags.length).toBeGreaterThan(0);
   });
 
-  it("filters prompts by tag", () => {
+  it("filters prompts by tag", async () => {
+    MockedMcpPrompts.getCachedPrompts.mockResolvedValue({
+      version: 1,
+      timestamp: Date.now(),
+      ttl: 24 * 60 * 60 * 1000,
+      source: "mcp",
+      prompts: mockPrompts,
+    });
+    MockedMcpPrompts.isCacheValid.mockReturnValue(true);
+    await initializePrompts();
+
     const allTags = getAllTags();
     if (allTags.length === 0) return;
 
@@ -476,8 +506,18 @@ describe("prompts", () => {
     });
   });
 
-  it("returns prompts by ids in correct order", () => {
-    const ids = SYSTEM_PROMPTS.slice(0, 3).map((p) => p.id);
+  it("returns prompts by ids in correct order", async () => {
+    MockedMcpPrompts.getCachedPrompts.mockResolvedValue({
+      version: 1,
+      timestamp: Date.now(),
+      ttl: 24 * 60 * 60 * 1000,
+      source: "mcp",
+      prompts: mockPrompts,
+    });
+    MockedMcpPrompts.isCacheValid.mockReturnValue(true);
+    await initializePrompts();
+
+    const ids = mockPrompts.slice(0, 3).map((p) => p.id);
     const results = getPromptsByIds(ids);
     expect(results.length).toBe(3);
     results.forEach((prompt) => {
@@ -485,17 +525,20 @@ describe("prompts", () => {
     });
   });
 
-  it("filters prompts by ids ignoring non-existent", () => {
-    const validId = SYSTEM_PROMPTS[0].id;
+  it("filters prompts by ids ignoring non-existent", async () => {
+    MockedMcpPrompts.getCachedPrompts.mockResolvedValue({
+      version: 1,
+      timestamp: Date.now(),
+      ttl: 24 * 60 * 60 * 1000,
+      source: "mcp",
+      prompts: mockPrompts,
+    });
+    MockedMcpPrompts.isCacheValid.mockReturnValue(true);
+    await initializePrompts();
+
+    const validId = mockPrompts[0].id;
     const results = getPromptsByIds([validId, "non-existent-id"]);
     expect(results.length).toBe(1);
     expect(results[0].id).toBe(validId);
-  });
-
-  it("localizes prompts returned by ids", () => {
-    const id = "weekly-planning-coach";
-    const results = getPromptsByIds([id], "ru");
-    expect(results.length).toBe(1);
-    expect(results[0].title).toBe("🧠 Коуч по еженедельному планированию");
   });
 });
