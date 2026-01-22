@@ -96,3 +96,40 @@ export function getLocalizedPromptById(
   if (!prompt) return undefined;
   return localizePrompt(prompt, locale);
 }
+
+export function getAllTags(): string[] {
+  const tagsSet = new Set<string>();
+  SYSTEM_PROMPTS.forEach((prompt) => {
+    (prompt.tags || []).forEach((tag) => tagsSet.add(tag));
+  });
+  return Array.from(tagsSet).sort();
+}
+
+export function getTopTags(limit: number = 10): string[] {
+  const tagCounts = new Map<string, number>();
+
+  SYSTEM_PROMPTS.forEach((prompt) => {
+    (prompt.tags || []).forEach((tag) => {
+      tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+    });
+  });
+
+  return Array.from(tagCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([tag]) => tag);
+}
+
+export function getPromptsByTag(tag: string, locale?: string): SystemPrompt[] {
+  const prompts = getLocalizedPrompts(locale);
+  return prompts.filter((p) => (p.tags || []).includes(tag));
+}
+
+export function getPromptsByIds(
+  ids: string[],
+  locale?: string,
+): SystemPrompt[] {
+  const prompts = getLocalizedPrompts(locale);
+  const idSet = new Set(ids);
+  return prompts.filter((p) => idSet.has(p.id));
+}
