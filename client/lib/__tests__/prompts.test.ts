@@ -1,60 +1,61 @@
 import {
-  SYSTEM_PROMPTS,
-  getPromptById,
-  getPromptsByCategory,
   searchPrompts,
-  localizePrompt,
-  getLocalizedPromptById,
+  getPromptById,
+  getPromptCategories,
+  getPromptsByCategory,
+  getTopTags,
+  getPromptsByTag,
+  getPromptsByIds,
+  getAllTags,
+  getPromptsSource,
+  getLoadedPromptsCount,
 } from "@/lib/prompts";
 
+// Note: These tests run against the module's internal state
+// which starts empty until initializePrompts is called
+
 describe("prompts", () => {
-  it("loads prompt catalog", () => {
-    expect(SYSTEM_PROMPTS.length).toBeGreaterThan(0);
+  describe("initial state", () => {
+    it("starts with no prompts loaded", () => {
+      expect(getLoadedPromptsCount()).toBe(0);
+    });
+
+    it("starts with source as none", () => {
+      expect(getPromptsSource()).toBe("none");
+    });
   });
 
-  it("finds a prompt by id", () => {
-    const sample = SYSTEM_PROMPTS[0];
-    const found = getPromptById(sample.id);
-    expect(found).toBeDefined();
-    expect(found?.title).toBe(sample.title);
-  });
+  describe("search and filter functions with empty state", () => {
+    it("searchPrompts returns empty array", () => {
+      expect(searchPrompts("test")).toEqual([]);
+    });
 
-  it("searches prompts by tag", () => {
-    const promptWithTag = SYSTEM_PROMPTS.find(
-      (prompt) => prompt.tags && prompt.tags.length > 0,
-    );
-    expect(promptWithTag).toBeDefined();
-    if (!promptWithTag?.tags) return;
+    it("getPromptById returns undefined", () => {
+      expect(getPromptById("test-id")).toBeUndefined();
+    });
 
-    const tag = promptWithTag.tags[0];
-    const results = searchPrompts(tag);
-    expect(results.some((prompt) => prompt.id === promptWithTag.id)).toBe(true);
-  });
+    it("getPromptCategories returns empty array", () => {
+      expect(getPromptCategories()).toEqual([]);
+    });
 
-  it("returns all prompts for empty query", () => {
-    const results = searchPrompts("");
-    expect(results.length).toBe(SYSTEM_PROMPTS.length);
-  });
+    it("getPromptsByCategory returns empty array", () => {
+      expect(getPromptsByCategory("Test")).toEqual([]);
+    });
 
-  it("filters prompts by category", () => {
-    const sample = SYSTEM_PROMPTS[0];
-    const results = getPromptsByCategory(sample.category);
-    expect(results.some((prompt) => prompt.id === sample.id)).toBe(true);
-  });
+    it("getTopTags returns empty array", () => {
+      expect(getTopTags()).toEqual([]);
+    });
 
-  it("localizes prompt titles for ru", () => {
-    const localized = getLocalizedPromptById("weekly-planning-coach", "ru");
-    expect(localized?.title).toBe("🧠 Коуч по еженедельному планированию");
-    expect(localized?.category).toBe("Лучшие промпты");
-  });
+    it("getPromptsByTag returns empty array", () => {
+      expect(getPromptsByTag("test")).toEqual([]);
+    });
 
-  it("keeps original prompt when locale missing", () => {
-    const original = getPromptById("weekly-planning-coach");
-    expect(original).toBeDefined();
-    if (!original) return;
+    it("getPromptsByIds returns empty array", () => {
+      expect(getPromptsByIds(["id1", "id2"])).toEqual([]);
+    });
 
-    const localized = localizePrompt(original, "fr");
-    expect(localized.title).toBe(original.title);
-    expect(localized.category).toBe(original.category);
+    it("getAllTags returns empty array", () => {
+      expect(getAllTags()).toEqual([]);
+    });
   });
 });

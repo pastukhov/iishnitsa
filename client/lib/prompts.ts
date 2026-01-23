@@ -1,77 +1,87 @@
-import { SYSTEM_PROMPTS as PROMPT_DATA } from "@/lib/prompts-data";
-import { PROMPT_LOCALES } from "@/lib/prompts-locales";
+import { MCPServer } from "@/lib/store";
+import {
+  SystemPrompt,
+  PromptCache,
+  loadPromptsFromMCP,
+  getCachedPrompts,
+  setCachedPrompts,
+  clearPromptCache,
+  isCacheValid,
+  getCacheAge,
+} from "@/lib/mcp-prompts";
 
-export interface SystemPrompt {
-  id: string;
-  title: string;
-  prompt: string;
-  category: string;
-  tags?: string[];
+export type { SystemPrompt, PromptCache };
+export { clearPromptCache, getCacheAge };
+
+let LOADED_PROMPTS: SystemPrompt[] = [];
+let PROMPTS_SOURCE: "mcp" | "none" = "none";
+let CACHE_TIMESTAMP: number | null = null;
+
+export function getPromptsSource(): "mcp" | "none" {
+  return PROMPTS_SOURCE;
 }
 
-export const SYSTEM_PROMPTS: SystemPrompt[] = PROMPT_DATA.map((prompt) => ({
-  ...prompt,
-  tags: prompt.tags ? [...prompt.tags] : undefined,
-}));
+export function getCacheTimestamp(): number | null {
+  return CACHE_TIMESTAMP;
+}
 
-export const PROMPT_CATEGORIES = Array.from(
-  new Set(SYSTEM_PROMPTS.map((prompt) => prompt.category)),
-);
+export function getLoadedPromptsCount(): number {
+  return LOADED_PROMPTS.length;
+}
+
+export async function initializePrompts(
+  mcpServers: MCPServer[],
+  forceRefresh: boolean = false,
+): Promise<{ prompts: SystemPrompt[]; source: "mcp" | "none" }> {
+  // Check cache if not forcing refresh
+  if (!forceRefresh) {
+    const cache = await getCachedPrompts();
+    if (isCacheValid(cache) && cache) {
+      LOADED_PROMPTS = cache.prompts;
+      PROMPTS_SOURCE = cache.source === "mcp" ? "mcp" : "none";
+      CACHE_TIMESTAMP = cache.timestamp;
+      return { prompts: cache.prompts, source: PROMPTS_SOURCE };
+    }
+  }
+
+  // Try loading from MCP
+  try {
+    const mcpPrompts = await loadPromptsFromMCP(mcpServers);
+    if (mcpPrompts.length > 0) {
+      LOADED_PROMPTS = mcpPrompts;
+      PROMPTS_SOURCE = "mcp";
+      CACHE_TIMESTAMP = Date.now();
+      await setCachedPrompts(mcpPrompts, "mcp");
+      return { prompts: mcpPrompts, source: "mcp" };
+    }
+  } catch (error) {
+    console.warn("Failed to load prompts from MCP:", error);
+  }
+
+  // No prompts available
+  LOADED_PROMPTS = [];
+  PROMPTS_SOURCE = "none";
+  CACHE_TIMESTAMP = null;
+  return { prompts: [], source: "none" };
+}
+
+function getActivePrompts(): SystemPrompt[] {
+  return LOADED_PROMPTS;
+}
 
 export type PromptCategory = string;
 
-function getLocaleKey(locale?: string): string | null {
-  if (!locale) return null;
-  const normalized = locale.toLowerCase();
-  return normalized.split("-")[0];
-}
-
-function getLocaleData(locale?: string) {
-  const key = getLocaleKey(locale);
-  if (!key) return null;
-  return (
-    (PROMPT_LOCALES[key as keyof typeof PROMPT_LOCALES] as {
-      titles: Record<string, string>;
-      categories: Record<string, string>;
-    }) || null
-  );
-}
-
-export function localizePrompt(
-  prompt: SystemPrompt,
-  locale?: string,
-): SystemPrompt {
-  const localeData = getLocaleData(locale);
-  if (!localeData) return prompt;
-
-  return {
-    ...prompt,
-    title: localeData.titles[prompt.id] || prompt.title,
-    category:
-      localeData.categories[prompt.category] ||
-      localeData.categories["Awesome Prompts"] ||
-      prompt.category,
-  };
-}
-
-export function getLocalizedPrompts(locale?: string): SystemPrompt[] {
-  return SYSTEM_PROMPTS.map((prompt) => localizePrompt(prompt, locale));
-}
-
-export function getPromptCategories(locale?: string): string[] {
-  const prompts = getLocalizedPrompts(locale);
+export function getPromptCategories(): string[] {
+  const prompts = getActivePrompts();
   return Array.from(new Set(prompts.map((prompt) => prompt.category)));
 }
 
-export function getPromptsByCategory(
-  category: PromptCategory,
-  locale?: string,
-): SystemPrompt[] {
-  return getLocalizedPrompts(locale).filter((p) => p.category === category);
+export function getPromptsByCategory(category: PromptCategory): SystemPrompt[] {
+  return getActivePrompts().filter((p) => p.category === category);
 }
 
-export function searchPrompts(query: string, locale?: string): SystemPrompt[] {
-  const prompts = getLocalizedPrompts(locale);
+export function searchPrompts(query: string): SystemPrompt[] {
+  const prompts = getActivePrompts();
   const lowerQuery = query.toLowerCase().trim();
   if (!lowerQuery) return prompts;
 
@@ -85,21 +95,12 @@ export function searchPrompts(query: string, locale?: string): SystemPrompt[] {
 }
 
 export function getPromptById(id: string): SystemPrompt | undefined {
-  return SYSTEM_PROMPTS.find((prompt) => prompt.id === id);
-}
-
-export function getLocalizedPromptById(
-  id: string,
-  locale?: string,
-): SystemPrompt | undefined {
-  const prompt = getPromptById(id);
-  if (!prompt) return undefined;
-  return localizePrompt(prompt, locale);
+  return getActivePrompts().find((prompt) => prompt.id === id);
 }
 
 export function getAllTags(): string[] {
   const tagsSet = new Set<string>();
-  SYSTEM_PROMPTS.forEach((prompt) => {
+  getActivePrompts().forEach((prompt) => {
     (prompt.tags || []).forEach((tag) => tagsSet.add(tag));
   });
   return Array.from(tagsSet).sort();
@@ -108,7 +109,7 @@ export function getAllTags(): string[] {
 export function getTopTags(limit: number = 10): string[] {
   const tagCounts = new Map<string, number>();
 
-  SYSTEM_PROMPTS.forEach((prompt) => {
+  getActivePrompts().forEach((prompt) => {
     (prompt.tags || []).forEach((tag) => {
       tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
     });
@@ -120,16 +121,12 @@ export function getTopTags(limit: number = 10): string[] {
     .map(([tag]) => tag);
 }
 
-export function getPromptsByTag(tag: string, locale?: string): SystemPrompt[] {
-  const prompts = getLocalizedPrompts(locale);
-  return prompts.filter((p) => (p.tags || []).includes(tag));
+export function getPromptsByTag(tag: string): SystemPrompt[] {
+  return getActivePrompts().filter((p) => (p.tags || []).includes(tag));
 }
 
-export function getPromptsByIds(
-  ids: string[],
-  locale?: string,
-): SystemPrompt[] {
-  const prompts = getLocalizedPrompts(locale);
+export function getPromptsByIds(ids: string[]): SystemPrompt[] {
+  const prompts = getActivePrompts();
   const idSet = new Set(ids);
   return prompts.filter((p) => idSet.has(p.id));
 }

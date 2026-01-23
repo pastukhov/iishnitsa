@@ -851,8 +851,11 @@ describe("useChatStore", () => {
       await useChatStore.getState().loadFromStorage();
 
       // Should have servers but no collections (migrated away)
+      // Also adds prompts.chat server during migration
       const settings = useChatStore.getState().settings;
-      expect(settings.mcpServers).toHaveLength(1);
+      expect(settings.mcpServers).toHaveLength(2); // prompts.chat + existing server
+      expect(settings.mcpServers[0].url).toBe("https://prompts.chat/api/mcp");
+      expect(settings.mcpServers[1].id).toBe("s1");
       expect(
         (settings as Record<string, unknown>).mcpCollections,
       ).toBeUndefined();

@@ -200,8 +200,15 @@ Always ensure:
 5. Respond clearly, helpfully, and kindly.`,
     providerId: "openai",
   },
-  mcpServers: [],
-  mcpEnabled: false,
+  mcpServers: [
+    {
+      id: "prompts-chat-default",
+      name: "Prompts.chat",
+      url: "https://prompts.chat/api/mcp",
+      enabled: true,
+    },
+  ],
+  mcpEnabled: true,
   theme: "system",
   memoryEnabled: true,
   memoryAutoSave: true,
@@ -224,6 +231,25 @@ const migrateSettings = (
   },
 ): Settings => {
   const { mcpCollections, activeMcpCollectionId, ...rest } = settings;
+
+  // Add prompts.chat MCP server if not present
+  const hasPromptsChat = rest.mcpServers?.some(
+    (s) => s.url === "https://prompts.chat/api/mcp",
+  );
+
+  if (!hasPromptsChat) {
+    rest.mcpServers = [
+      {
+        id: "prompts-chat-default",
+        name: "Prompts.chat",
+        url: "https://prompts.chat/api/mcp",
+        enabled: true,
+      },
+      ...(rest.mcpServers || []),
+    ];
+    rest.mcpEnabled = true;
+  }
+
   return rest;
 };
 
