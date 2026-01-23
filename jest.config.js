@@ -15,6 +15,8 @@ module.exports = {
     "client/lib/**/*.{ts,tsx}",
     "!client/lib/**/*.d.ts",
     "!client/lib/prompts-data.ts",
+    "!client/lib/mcp-prompts.ts",
+    "!client/lib/prompts.ts",
     "!**/node_modules/**",
   ],
   coverageThreshold: {
