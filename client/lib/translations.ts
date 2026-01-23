@@ -38,6 +38,8 @@ export const TRANSLATIONS = {
     recentPrompts: "Recent",
     allPrompts: "All Prompts",
     searchResults: "Search Results",
+    loading: "Loading...",
+    retry: "Retry",
   },
   ru: {
     // App identity
@@ -71,6 +73,8 @@ export const TRANSLATIONS = {
     recentPrompts: "Недавние",
     allPrompts: "Все промпты",
     searchResults: "Результаты поиска",
+    loading: "Загрузка...",
+    retry: "Повторить",
   },
 };
 

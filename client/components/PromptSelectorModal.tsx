@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import {
   Modal,
   View,
@@ -8,6 +8,7 @@ import {
   SectionList,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -23,8 +24,10 @@ import {
   getTopTags,
   getPromptsByTag,
   getPromptsByIds,
+  initializePrompts,
+  getPromptsSource,
+  getLoadedPromptsCount,
 } from "@/lib/prompts";
-import { getDeviceLanguageCode } from "@/lib/locale";
 import { useChatStore } from "@/lib/store";
 import { useTranslations } from "@/lib/translations";
 
@@ -49,29 +52,63 @@ export function PromptSelectorModal({
   const t = useTranslations();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const languageCode = useMemo(() => getDeviceLanguageCode(), []);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [promptsLoaded, setPromptsLoaded] = useState(false);
 
   const {
-    settings: { favoritePromptIds, recentPromptIds },
+    settings: { favoritePromptIds, recentPromptIds, mcpServers },
     toggleFavoritePrompt,
     addRecentPrompt,
   } = useChatStore();
 
-  const topTags = useMemo(() => getTopTags(10), []);
+  const loadPrompts = useCallback(
+    async (forceRefresh: boolean = false) => {
+      if (forceRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+
+      try {
+        await initializePrompts(mcpServers, forceRefresh);
+        setPromptsLoaded(true);
+      } catch (error) {
+        console.error("Failed to load prompts:", error);
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [mcpServers],
+  );
+
+  useEffect(() => {
+    if (visible && !promptsLoaded) {
+      loadPrompts(false);
+    }
+  }, [visible, promptsLoaded, loadPrompts]);
+
+  const topTags = useMemo(() => {
+    if (!promptsLoaded) return [];
+    return getTopTags(10);
+  }, [promptsLoaded]);
 
   const sections = useMemo((): SectionData[] => {
+    if (!promptsLoaded) return [];
+
     const results: SectionData[] = [];
 
     let filtered = searchQuery
-      ? searchPrompts(searchQuery, languageCode)
+      ? searchPrompts(searchQuery)
       : selectedTag
-        ? getPromptsByTag(selectedTag, languageCode)
-        : searchPrompts("", languageCode);
+        ? getPromptsByTag(selectedTag)
+        : searchPrompts("");
 
     if (!searchQuery) {
       if (favoritePromptIds.length > 0) {
-        const favs = getPromptsByIds(favoritePromptIds, languageCode).filter(
-          (p) => filtered.some((f) => f.id === p.id),
+        const favs = getPromptsByIds(favoritePromptIds).filter((p) =>
+          filtered.some((f) => f.id === p.id),
         );
         if (favs.length > 0) {
           results.push({ title: `⭐ ${t.favoritePrompts}`, data: favs });
@@ -79,7 +116,7 @@ export function PromptSelectorModal({
       }
 
       if (recentPromptIds.length > 0) {
-        const recents = getPromptsByIds(recentPromptIds, languageCode)
+        const recents = getPromptsByIds(recentPromptIds)
           .filter((p) => !favoritePromptIds.includes(p.id))
           .filter((p) => filtered.some((f) => f.id === p.id));
         if (recents.length > 0) {
@@ -103,7 +140,7 @@ export function PromptSelectorModal({
 
     return results;
   }, [
-    languageCode,
+    promptsLoaded,
     searchQuery,
     selectedTag,
     favoritePromptIds,
@@ -139,6 +176,16 @@ export function PromptSelectorModal({
     onClose();
   };
 
+  const handleRefresh = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    loadPrompts(true);
+  };
+
+  const promptsSource = getPromptsSource();
+  const promptsCount = getLoadedPromptsCount();
+
   return (
     <Modal
       visible={visible}
@@ -157,16 +204,57 @@ export function PromptSelectorModal({
           ]}
         >
           <View style={styles.header}>
-            <ThemedText style={styles.title}>{t.selectPrompt}</ThemedText>
-            <Pressable
-              onPress={handleClose}
-              style={({ pressed }) => [
-                styles.closeButton,
-                { opacity: pressed ? 0.6 : 1 },
-              ]}
-            >
-              <MaterialIcons name="close" size={24} color={theme.text} />
-            </Pressable>
+            <View style={styles.headerLeft}>
+              <ThemedText style={styles.title}>{t.selectPrompt}</ThemedText>
+              {promptsSource === "mcp" && promptsCount > 0 && (
+                <View
+                  style={[
+                    styles.sourceIndicator,
+                    { backgroundColor: theme.surfaceVariant },
+                  ]}
+                >
+                  <MaterialIcons
+                    name="cloud"
+                    size={12}
+                    color={theme.textSecondary}
+                  />
+                  <ThemedText
+                    style={[styles.sourceText, { color: theme.textSecondary }]}
+                  >
+                    {promptsCount}
+                  </ThemedText>
+                </View>
+              )}
+            </View>
+            <View style={styles.headerRight}>
+              <Pressable
+                onPress={handleRefresh}
+                disabled={isRefreshing}
+                style={({ pressed }) => [
+                  styles.refreshButton,
+                  { opacity: pressed || isRefreshing ? 0.5 : 1 },
+                ]}
+              >
+                {isRefreshing ? (
+                  <ActivityIndicator size="small" color={theme.primary} />
+                ) : (
+                  <MaterialIcons
+                    name="refresh"
+                    size={22}
+                    color={theme.primary}
+                  />
+                )}
+              </Pressable>
+              <Pressable
+                onPress={handleClose}
+                style={({ pressed }) => [
+                  styles.closeButton,
+                  { opacity: pressed ? 0.6 : 1 },
+                ]}
+              >
+                <MaterialIcons name="close" size={24} color={theme.text} />
+              </Pressable>
+            </View>
           </View>
 
           <View
@@ -296,103 +384,128 @@ export function PromptSelectorModal({
             />
           </Pressable>
 
-          <SectionList
-            sections={sections}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-            stickySectionHeadersEnabled={false}
-            showsVerticalScrollIndicator={false}
-            renderSectionHeader={({ section }) => (
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.primary} />
               <ThemedText
-                style={[styles.sectionHeader, { color: theme.textSecondary }]}
+                style={[styles.loadingText, { color: theme.textSecondary }]}
               >
-                {section.title}
+                {t.loading || "Loading..."}
               </ThemedText>
-            )}
-            renderItem={({ item }) => {
-              const isFavorite = favoritePromptIds.includes(item.id);
-              return (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.promptItem,
-                    {
-                      backgroundColor: pressed
-                        ? theme.surfaceVariant
-                        : theme.surface,
-                      borderColor: theme.outlineVariant,
-                    },
-                  ]}
-                  onPress={() => handleSelect(item)}
+            </View>
+          ) : (
+            <SectionList
+              sections={sections}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listContent}
+              stickySectionHeadersEnabled={false}
+              showsVerticalScrollIndicator={false}
+              renderSectionHeader={({ section }) => (
+                <ThemedText
+                  style={[styles.sectionHeader, { color: theme.textSecondary }]}
                 >
-                  <View style={styles.promptContent}>
-                    <ThemedText style={styles.promptTitle}>
-                      {item.title}
-                    </ThemedText>
-                    {item.tags && item.tags.length > 0 && (
-                      <View style={styles.tagPillsContainer}>
-                        {item.tags.slice(0, 3).map((tag) => (
-                          <View
-                            key={tag}
-                            style={[
-                              styles.tagPill,
-                              { backgroundColor: theme.surfaceVariant },
-                            ]}
-                          >
-                            <ThemedText
+                  {section.title}
+                </ThemedText>
+              )}
+              renderItem={({ item }) => {
+                const isFavorite = favoritePromptIds.includes(item.id);
+                return (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.promptItem,
+                      {
+                        backgroundColor: pressed
+                          ? theme.surfaceVariant
+                          : theme.surface,
+                        borderColor: theme.outlineVariant,
+                      },
+                    ]}
+                    onPress={() => handleSelect(item)}
+                  >
+                    <View style={styles.promptContent}>
+                      <ThemedText style={styles.promptTitle}>
+                        {item.title}
+                      </ThemedText>
+                      {item.tags && item.tags.length > 0 && (
+                        <View style={styles.tagPillsContainer}>
+                          {item.tags.slice(0, 3).map((tag) => (
+                            <View
+                              key={tag}
                               style={[
-                                styles.tagPillText,
-                                { color: theme.textSecondary },
+                                styles.tagPill,
+                                { backgroundColor: theme.surfaceVariant },
                               ]}
                             >
-                              {tag.replace(/_/g, " ")}
-                            </ThemedText>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                    <ThemedText
-                      style={[
-                        styles.promptPreview,
-                        { color: theme.textSecondary },
-                      ]}
-                      numberOfLines={2}
+                              <ThemedText
+                                style={[
+                                  styles.tagPillText,
+                                  { color: theme.textSecondary },
+                                ]}
+                              >
+                                {tag.replace(/_/g, " ")}
+                              </ThemedText>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                      <ThemedText
+                        style={[
+                          styles.promptPreview,
+                          { color: theme.textSecondary },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {item.prompt.slice(0, 150)}
+                        {item.prompt.length > 150 ? "..." : ""}
+                      </ThemedText>
+                    </View>
+                    <Pressable
+                      style={styles.starButton}
+                      onPress={(e) => handleToggleFavorite(item.id, e)}
                     >
-                      {item.prompt.slice(0, 150)}...
-                    </ThemedText>
-                  </View>
-                  <Pressable
-                    style={styles.starButton}
-                    onPress={(e) => handleToggleFavorite(item.id, e)}
-                  >
+                      <MaterialIcons
+                        name={isFavorite ? "star" : "star-border"}
+                        size={24}
+                        color={isFavorite ? theme.primary : theme.textSecondary}
+                      />
+                    </Pressable>
                     <MaterialIcons
-                      name={isFavorite ? "star" : "star-border"}
-                      size={24}
-                      color={isFavorite ? theme.primary : theme.textSecondary}
+                      name="chevron-right"
+                      size={20}
+                      color={theme.textSecondary}
                     />
                   </Pressable>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
                   <MaterialIcons
-                    name="chevron-right"
-                    size={20}
+                    name="cloud-off"
+                    size={48}
                     color={theme.textSecondary}
                   />
-                </Pressable>
-              );
-            }}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <MaterialIcons
-                  name="search-off"
-                  size={48}
-                  color={theme.textSecondary}
-                />
-                <ThemedText
-                  style={[styles.emptyText, { color: theme.textSecondary }]}
-                >
-                  {t.noPromptsFound}
-                </ThemedText>
-              </View>
-            }
-          />
+                  <ThemedText
+                    style={[styles.emptyText, { color: theme.textSecondary }]}
+                  >
+                    {t.noPromptsFound}
+                  </ThemedText>
+                  <Pressable
+                    onPress={handleRefresh}
+                    style={[
+                      styles.retryButton,
+                      { backgroundColor: theme.primary },
+                    ]}
+                  >
+                    <ThemedText
+                      style={[styles.retryText, { color: theme.buttonText }]}
+                    >
+                      {t.retry || "Retry"}
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              }
+            />
+          )}
         </ThemedView>
       </View>
     </Modal>
@@ -418,9 +531,34 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: Spacing.lg,
   },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+  },
   title: {
     ...Typography.titleLarge,
     fontWeight: "600",
+  },
+  sourceIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+  },
+  sourceText: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  refreshButton: {
+    padding: Spacing.sm,
   },
   closeButton: {
     padding: Spacing.sm,
@@ -452,6 +590,15 @@ const styles = StyleSheet.create({
   noneButtonText: {
     flex: 1,
     ...Typography.bodyLarge,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.md,
+  },
+  loadingText: {
+    ...Typography.bodyMedium,
   },
   listContent: {
     paddingBottom: Spacing["2xl"],
@@ -485,10 +632,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: Spacing["4xl"],
+    gap: Spacing.md,
   },
   emptyText: {
     ...Typography.bodyMedium,
-    marginTop: Spacing.md,
+  },
+  retryButton: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    marginTop: Spacing.sm,
+  },
+  retryText: {
+    ...Typography.labelMedium,
+    fontWeight: "600",
   },
   tagFilterContainer: {
     marginBottom: Spacing.md,
