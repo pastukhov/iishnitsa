@@ -29,6 +29,8 @@ const resetStore = () => {
       memoryLimit: 8,
       memoryMinImportance: 0.5,
       memorySummaryTtlDays: 30,
+      favoritePromptIds: [],
+      recentPromptIds: [],
     },
     isLoading: false,
     isStreaming: false,
@@ -862,6 +864,78 @@ describe("useChatStore", () => {
       expect(
         (settings as Record<string, unknown>).activeMcpCollectionId,
       ).toBeUndefined();
+    });
+  });
+
+  describe("prompt favorites", () => {
+    it("toggles favorite prompt on", () => {
+      act(() => {
+        useChatStore.getState().toggleFavoritePrompt("prompt1");
+      });
+
+      const settings = useChatStore.getState().settings;
+      expect(settings.favoritePromptIds).toContain("prompt1");
+      expect(AsyncStorage.setItem).toHaveBeenCalled();
+    });
+
+    it("toggles favorite prompt off", () => {
+      act(() => {
+        useChatStore.getState().toggleFavoritePrompt("prompt1");
+        useChatStore.getState().toggleFavoritePrompt("prompt1");
+      });
+
+      const settings = useChatStore.getState().settings;
+      expect(settings.favoritePromptIds).not.toContain("prompt1");
+    });
+
+    it("maintains multiple favorites", () => {
+      act(() => {
+        useChatStore.getState().toggleFavoritePrompt("prompt1");
+        useChatStore.getState().toggleFavoritePrompt("prompt2");
+      });
+
+      const settings = useChatStore.getState().settings;
+      expect(settings.favoritePromptIds).toContain("prompt1");
+      expect(settings.favoritePromptIds).toContain("prompt2");
+      expect(settings.favoritePromptIds).toHaveLength(2);
+    });
+  });
+
+  describe("recent prompts", () => {
+    it("adds recent prompt", () => {
+      act(() => {
+        useChatStore.getState().addRecentPrompt("prompt1");
+      });
+
+      const settings = useChatStore.getState().settings;
+      expect(settings.recentPromptIds).toContain("prompt1");
+      expect(settings.recentPromptIds[0]).toBe("prompt1");
+      expect(AsyncStorage.setItem).toHaveBeenCalled();
+    });
+
+    it("moves existing prompt to front", () => {
+      act(() => {
+        useChatStore.getState().addRecentPrompt("prompt1");
+        useChatStore.getState().addRecentPrompt("prompt2");
+        useChatStore.getState().addRecentPrompt("prompt1");
+      });
+
+      const settings = useChatStore.getState().settings;
+      expect(settings.recentPromptIds[0]).toBe("prompt1");
+      expect(settings.recentPromptIds[1]).toBe("prompt2");
+      expect(settings.recentPromptIds).toHaveLength(2);
+    });
+
+    it("limits recent prompts to 10", () => {
+      act(() => {
+        for (let i = 0; i < 15; i++) {
+          useChatStore.getState().addRecentPrompt(`prompt${i}`);
+        }
+      });
+
+      const settings = useChatStore.getState().settings;
+      expect(settings.recentPromptIds).toHaveLength(10);
+      expect(settings.recentPromptIds[0]).toBe("prompt14");
     });
   });
 });
