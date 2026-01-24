@@ -667,6 +667,7 @@ const styles = StyleSheet.create({
   tagPillsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
+    alignItems: "center",
     gap: Spacing.xs,
     marginTop: Spacing.xs,
     marginBottom: Spacing.xs,
