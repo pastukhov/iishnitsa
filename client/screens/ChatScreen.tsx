@@ -19,6 +19,7 @@ import {
   ActionSheetIOS,
   Modal,
   Switch,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, DrawerActions } from "@react-navigation/native";
@@ -108,7 +109,11 @@ function MessageBubble({
     >
       {!isUser && (
         <View style={[styles.avatarSmall, { backgroundColor: theme.primary }]}>
-          <MaterialIcons name="smart-toy" size={16} color={theme.buttonText} />
+          <Image
+            source={require("../../assets/images/icon.png")}
+            style={{ width: 24, height: 24 }}
+            resizeMode="contain"
+          />
         </View>
       )}
       <View style={styles.messageContent}>
@@ -155,14 +160,14 @@ function TypingIndicator() {
 
   return (
     <View
-      style={[
-        styles.messageBubble,
-        styles.aiBubble,
-        { backgroundColor: theme.aiBubble, alignSelf: "flex-start" },
-      ]}
+      style={[styles.typingIndicatorContainer, { alignSelf: "flex-start" }]}
     >
       <View style={[styles.avatarSmall, { backgroundColor: theme.primary }]}>
-        <MaterialIcons name="smart-toy" size={16} color={theme.buttonText} />
+        <Image
+          source={require("../../assets/images/icon.png")}
+          style={{ width: 24, height: 24 }}
+          resizeMode="contain"
+        />
       </View>
       <View style={styles.typingDots}>
         <ActivityIndicator size="small" color={theme.primary} />
@@ -810,6 +815,13 @@ const styles = StyleSheet.create({
   },
   typingDots: {
     paddingVertical: Spacing.xs,
+  },
+  typingIndicatorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+    paddingLeft: Spacing.lg,
+    gap: Spacing.sm,
   },
   emptyState: {
     flex: 1,
