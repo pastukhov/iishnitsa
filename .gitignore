@@ -49,3 +49,9 @@ app-example
 # generated native folders
 /ios
 /android
+
+# IDE
+.idea/
+
+# temp files
+tmp/
