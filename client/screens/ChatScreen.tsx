@@ -108,11 +108,11 @@ function MessageBubble({
       ]}
     >
       {!isUser && (
-        <View style={[styles.avatarSmall, { backgroundColor: theme.primary }]}>
+        <View style={[styles.avatarSmall, { overflow: "hidden" }]}>
           <Image
             source={require("../../assets/images/icon.png")}
-            style={{ width: 24, height: 24 }}
-            resizeMode="contain"
+            style={{ width: 38, height: 38 }}
+            resizeMode="cover"
           />
         </View>
       )}
@@ -162,11 +162,11 @@ function TypingIndicator() {
     <View
       style={[styles.typingIndicatorContainer, { alignSelf: "flex-start" }]}
     >
-      <View style={[styles.avatarSmall, { backgroundColor: theme.primary }]}>
+      <View style={[styles.avatarSmall, { overflow: "hidden" }]}>
         <Image
           source={require("../../assets/images/icon.png")}
-          style={{ width: 24, height: 24 }}
-          resizeMode="contain"
+          style={{ width: 38, height: 38 }}
+          resizeMode="cover"
         />
       </View>
       <View style={styles.typingDots}>
@@ -626,9 +626,20 @@ export default function ChatScreen() {
             styles.messageList,
             { paddingBottom: Spacing["2xl"] },
           ]}
-          renderItem={({ item }) => (
-            <MessageBubble message={item} isUser={item.role === "user"} />
-          )}
+          renderItem={({ item, index }) => {
+            // Don't render empty assistant message while streaming (TypingIndicator handles this)
+            if (
+              item.role === "assistant" &&
+              !item.content &&
+              isStreaming &&
+              index === messages.length - 1
+            ) {
+              return null;
+            }
+            return (
+              <MessageBubble message={item} isUser={item.role === "user"} />
+            );
+          }}
           ListEmptyComponent={EmptyState}
           ListFooterComponent={isStreaming ? <TypingIndicator /> : null}
           showsVerticalScrollIndicator={false}
