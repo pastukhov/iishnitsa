@@ -102,5 +102,7 @@ title: Iishnitsa - AI Chat App
   <span>•</span>
   <a href="https://github.com/pastukhov/iishnitsa/issues">Сообщить о проблеме</a>
   <span>•</span>
+  <a href="https://github.com/pastukhov/iishnitsa/blob/main/LICENSE">MIT License</a>
+  <span>•</span>
   <span>Версия {{ site.app_version }}</span>
 </div>
