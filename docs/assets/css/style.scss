@@ -122,11 +122,17 @@ details {
 
 details summary {
   cursor: pointer;
-  color: var(--color-text);
+  color: var(--color-yellow) !important;
+  font-weight: 600;
 }
 
-details summary:hover {
-  color: var(--color-accent);
+details summary strong {
+  color: var(--color-yellow) !important;
+}
+
+details summary:hover,
+details summary:hover strong {
+  color: var(--color-accent) !important;
 }
 
 details[open] summary {
@@ -134,7 +140,7 @@ details[open] summary {
 }
 
 details p {
-  color: #bbb;
+  color: var(--color-text) !important;
   margin: 0;
   line-height: 1.6;
 }
