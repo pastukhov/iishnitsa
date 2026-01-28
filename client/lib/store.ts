@@ -35,7 +35,8 @@ export interface EndpointConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
-  systemPrompt: string;
+  /** @deprecated Use Settings.systemPrompt instead */
+  systemPrompt?: string;
   providerId:
     | "openai"
     | "anthropic"
@@ -71,6 +72,7 @@ export interface Settings {
   memorySummaryTtlDays: number;
   favoritePromptIds: string[];
   recentPromptIds: string[];
+  systemPrompt: string;
 }
 
 interface ChatStore {
@@ -116,12 +118,7 @@ const STORAGE_KEYS = {
   SETTINGS: "@ai_agent_settings",
 };
 
-const defaultSettings: Settings = {
-  endpoint: {
-    baseUrl: "https://api.openai.com/v1",
-    apiKey: "",
-    model: "gpt-4o-mini",
-    systemPrompt: `# System Prompt for Mobile AI Assistant with MCP Support
+const DEFAULT_SYSTEM_PROMPT = `# System Prompt for Mobile AI Assistant with MCP Support
 
 You are a mobile AI assistant for a broad audience. Your task is to help users communicate, receive answers, perform actions, connect to external services via MCP, and remain clear, friendly, and reliable.
 
@@ -197,7 +194,13 @@ Always ensure:
 2. Clarify if needed.
 3. Solve efficiently.
 4. Use MCP if appropriate.
-5. Respond clearly, helpfully, and kindly.`,
+5. Respond clearly, helpfully, and kindly.`;
+
+const defaultSettings: Settings = {
+  endpoint: {
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "",
+    model: "gpt-4o-mini",
     providerId: "openai",
   },
   mcpServers: [
@@ -218,6 +221,7 @@ Always ensure:
   memorySummaryTtlDays: 30,
   favoritePromptIds: [],
   recentPromptIds: [],
+  systemPrompt: DEFAULT_SYSTEM_PROMPT,
 };
 
 const generateId = () => {
@@ -248,6 +252,14 @@ const migrateSettings = (
       ...(rest.mcpServers || []),
     ];
     rest.mcpEnabled = true;
+  }
+
+  // Migrate systemPrompt from endpoint to top-level settings
+  if (!rest.systemPrompt && rest.endpoint?.systemPrompt) {
+    rest.systemPrompt = rest.endpoint.systemPrompt;
+    delete rest.endpoint.systemPrompt;
+  } else if (!rest.systemPrompt) {
+    rest.systemPrompt = DEFAULT_SYSTEM_PROMPT;
   }
 
   return rest;

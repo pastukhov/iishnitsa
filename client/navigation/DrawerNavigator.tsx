@@ -127,64 +127,49 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.chatList}
         renderItem={({ item }) => (
-          <View style={styles.chatItemRow}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.chatItem,
-                {
-                  backgroundColor:
-                    item.id === currentChatId
-                      ? theme.primaryContainer
-                      : pressed
-                        ? theme.surfaceVariant
-                        : "transparent",
-                },
-              ]}
-              onPress={() => handleSelectChat(item.id)}
-            >
-              <View style={styles.chatItemContent}>
-                <MaterialIcons
-                  name="chat-bubble-outline"
-                  size={20}
-                  color={
-                    item.id === currentChatId
-                      ? theme.primary
-                      : theme.textSecondary
-                  }
-                />
-                <View style={styles.chatItemText}>
-                  <ThemedText
-                    style={[
-                      styles.chatTitle,
-                      item.id === currentChatId && { color: theme.primary },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {item.title}
-                  </ThemedText>
-                  <ThemedText
-                    style={[styles.chatDate, { color: theme.textSecondary }]}
-                  >
-                    {formatDate(item.updatedAt)}
-                  </ThemedText>
-                </View>
-              </View>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles.deleteButton,
-                { opacity: pressed ? 0.5 : 1 },
-              ]}
-              onPress={() => handleDeleteChat(item.id, item.title)}
-              hitSlop={8}
-            >
+          <Pressable
+            style={({ pressed }) => [
+              styles.chatItem,
+              {
+                backgroundColor:
+                  item.id === currentChatId
+                    ? theme.primaryContainer
+                    : pressed
+                      ? theme.surfaceVariant
+                      : "transparent",
+              },
+            ]}
+            onPress={() => handleSelectChat(item.id)}
+            onLongPress={() => handleDeleteChat(item.id, item.title)}
+          >
+            <View style={styles.chatItemContent}>
               <MaterialIcons
-                name="delete-outline"
+                name="chat-bubble-outline"
                 size={20}
-                color={theme.textSecondary}
+                color={
+                  item.id === currentChatId
+                    ? theme.primary
+                    : theme.textSecondary
+                }
               />
-            </Pressable>
-          </View>
+              <View style={styles.chatItemText}>
+                <ThemedText
+                  style={[
+                    styles.chatTitle,
+                    item.id === currentChatId && { color: theme.primary },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {item.title}
+                </ThemedText>
+                <ThemedText
+                  style={[styles.chatDate, { color: theme.textSecondary }]}
+                >
+                  {formatDate(item.updatedAt)}
+                </ThemedText>
+              </View>
+            </View>
+          </Pressable>
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -317,19 +302,11 @@ const styles = StyleSheet.create({
   chatList: {
     paddingHorizontal: Spacing.sm,
   },
-  chatItemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: Spacing.xs,
-  },
   chatItem: {
-    flex: 1,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.md,
-  },
-  deleteButton: {
-    padding: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   chatItemContent: {
     flexDirection: "row",
