@@ -12,6 +12,20 @@ const DEFAULT_CAPABILITIES: ModelCapabilities = {
   supportsStreaming: true,
 };
 
+// Default models for each provider (used as fallback in auto mode)
+const PROVIDER_DEFAULT_MODELS: Partial<
+  Record<EndpointConfig["providerId"], string>
+> = {
+  openai: "gpt-4o-mini",
+  anthropic: "claude-3-5-haiku-latest",
+  together: "meta-llama/Llama-3.1-8B-Instruct-Turbo",
+  mistral: "mistral-small-latest",
+  groq: "llama-3.1-8b-instant",
+  deepseek: "deepseek-chat",
+  perplexity: "sonar",
+  dashscope: "qwen-turbo",
+};
+
 const PROVIDER_DEFAULTS: Record<
   EndpointConfig["providerId"],
   ModelCapabilities
@@ -156,6 +170,12 @@ export function getProviderDefaultCapabilities(
 ): ModelCapabilities {
   const defaults = PROVIDER_DEFAULTS[providerId] || DEFAULT_CAPABILITIES;
   return { ...defaults };
+}
+
+export function getProviderDefaultModel(
+  providerId: EndpointConfig["providerId"],
+): string | undefined {
+  return PROVIDER_DEFAULT_MODELS[providerId];
 }
 
 export function getModelCandidates(

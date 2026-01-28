@@ -9,6 +9,7 @@ import {
 import {
   getModelCandidates,
   getProviderDefaultCapabilities,
+  getProviderDefaultModel,
   getModelTier,
 } from "@/lib/agent/model-registry";
 
@@ -250,17 +251,24 @@ export function decideAgentAction({
       selectedCandidate = candidates[0];
       reason = "auto_fallback";
     } else {
-      // No candidates available, return error state
-      const defaultCapabilities = getProviderDefaultCapabilities(
-        endpoint.providerId,
-      );
-      return {
-        model: "",
-        toolChoice: "none",
-        mode: "chat",
-        capabilities: defaultCapabilities,
-        reason: "no_models_available",
-      };
+      // No candidates in registry, use provider's default model
+      const defaultModel = getProviderDefaultModel(endpoint.providerId);
+      if (defaultModel) {
+        selectedCandidate = buildEndpointCandidate(endpoint, defaultModel);
+        reason = "auto_default_model";
+      } else {
+        // No default model for this provider
+        const defaultCapabilities = getProviderDefaultCapabilities(
+          endpoint.providerId,
+        );
+        return {
+          model: "",
+          toolChoice: "none",
+          mode: "chat",
+          capabilities: defaultCapabilities,
+          reason: "no_models_available",
+        };
+      }
     }
   } else {
     // Manual mode: use the specified model
