@@ -232,9 +232,11 @@ const migrateSettings = (
   settings: Settings & {
     mcpCollections?: unknown;
     activeMcpCollectionId?: unknown;
+    chatOptionsVisible?: unknown;
   },
 ): Settings => {
-  const { mcpCollections, activeMcpCollectionId, ...rest } = settings;
+  const { mcpCollections, activeMcpCollectionId, chatOptionsVisible, ...rest } =
+    settings;
 
   // Add prompts.chat MCP server if not present
   const hasPromptsChat = rest.mcpServers?.some(
