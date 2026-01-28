@@ -352,10 +352,28 @@ describe("decideAgentAction", () => {
       expect(decision.reason).toBe("auto_selected_complex");
     });
 
-    it("returns no_models_available when no candidates", () => {
+    it("uses provider default model when no candidates in registry", () => {
       clearModelRegistry();
       const decision = decideAgentAction({
         endpoint: autoEndpoint,
+        messages: baseMessages,
+        tools: [],
+        mcpEnabled: false,
+      });
+
+      // OpenAI provider has default model gpt-4o-mini
+      expect(decision.model).toBe("gpt-4o-mini");
+      expect(decision.reason).toBe("auto_default_model");
+    });
+
+    it("returns no_models_available for custom provider without default", () => {
+      clearModelRegistry();
+      const customEndpoint = {
+        ...autoEndpoint,
+        providerId: "custom" as const,
+      };
+      const decision = decideAgentAction({
+        endpoint: customEndpoint,
         messages: baseMessages,
         tools: [],
         mcpEnabled: false,
