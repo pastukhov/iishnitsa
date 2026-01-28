@@ -18,6 +18,7 @@ import {
   Alert,
   ActionSheetIOS,
   Image,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, DrawerActions } from "@react-navigation/native";
@@ -34,7 +35,11 @@ import { ThemedView } from "@/components/ThemedView";
 import { AttachedImage } from "@/components/AttachedImage";
 import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
 import { useChatStore, Message, MessageAttachment } from "@/lib/store";
-import { sendChatMessage, flushQueuedChatMessages } from "@/lib/api";
+import {
+  sendChatMessage,
+  flushQueuedChatMessages,
+  testConnection,
+} from "@/lib/api";
 import { PromptSelectorModal } from "@/components/PromptSelectorModal";
 import { SystemPrompt, getPromptById } from "@/lib/prompts";
 import {
@@ -204,6 +209,9 @@ export default function ChatScreen() {
     MessageAttachment[]
   >([]);
   const [promptSelectorVisible, setPromptSelectorVisible] = useState(false);
+  const [modelSelectorVisible, setModelSelectorVisible] = useState(false);
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const {
     getCurrentChat,
@@ -214,6 +222,7 @@ export default function ChatScreen() {
     settings,
     loadFromStorage,
     setChatPromptSelection,
+    updateEndpoint,
   } = useChatStore();
 
   const currentChat = getCurrentChat();
@@ -469,6 +478,32 @@ export default function ChatScreen() {
     setPromptSelectorVisible(false);
   }, [currentChat, setChatPromptSelection]);
 
+  const handleOpenModelSelector = useCallback(async () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setModelSelectorVisible(true);
+    if (modelOptions.length === 0 && settings.endpoint.apiKey) {
+      setModelsLoading(true);
+      const result = await testConnection(settings.endpoint);
+      if (result.success && result.models && result.models.length > 0) {
+        setModelOptions(result.models);
+      }
+      setModelsLoading(false);
+    }
+  }, [modelOptions.length, settings.endpoint]);
+
+  const handleSelectModel = useCallback(
+    (model: string) => {
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      updateEndpoint({ model });
+      setModelSelectorVisible(false);
+    },
+    [updateEndpoint],
+  );
+
   return (
     <ThemedView style={styles.container}>
       <View
@@ -491,7 +526,13 @@ export default function ChatScreen() {
           <MaterialIcons name="menu" size={24} color={theme.text} />
         </Pressable>
 
-        <View style={styles.headerCenter}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.headerCenter,
+            { opacity: pressed ? 0.6 : 1 },
+          ]}
+          onPress={handleOpenModelSelector}
+        >
           <View
             style={[
               styles.statusDot,
@@ -503,9 +544,14 @@ export default function ChatScreen() {
             ]}
           />
           <ThemedText style={styles.headerTitle} numberOfLines={1}>
-            {settings.endpoint.model || "Iishnitsa"}
+            {settings.endpoint.model || "Auto"}
           </ThemedText>
-        </View>
+          <MaterialIcons
+            name="expand-more"
+            size={20}
+            color={theme.textSecondary}
+          />
+        </Pressable>
       </View>
 
       <KeyboardAvoidingView
@@ -641,6 +687,106 @@ export default function ChatScreen() {
         onClose={handlePromptClose}
         onSelect={handlePromptSelect}
       />
+      <Modal
+        visible={modelSelectorVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModelSelectorVisible(false)}
+      >
+        <Pressable
+          style={styles.modelOverlay}
+          onPress={() => setModelSelectorVisible(false)}
+        >
+          <View
+            style={[
+              styles.modelSheet,
+              {
+                backgroundColor: theme.backgroundDefault,
+                paddingBottom: insets.bottom + Spacing.md,
+              },
+            ]}
+          >
+            <View style={styles.modelSheetHeader}>
+              <ThemedText style={styles.modelSheetTitle}>Model</ThemedText>
+              <Pressable onPress={() => setModelSelectorVisible(false)}>
+                <MaterialIcons name="close" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+            {modelsLoading ? (
+              <ActivityIndicator
+                size="small"
+                color={theme.primary}
+                style={{ paddingVertical: Spacing.xl }}
+              />
+            ) : (
+              <ScrollView style={styles.modelList}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.modelOption,
+                    {
+                      backgroundColor: !settings.endpoint.model
+                        ? theme.surfaceVariant
+                        : pressed
+                          ? theme.surfaceVariant
+                          : "transparent",
+                    },
+                  ]}
+                  onPress={() => handleSelectModel("")}
+                >
+                  <ThemedText style={{ color: theme.text }}>Auto</ThemedText>
+                  {!settings.endpoint.model && (
+                    <MaterialIcons
+                      name="check"
+                      size={20}
+                      color={theme.primary}
+                    />
+                  )}
+                </Pressable>
+                {modelOptions.map((model) => (
+                  <Pressable
+                    key={model}
+                    style={({ pressed }) => [
+                      styles.modelOption,
+                      {
+                        backgroundColor:
+                          settings.endpoint.model === model
+                            ? theme.surfaceVariant
+                            : pressed
+                              ? theme.surfaceVariant
+                              : "transparent",
+                      },
+                    ]}
+                    onPress={() => handleSelectModel(model)}
+                  >
+                    <ThemedText style={{ color: theme.text }} numberOfLines={1}>
+                      {model}
+                    </ThemedText>
+                    {settings.endpoint.model === model && (
+                      <MaterialIcons
+                        name="check"
+                        size={20}
+                        color={theme.primary}
+                      />
+                    )}
+                  </Pressable>
+                ))}
+                {modelOptions.length === 0 && !modelsLoading && (
+                  <ThemedText
+                    style={[
+                      styles.modelEmptyText,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    {settings.endpoint.apiKey
+                      ? "No models loaded"
+                      : "Set API key in Settings"}
+                  </ThemedText>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
     </ThemedView>
   );
 }
@@ -785,5 +931,43 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginLeft: Spacing.sm,
+  },
+  modelOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modelSheet: {
+    borderTopLeftRadius: BorderRadius["2xl"],
+    borderTopRightRadius: BorderRadius["2xl"],
+    paddingTop: Spacing.lg,
+    maxHeight: "60%",
+  },
+  modelSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  modelSheetTitle: {
+    ...Typography.titleLarge,
+    fontWeight: "600",
+  },
+  modelList: {
+    paddingHorizontal: Spacing.sm,
+  },
+  modelOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  modelEmptyText: {
+    ...Typography.bodyMedium,
+    textAlign: "center",
+    paddingVertical: Spacing.xl,
   },
 });
