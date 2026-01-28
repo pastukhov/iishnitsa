@@ -275,6 +275,7 @@ export default function SettingsScreen() {
   const [showMemoryModal, setShowMemoryModal] = useState(false);
   const [memoryEntries, setMemoryEntries] = useState<MemoryEntry[]>([]);
   const [memoryLoading, setMemoryLoading] = useState(false);
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const memoryStore = useMemo(() => new MemoryStore(), []);
   const systemPromptHeight = useMemo(
     () => Math.max(120, Math.floor(Dimensions.get("window").height / 3)),
@@ -293,16 +294,58 @@ export default function SettingsScreen() {
   const resolvedBaseUrl = isCustomProvider
     ? settings.endpoint.baseUrl
     : providerConfig.baseUrl;
-  const modelSelectOptions =
-    modelOptions.length > 0
-      ? modelOptions.includes(settings.endpoint.model)
+  const AUTO_MODEL_VALUE = "__auto__";
+  const modelSelectOptions = useMemo(() => {
+    const options: { label: string; value: string }[] = [
+      { label: "Auto (select by complexity)", value: AUTO_MODEL_VALUE },
+    ];
+    if (modelOptions.length > 0) {
+      const baseModels = modelOptions.includes(settings.endpoint.model)
         ? modelOptions
-        : [...modelOptions, settings.endpoint.model].filter(Boolean)
-      : [];
+        : [...modelOptions, settings.endpoint.model].filter(Boolean);
+      baseModels.forEach((model) => {
+        options.push({ label: model, value: model });
+      });
+    }
+    return options;
+  }, [modelOptions, settings.endpoint.model]);
 
   useEffect(() => {
     setModelOptions([]);
     setModelStatus(null);
+    setTestResult(null);
+  }, [settings.endpoint.apiKey, settings.endpoint.providerId, resolvedBaseUrl]);
+
+  // Auto-fetch models when endpoint configuration changes
+  useEffect(() => {
+    if (!settings.endpoint.apiKey || !resolvedBaseUrl) {
+      return;
+    }
+
+    const fetchModels = async () => {
+      setModelStatus({ loading: true });
+      const result = await testConnection(settings.endpoint);
+
+      if (result.success && result.models && result.models.length > 0) {
+        setModelOptions(result.models);
+        setModelStatus({
+          loading: false,
+          message: `${result.models.length} models available`,
+        });
+      } else {
+        setModelOptions([]);
+        setModelStatus({
+          loading: false,
+          message: result.success ? "Enter model manually" : undefined,
+          error: result.success ? undefined : result.message,
+        });
+      }
+    };
+
+    // Debounce to avoid too many requests
+    const timeoutId = setTimeout(fetchModels, 500);
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.endpoint.apiKey, settings.endpoint.providerId, resolvedBaseUrl]);
 
   const handleTestConnection = async () => {
@@ -581,15 +624,16 @@ export default function SettingsScreen() {
               Auth format: {formatAuthHeaderLabel(settings.endpoint.providerId)}
             </ThemedText>
 
-            {modelSelectOptions.length > 0 ? (
+            {modelSelectOptions.length > 1 ? (
               <SelectField
                 label="Model"
-                value={settings.endpoint.model}
-                options={modelSelectOptions.map((model) => ({
-                  label: model,
-                  value: model,
-                }))}
-                onSelect={(value) => updateEndpoint({ model: value })}
+                value={settings.endpoint.model || AUTO_MODEL_VALUE}
+                options={modelSelectOptions}
+                onSelect={(value) =>
+                  updateEndpoint({
+                    model: value === AUTO_MODEL_VALUE ? "" : value,
+                  })
+                }
                 placeholder="Select a model"
               />
             ) : (
@@ -597,7 +641,7 @@ export default function SettingsScreen() {
                 label="Model"
                 value={settings.endpoint.model}
                 onChangeText={(text) => updateEndpoint({ model: text })}
-                placeholder="gpt-4o-mini"
+                placeholder="gpt-4o-mini (or leave empty for auto)"
               />
             )}
             {modelStatus?.loading && (
@@ -619,16 +663,6 @@ export default function SettingsScreen() {
                 {modelStatus.error}
               </ThemedText>
             )}
-
-            <InputField
-              label="System Prompt"
-              value={settings.endpoint.systemPrompt}
-              onChangeText={(text) => updateEndpoint({ systemPrompt: text })}
-              placeholder="You are a helpful AI assistant."
-              multiline
-              scrollEnabled
-              inputStyle={{ height: systemPromptHeight }}
-            />
 
             <Pressable
               onPress={handleTestConnection}
@@ -688,6 +722,60 @@ export default function SettingsScreen() {
                 >
                   {testResult.message}
                 </ThemedText>
+              </View>
+            )}
+          </View>
+
+          <SectionHeader title="System Prompt" />
+          <View
+            style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
+          >
+            <Pressable
+              onPress={() => setShowSystemPrompt(!showSystemPrompt)}
+              style={[
+                styles.systemPromptButton,
+                {
+                  backgroundColor: theme.inputBackground,
+                  borderColor: theme.outlineVariant,
+                },
+              ]}
+            >
+              <MaterialIcons name="edit" size={20} color={theme.primary} />
+              <ThemedText style={{ color: theme.primary, flex: 1 }}>
+                Edit System Prompt
+              </ThemedText>
+              <MaterialIcons
+                name={showSystemPrompt ? "expand-less" : "expand-more"}
+                size={20}
+                color={theme.textSecondary}
+              />
+            </Pressable>
+            {showSystemPrompt && (
+              <View style={{ marginTop: Spacing.md }}>
+                <TextInput
+                  style={[
+                    styles.input,
+                    styles.multilineInput,
+                    {
+                      color: theme.text,
+                      backgroundColor: theme.inputBackground,
+                      borderColor: theme.outlineVariant,
+                      borderWidth: 1,
+                      borderRadius: BorderRadius.sm,
+                      height: systemPromptHeight,
+                    },
+                  ]}
+                  value={settings.systemPrompt}
+                  onChangeText={(text) =>
+                    updateSettings({ systemPrompt: text })
+                  }
+                  placeholder="You are a helpful AI assistant."
+                  placeholderTextColor={theme.textSecondary}
+                  multiline
+                  scrollEnabled
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
               </View>
             )}
           </View>
@@ -1302,6 +1390,14 @@ const styles = StyleSheet.create({
   helperText: {
     ...Typography.bodySmall,
     marginTop: Spacing.xs,
+  },
+  systemPromptButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    gap: Spacing.sm,
   },
   testButton: {
     flexDirection: "row",

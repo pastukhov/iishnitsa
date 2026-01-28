@@ -30,20 +30,17 @@ export async function sendChatMessage(
     queueOnFailure?: boolean;
     chatId?: string | null;
     onQueued?: (id: string) => void;
+    systemPrompt?: string;
     chatPrompt?: string;
     memorySettings?: MemorySettings;
   },
 ): Promise<void> {
   try {
-    await runAgentChat(
-      messages,
-      endpoint,
-      onChunk,
-      mcpServers,
-      mcpEnabled,
-      options?.chatPrompt,
-      options?.memorySettings,
-    );
+    await runAgentChat(messages, endpoint, onChunk, mcpServers, mcpEnabled, {
+      systemPrompt: options?.systemPrompt,
+      chatPrompt: options?.chatPrompt,
+      memorySettings: options?.memorySettings,
+    });
   } catch (error: any) {
     if (options?.queueOnFailure && isNetworkError(error)) {
       const payload = {
@@ -52,6 +49,7 @@ export async function sendChatMessage(
         endpoint,
         mcpServers,
         mcpEnabled,
+        systemPrompt: options.systemPrompt,
         memorySettings: options.memorySettings,
         ...(options.chatPrompt !== undefined
           ? { chatPrompt: options.chatPrompt }
@@ -83,8 +81,11 @@ export async function flushQueuedChatMessages(options: {
           options.onChunk,
           payload.mcpServers,
           payload.mcpEnabled,
-          payload.chatPrompt,
-          payload.memorySettings ?? options.memorySettings,
+          {
+            systemPrompt: payload.systemPrompt,
+            chatPrompt: payload.chatPrompt,
+            memorySettings: payload.memorySettings ?? options.memorySettings,
+          },
         );
       } finally {
         options.onItemFinish?.();

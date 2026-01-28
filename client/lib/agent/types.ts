@@ -39,12 +39,15 @@ export interface OpenAIFunction {
 
 export type AgentMode = "chat" | "tool" | "observe";
 
+export type ModelTier = "cheap" | "standard" | "premium";
+
 export interface ModelCapabilities {
   supportsVision: boolean;
   supportsTools: boolean;
   supportsAudio: boolean;
   supportsStreaming: boolean;
   maxContextTokens?: number;
+  tier?: ModelTier;
 }
 
 export interface ModelCatalogEntry {
