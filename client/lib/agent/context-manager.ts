@@ -6,6 +6,7 @@ import { MemoryEntry, MemoryStore } from "@/lib/agent/memory";
 interface ContextBuildInput {
   messages: Message[];
   endpoint: EndpointConfig;
+  systemPrompt?: string;
   chatPrompt?: string;
   memoryStore?: MemoryStore;
   memoryLimit?: number;
@@ -73,6 +74,7 @@ async function buildConversationMessages(
 export async function buildAgentContext({
   messages,
   endpoint,
+  systemPrompt,
   chatPrompt,
   memoryStore,
   memoryLimit,
@@ -80,8 +82,10 @@ export async function buildAgentContext({
 }: ContextBuildInput): Promise<ChatCompletionMessage[]> {
   const chatMessages: ChatCompletionMessage[] = [];
 
+  // Use provided systemPrompt, fallback to endpoint.systemPrompt for backwards compatibility
+  const effectiveSystemPrompt = systemPrompt ?? endpoint.systemPrompt;
   const promptParts = [
-    endpoint.systemPrompt?.trim(),
+    effectiveSystemPrompt?.trim(),
     chatPrompt?.trim(),
   ].filter(Boolean);
 

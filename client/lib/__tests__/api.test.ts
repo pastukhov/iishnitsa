@@ -57,8 +57,11 @@ describe("api", () => {
         onChunk,
         [],
         false,
-        undefined,
-        undefined,
+        {
+          systemPrompt: undefined,
+          chatPrompt: undefined,
+          memorySettings: undefined,
+        },
       );
     });
 
@@ -87,8 +90,11 @@ describe("api", () => {
         onChunk,
         mcpServers,
         true,
-        undefined,
-        undefined,
+        {
+          systemPrompt: undefined,
+          chatPrompt: undefined,
+          memorySettings: undefined,
+        },
       );
     });
 
@@ -166,8 +172,11 @@ describe("api", () => {
         onChunk,
         [],
         false,
-        "Prompt text",
-        undefined,
+        {
+          systemPrompt: undefined,
+          chatPrompt: "Prompt text",
+          memorySettings: undefined,
+        },
       );
     });
 
@@ -191,8 +200,11 @@ describe("api", () => {
         onChunk,
         [],
         false,
-        undefined,
-        memorySettings,
+        {
+          systemPrompt: undefined,
+          chatPrompt: undefined,
+          memorySettings,
+        },
       );
     });
 

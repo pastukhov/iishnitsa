@@ -46,6 +46,7 @@ interface AgentRunInput {
   onChunk: (content: string) => void;
   mcpServers: MCPServer[];
   mcpEnabled: boolean;
+  systemPrompt?: string;
   chatPrompt?: string;
 }
 
@@ -112,6 +113,7 @@ export class AgentCore {
     onChunk,
     mcpServers,
     mcpEnabled,
+    systemPrompt,
     chatPrompt,
   }: AgentRunInput): Promise<void> {
     const context: AgentContext = {
@@ -138,6 +140,7 @@ export class AgentCore {
             context.chatMessages = await buildAgentContext({
               messages: context.rawMessages,
               endpoint,
+              systemPrompt,
               chatPrompt,
               memoryStore: this.memoryEnabled ? this.memoryStore : undefined,
               memoryLimit: this.memoryEnabled ? this.memoryLimit : undefined,
@@ -500,9 +503,13 @@ export async function runAgentChat(
   onChunk: (content: string) => void,
   mcpServers: MCPServer[] = [],
   mcpEnabled: boolean = false,
-  chatPrompt?: string,
-  memorySettings?: MemorySettings,
+  options?: {
+    systemPrompt?: string;
+    chatPrompt?: string;
+    memorySettings?: MemorySettings;
+  },
 ): Promise<void> {
+  const { systemPrompt, chatPrompt, memorySettings } = options || {};
   const agent = new AgentCore(
     memorySettings
       ? {
@@ -521,6 +528,7 @@ export async function runAgentChat(
     onChunk,
     mcpServers,
     mcpEnabled,
+    systemPrompt,
     chatPrompt,
   });
 }
