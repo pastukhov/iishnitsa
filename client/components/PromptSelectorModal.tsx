@@ -649,14 +649,13 @@ const styles = StyleSheet.create({
   },
   tagFilterContainer: {
     marginBottom: Spacing.md,
-    height: 44,
-    flexShrink: 0,
+    maxHeight: 44,
+    minHeight: 44,
   },
   tagFilterContent: {
     paddingHorizontal: Spacing.xs,
     gap: Spacing.sm,
     alignItems: "center",
-    height: 44,
   },
   tagChip: {
     paddingHorizontal: Spacing.md,
