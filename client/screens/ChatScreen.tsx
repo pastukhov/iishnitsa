@@ -47,6 +47,7 @@ import {
   pickImageFromCamera,
   deleteImage,
 } from "@/lib/image-utils";
+import { getProviderDefaultCapabilities } from "@/lib/agent/model-registry";
 
 function MessageBubble({
   message,
@@ -227,6 +228,12 @@ export default function ChatScreen() {
 
   const currentChat = getCurrentChat();
   const messages = useMemo(() => currentChat?.messages || [], [currentChat]);
+  const supportsVision = useMemo(
+    () =>
+      getProviderDefaultCapabilities(settings.endpoint.providerId)
+        .supportsVision,
+    [settings.endpoint.providerId],
+  );
   const selectedPrompt = useMemo(() => {
     if (!currentChat) return null;
     if (currentChat.promptSelection !== "preset" || !currentChat.promptId) {
@@ -624,20 +631,22 @@ export default function ChatScreen() {
               },
             ]}
           >
-            <Pressable
-              onPress={showAttachOptions}
-              disabled={isStreaming}
-              style={({ pressed }) => [
-                styles.attachButton,
-                { opacity: pressed ? 0.6 : 1 },
-              ]}
-            >
-              <MaterialIcons
-                name="add-photo-alternate"
-                size={24}
-                color={isStreaming ? theme.textSecondary : theme.primary}
-              />
-            </Pressable>
+            {supportsVision && (
+              <Pressable
+                onPress={showAttachOptions}
+                disabled={isStreaming}
+                style={({ pressed }) => [
+                  styles.attachButton,
+                  { opacity: pressed ? 0.6 : 1 },
+                ]}
+              >
+                <MaterialIcons
+                  name="add-photo-alternate"
+                  size={24}
+                  color={isStreaming ? theme.textSecondary : theme.primary}
+                />
+              </Pressable>
+            )}
             <TextInput
               style={[styles.input, { color: theme.text }]}
               placeholder="Message Iishnitsa..."
