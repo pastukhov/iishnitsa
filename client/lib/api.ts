@@ -105,6 +105,7 @@ export async function testConnection(endpoint: EndpointConfig): Promise<{
       baseUrl: endpoint.baseUrl,
       apiKey: endpoint.apiKey,
       currentModel: endpoint.model,
+      folderId: endpoint.folderId,
     });
 
     if (result.error) {

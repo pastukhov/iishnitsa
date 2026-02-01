@@ -49,6 +49,7 @@ export interface EndpointConfig {
     | "groq"
     | "dashscope"
     | "custom";
+  folderId?: string;
 }
 
 export interface MCPServer {
@@ -254,6 +255,14 @@ const migrateSettings = (
       ...(rest.mcpServers || []),
     ];
     rest.mcpEnabled = true;
+  }
+
+  // Migrate yandex provider baseUrl
+  if (
+    rest.endpoint?.providerId === "yandex" &&
+    rest.endpoint.baseUrl === "https://api.ai.yandex.net/v1"
+  ) {
+    rest.endpoint.baseUrl = "https://llm.api.cloud.yandex.net/v1";
   }
 
   // Migrate systemPrompt from endpoint to top-level settings

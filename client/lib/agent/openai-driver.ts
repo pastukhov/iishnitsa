@@ -1,5 +1,5 @@
 import { EndpointConfig } from "@/lib/store";
-import { buildAuthHeaders, resolveBaseUrl } from "@/lib/providers";
+import { buildProviderHeaders, resolveBaseUrl } from "@/lib/providers";
 import {
   AgentDecision,
   ChatCompletionMessage,
@@ -44,7 +44,11 @@ export class OpenAICompatibleDriver {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...buildAuthHeaders(endpoint.providerId, endpoint.apiKey),
+        ...buildProviderHeaders(
+          endpoint.providerId,
+          endpoint.apiKey,
+          endpoint.folderId,
+        ),
       },
       body: JSON.stringify(requestBody),
     });

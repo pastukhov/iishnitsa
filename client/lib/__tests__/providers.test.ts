@@ -3,6 +3,7 @@ import {
   getProviderConfig,
   formatAuthHeaderLabel,
   buildAuthHeaders,
+  buildProviderHeaders,
   normalizeBaseUrl,
   resolveBaseUrl,
   fetchProviderModels,
@@ -126,6 +127,35 @@ describe("providers", () => {
 
     it("returns empty object for empty api key", () => {
       const headers = buildAuthHeaders("openai", "");
+      expect(headers).toEqual({});
+    });
+  });
+
+  describe("buildProviderHeaders", () => {
+    it("includes x-folder-id for yandex with folderId", () => {
+      const headers = buildProviderHeaders("yandex", "test-key", "b1abc123");
+      expect(headers).toEqual({
+        Authorization: "Api-Key test-key",
+        "x-folder-id": "b1abc123",
+      });
+    });
+
+    it("does not include x-folder-id for yandex without folderId", () => {
+      const headers = buildProviderHeaders("yandex", "test-key");
+      expect(headers).toEqual({
+        Authorization: "Api-Key test-key",
+      });
+    });
+
+    it("does not include x-folder-id for non-yandex providers", () => {
+      const headers = buildProviderHeaders("openai", "test-key", "ignored");
+      expect(headers).toEqual({
+        Authorization: "Bearer test-key",
+      });
+    });
+
+    it("returns empty object for empty api key", () => {
+      const headers = buildProviderHeaders("yandex", "", "b1abc123");
       expect(headers).toEqual({});
     });
   });
