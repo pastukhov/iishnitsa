@@ -514,6 +514,29 @@ describe("providers", () => {
       expect(result.models).toHaveLength(1);
     });
 
+    it("returns fallback models for yandex with folderId", async () => {
+      const result = await fetchProviderModels({
+        providerId: "yandex",
+        baseUrl: "https://llm.api.cloud.yandex.net/v1",
+        apiKey: "test",
+        folderId: "b1abc123",
+      });
+      expect(result.models).toContain("gpt://b1abc123/yandexgpt-lite/latest");
+      expect(result.models).toContain("gpt://b1abc123/yandexgpt/latest");
+      expect(result.message).toContain("Yandex");
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it("returns error for yandex without folderId", async () => {
+      const result = await fetchProviderModels({
+        providerId: "yandex",
+        baseUrl: "https://llm.api.cloud.yandex.net/v1",
+        apiKey: "test",
+      });
+      expect(result.error).toBe("Folder ID is required for Yandex Cloud.");
+      expect(result.models).toEqual([]);
+    });
+
     it("handles JSON parse error in response", async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,

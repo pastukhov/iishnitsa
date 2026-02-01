@@ -835,6 +835,31 @@ describe("useChatStore", () => {
       expect(useChatStore.getState().currentChatId).toBe("chat1");
     });
 
+    it("migrates yandex provider old baseUrl to new one", async () => {
+      const mockSettings = {
+        endpoint: {
+          providerId: "yandex",
+          baseUrl: "https://api.ai.yandex.net/v1",
+          apiKey: "test-key",
+          model: "yandexgpt-lite/latest",
+        },
+        mcpServers: [],
+      };
+
+      (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) => {
+        if (key === "@ai_agent_settings")
+          return Promise.resolve(JSON.stringify(mockSettings));
+        return Promise.resolve(null);
+      });
+
+      await useChatStore.getState().loadFromStorage();
+
+      const settings = useChatStore.getState().settings;
+      expect(settings.endpoint.baseUrl).toBe(
+        "https://llm.api.cloud.yandex.net/v1",
+      );
+    });
+
     it("migrates legacy settings with collections", async () => {
       const mockSettings = {
         mcpServers: [
