@@ -226,25 +226,39 @@ const extractModels = (payload: any): string[] => {
   return Array.from(new Set(models));
 };
 
+const resolveYandexFolderId = (
+  folderId?: string,
+  currentModel?: string,
+): string | undefined => {
+  if (folderId) return folderId;
+  if (!currentModel) return undefined;
+  const match = currentModel.match(/^gpt:\/\/([^/]+)\//i);
+  return match?.[1];
+};
+
 export const fetchProviderModels = async ({
   providerId,
   baseUrl,
   apiKey,
-  currentModel,
   folderId,
+  currentModel,
 }: {
   providerId: ProviderId;
   baseUrl: string;
   apiKey: string;
-  currentModel?: string;
   folderId?: string;
+  currentModel?: string;
 }): Promise<{ models: string[]; message?: string; error?: string }> => {
   const provider = getProviderConfig(providerId);
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl, {
     appendV1: providerId === "custom",
   });
+  const resolvedFolderId =
+    providerId === "yandex"
+      ? resolveYandexFolderId(folderId, currentModel)
+      : folderId;
   const headers = {
-    ...buildProviderHeaders(providerId, apiKey, folderId),
+    ...buildProviderHeaders(providerId, apiKey, resolvedFolderId),
     "Content-Type": "application/json",
   };
 
@@ -261,20 +275,42 @@ export const fetchProviderModels = async ({
     }
 
     if (provider.modelListType === "yandex") {
-      if (!folderId) {
+      if (!resolvedFolderId) {
         return {
           models: [],
           error: "Folder ID is required for Yandex Cloud.",
         };
       }
+
+      const testModel = `gpt://${resolvedFolderId}/${yandexFallbackModels[0]}`;
+      const response = await fetch(`${normalizedBaseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: testModel,
+          messages: [{ role: "user", content: "test" }],
+          max_tokens: 1,
+          stream: false,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        return {
+          models: [],
+          error:
+            errorText ||
+            `Yandex request failed: ${response.status} ${response.statusText}`,
+        };
+      }
+
       return {
         models: yandexFallbackModels.map(
-          (model) => `gpt://${folderId}/${model}`,
+          (model: string) => `gpt://${resolvedFolderId}/${model}`,
         ),
-        message: "Using built-in Yandex Cloud model list.",
+        message: "Connected! Using Yandex Cloud model list.",
       };
     }
-
     if (provider.modelListType === "anthropic") {
       const modelToCheck = currentModel || anthropicFallbackModels[0] || "";
       if (!modelToCheck) {

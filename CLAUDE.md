@@ -49,7 +49,6 @@ npm run check:providers:mock   # Test with mocked providers (for CI)
 **Предпочтения:**
 - Используй Mobile MCP вместо `adb` для скриншотов, тапов, ввода текста и навигации
 - `adb` оставляй для операций, которые Mobile MCP не покрывает (force-stop, pm clear, etc.)
-
 ## Android Emulator
 
 Для тестирования в эмуляторе:
@@ -79,7 +78,6 @@ adb shell input swipe <x1> <y1> <x2> <y2> <duration_ms>
 
 **Важно:** Скриншоты делай самостоятельно через `adb exec-out screencap` — не проси пользователя.
 Если пользователь кидает скриншот в `./tmp/`, читай его через Read tool.
-
 ## Architecture
 
 ### Directory Structure
