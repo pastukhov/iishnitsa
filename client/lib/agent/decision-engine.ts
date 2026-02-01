@@ -252,7 +252,10 @@ export function decideAgentAction({
       reason = "auto_fallback";
     } else {
       // No candidates in registry, use provider's default model
-      const defaultModel = getProviderDefaultModel(endpoint.providerId);
+      const defaultModel = getProviderDefaultModel(
+        endpoint.providerId,
+        endpoint.folderId,
+      );
       if (defaultModel) {
         selectedCandidate = buildEndpointCandidate(endpoint, defaultModel);
         reason = "auto_default_model";
