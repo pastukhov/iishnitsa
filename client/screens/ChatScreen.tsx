@@ -47,7 +47,11 @@ import {
   pickImageFromCamera,
   deleteImage,
 } from "@/lib/image-utils";
-import { getProviderDefaultCapabilities } from "@/lib/agent/model-registry";
+import {
+  getProviderDefaultCapabilities,
+  getProviderDefaultModel,
+} from "@/lib/agent/model-registry";
+import { getProviderConfig } from "@/lib/providers";
 
 function MessageBubble({
   message,
@@ -214,6 +218,10 @@ export default function ChatScreen() {
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [lastDecision, setLastDecision] = useState<{
+    providerId: string;
+    model: string;
+  } | null>(null);
   const {
     getCurrentChat,
     addMessage,
@@ -234,6 +242,35 @@ export default function ChatScreen() {
         .supportsVision,
     [settings.endpoint.providerId],
   );
+  const providerLabel = useMemo(() => {
+    return getProviderConfig(settings.endpoint.providerId).name;
+  }, [settings.endpoint.providerId]);
+  const displayedModel = useMemo(() => {
+    if (!settings.endpoint.model) {
+      return "Auto";
+    }
+    return settings.endpoint.model;
+  }, [settings.endpoint.model]);
+  const autoResolvedModel = useMemo(() => {
+    if (settings.endpoint.model) {
+      return settings.endpoint.model;
+    }
+
+    if (lastDecision?.model) {
+      return lastDecision.model;
+    }
+
+    const fallback = getProviderDefaultModel(
+      settings.endpoint.providerId,
+      settings.endpoint.folderId,
+    );
+    return fallback || "";
+  }, [
+    lastDecision?.model,
+    settings.endpoint.folderId,
+    settings.endpoint.model,
+    settings.endpoint.providerId,
+  ]);
   const selectedPrompt = useMemo(() => {
     if (!currentChat) return null;
     if (currentChat.promptSelection !== "preset" || !currentChat.promptId) {
@@ -246,6 +283,10 @@ export default function ChatScreen() {
   useEffect(() => {
     loadFromStorage();
   }, [loadFromStorage]);
+
+  useEffect(() => {
+    setLastDecision(null);
+  }, [settings.endpoint.providerId]);
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
@@ -372,6 +413,12 @@ export default function ChatScreen() {
             updateLastAssistantMessage(
               "Queued. Will retry when you're back online.",
             );
+          },
+          onDecision: (decision) => {
+            setLastDecision({
+              providerId: decision.providerId,
+              model: decision.model,
+            });
           },
           systemPrompt: settings.systemPrompt,
           memorySettings: {
@@ -550,9 +597,19 @@ export default function ChatScreen() {
               },
             ]}
           />
-          <ThemedText style={styles.headerTitle} numberOfLines={1}>
-            {settings.endpoint.model || "Auto"}
-          </ThemedText>
+          <View style={styles.headerTitleGroup}>
+            <ThemedText style={styles.headerTitle} numberOfLines={1}>
+              {providerLabel} · {displayedModel}
+            </ThemedText>
+            {displayedModel === "Auto" && autoResolvedModel ? (
+              <ThemedText
+                style={[styles.headerSubtitle, { color: theme.textSecondary }]}
+                numberOfLines={1}
+              >
+                Using {autoResolvedModel}
+              </ThemedText>
+            ) : null}
+          </View>
           <MaterialIcons
             name="expand-more"
             size={20}
@@ -823,6 +880,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: Spacing.sm,
+    minWidth: 0,
+  },
+  headerTitleGroup: {
+    flex: 1,
+    minWidth: 0,
   },
   statusDot: {
     width: 8,
@@ -833,6 +896,10 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...Typography.titleMedium,
     fontWeight: "600",
+    maxWidth: "100%",
+  },
+  headerSubtitle: {
+    ...Typography.bodySmall,
   },
   keyboardContainer: {
     flex: 1,
