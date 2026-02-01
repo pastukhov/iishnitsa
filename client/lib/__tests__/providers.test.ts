@@ -514,17 +514,47 @@ describe("providers", () => {
       expect(result.models).toHaveLength(1);
     });
 
-    it("returns fallback models for yandex with folderId", async () => {
+    it("pings yandex API and returns fallback models on success", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
       const result = await fetchProviderModels({
         providerId: "yandex",
         baseUrl: "https://llm.api.cloud.yandex.net/v1",
         apiKey: "test",
         folderId: "b1abc123",
       });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        "https://llm.api.cloud.yandex.net/v1/chat/completions",
+        expect.objectContaining({
+          method: "POST",
+        }),
+      );
       expect(result.models).toContain("gpt://b1abc123/yandexgpt-lite/latest");
       expect(result.models).toContain("gpt://b1abc123/yandexgpt/latest");
       expect(result.message).toContain("Yandex");
-      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it("returns error for failed yandex API ping", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+        text: () => Promise.resolve("Invalid API key"),
+      });
+
+      const result = await fetchProviderModels({
+        providerId: "yandex",
+        baseUrl: "https://llm.api.cloud.yandex.net/v1",
+        apiKey: "bad-key",
+        folderId: "b1abc123",
+      });
+
+      expect(result.error).toBe("Invalid API key");
+      expect(result.models).toEqual([]);
     });
 
     it("returns error for yandex without folderId", async () => {
