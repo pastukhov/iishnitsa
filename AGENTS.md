@@ -27,6 +27,11 @@
 - After a PR is merged, always start a new branch from the latest `main` for the next change.
 - Prefer `gh api` for repository queries if standard `gh` commands rely on git in environments where git execution is restricted.
 
+## Subagent Workflow
+- For features, bug fixes, and refactors, follow the CLAUDE.md subagent chain:
+  - Explore (haiku) -> Plan (sonnet) -> branch -> implementation -> checks.
+  - Use systematic-debugging for failures, senior-devops for CI/CD/build issues, and senior-prompt-engineer for prompt changes.
+
 ## Coding Style & Naming Conventions
 - TypeScript/JavaScript with double quotes and 2-space indentation (enforced by Prettier).
 - Prefer descriptive, explicit names for components and hooks (e.g., `ChatView`, `useStore`).
