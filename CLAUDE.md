@@ -29,6 +29,27 @@ npm run check:providers        # Test AI provider connectivity (requires API key
 npm run check:providers:mock   # Test with mocked providers (for CI)
 ```
 
+## Mobile MCP
+
+Подключен Mobile MCP — используй его для взаимодействия с Android эмулятором вместо adb-команд.
+
+**Основные операции:**
+- `mobile_list_available_devices` — список доступных устройств
+- `mobile_take_screenshot` / `mobile_save_screenshot` — скриншоты
+- `mobile_list_elements_on_screen` — получить элементы UI с координатами
+- `mobile_click_on_screen_at_coordinates` — тап по координатам
+- `mobile_type_keys` — ввод текста
+- `mobile_swipe_on_screen` — свайп (скролл)
+- `mobile_launch_app` / `mobile_terminate_app` — запуск/остановка приложений
+- `mobile_press_button` — аппаратные кнопки (HOME, BACK, etc.)
+
+**Device ID:** `emulator-5554` (Pixel 7 Pro, Android 15)
+**Package name:** `com.iishnitsa.app`
+
+**Предпочтения:**
+- Используй Mobile MCP вместо `adb` для скриншотов, тапов, ввода текста и навигации
+- `adb` оставляй для операций, которые Mobile MCP не покрывает (force-stop, pm clear, etc.)
+
 ## Android Emulator
 
 Для тестирования в эмуляторе:
