@@ -314,7 +314,12 @@ export default function SettingsScreen() {
     setModelOptions([]);
     setModelStatus(null);
     setTestResult(null);
-  }, [settings.endpoint.apiKey, settings.endpoint.providerId, resolvedBaseUrl]);
+  }, [
+    settings.endpoint.apiKey,
+    settings.endpoint.providerId,
+    resolvedBaseUrl,
+    settings.endpoint.folderId,
+  ]);
 
   // Auto-fetch models when endpoint configuration changes
   useEffect(() => {
@@ -346,7 +351,12 @@ export default function SettingsScreen() {
     const timeoutId = setTimeout(fetchModels, 500);
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.endpoint.apiKey, settings.endpoint.providerId, resolvedBaseUrl]);
+  }, [
+    settings.endpoint.apiKey,
+    settings.endpoint.providerId,
+    resolvedBaseUrl,
+    settings.endpoint.folderId,
+  ]);
 
   const handleTestConnection = async () => {
     if (Platform.OS !== "web") {
@@ -505,6 +515,8 @@ export default function SettingsScreen() {
     updateEndpoint({
       providerId,
       baseUrl: providerId === "custom" ? "" : provider.baseUrl,
+      model: "",
+      ...(!provider.requiresFolderId ? { folderId: undefined } : {}),
     });
   };
 
@@ -623,6 +635,22 @@ export default function SettingsScreen() {
             >
               Auth format: {formatAuthHeaderLabel(settings.endpoint.providerId)}
             </ThemedText>
+
+            {providerConfig.requiresFolderId && (
+              <>
+                <InputField
+                  label="Folder ID"
+                  value={settings.endpoint.folderId || ""}
+                  onChangeText={(text) => updateEndpoint({ folderId: text })}
+                  placeholder="b1abc123def456..."
+                />
+                <ThemedText
+                  style={[styles.helperText, { color: theme.textSecondary }]}
+                >
+                  Yandex Cloud folder ID from the cloud console.
+                </ThemedText>
+              </>
+            )}
 
             {modelSelectOptions.length > 1 ? (
               <SelectField

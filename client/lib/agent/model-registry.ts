@@ -24,6 +24,7 @@ const PROVIDER_DEFAULT_MODELS: Partial<
   deepseek: "deepseek-chat",
   perplexity: "sonar",
   dashscope: "qwen-turbo",
+  yandex: "yandexgpt-lite/latest",
 };
 
 const PROVIDER_DEFAULTS: Record<
@@ -129,6 +130,12 @@ const MODEL_TIER_PATTERNS: Record<
     // Standard tier
     { pattern: /sonar/i, tier: "standard" },
   ],
+  yandex: [
+    // Premium tier
+    { pattern: /yandexgpt\//, tier: "premium" },
+    // Cheap tier
+    { pattern: /yandexgpt-lite\//, tier: "cheap" },
+  ],
 };
 
 export function getModelTier(providerId: string, modelName: string): ModelTier {
@@ -174,8 +181,14 @@ export function getProviderDefaultCapabilities(
 
 export function getProviderDefaultModel(
   providerId: EndpointConfig["providerId"],
+  folderId?: string,
 ): string | undefined {
-  return PROVIDER_DEFAULT_MODELS[providerId];
+  const model = PROVIDER_DEFAULT_MODELS[providerId];
+  if (!model) return undefined;
+  if (providerId === "yandex" && folderId) {
+    return `gpt://${folderId}/${model}`;
+  }
+  return model;
 }
 
 export function getModelCandidates(
