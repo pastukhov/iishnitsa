@@ -29,6 +29,36 @@ npm run check:providers        # Test AI provider connectivity (requires API key
 npm run check:providers:mock   # Test with mocked providers (for CI)
 ```
 
+## Android Emulator
+
+Для тестирования в эмуляторе:
+
+```bash
+# Скриншот эмулятора (сохранить в tmp/)
+adb exec-out screencap -p > tmp/screen.png
+
+# Перезапуск приложения
+adb shell am force-stop com.iishnitsa.app && adb shell am start -n com.iishnitsa.app/.MainActivity
+
+# Очистка данных приложения (полный сброс)
+adb shell pm clear com.iishnitsa.app
+
+# Проверка подключённых устройств
+adb devices
+
+# Tap по координатам (координаты — в пикселях оригинального разрешения)
+adb shell input tap <x> <y>
+
+# Ввод текста
+adb shell input text 'hello'
+
+# Свайп (для скролла)
+adb shell input swipe <x1> <y1> <x2> <y2> <duration_ms>
+```
+
+**Важно:** Скриншоты делай самостоятельно через `adb exec-out screencap` — не проси пользователя.
+Если пользователь кидает скриншот в `./tmp/`, читай его через Read tool.
+
 ## Architecture
 
 ### Directory Structure

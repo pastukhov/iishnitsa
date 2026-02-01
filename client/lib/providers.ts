@@ -11,7 +11,12 @@ export type ProviderId =
   | "dashscope"
   | "custom";
 
-export type ModelListType = "openai" | "anthropic" | "replicate" | "perplexity";
+export type ModelListType =
+  | "openai"
+  | "anthropic"
+  | "replicate"
+  | "perplexity"
+  | "yandex";
 
 export interface ProviderConfig {
   id: ProviderId;
@@ -20,6 +25,7 @@ export interface ProviderConfig {
   authHeader: string;
   authFormat: string;
   modelListType: ModelListType;
+  requiresFolderId?: boolean;
 }
 
 const providers: ProviderConfig[] = [
@@ -65,11 +71,12 @@ const providers: ProviderConfig[] = [
   },
   {
     id: "yandex",
-    name: "Yandex AI Studio",
-    baseUrl: "https://api.ai.yandex.net/v1",
+    name: "Yandex Cloud",
+    baseUrl: "https://llm.api.cloud.yandex.net/v1",
     authHeader: "Authorization",
     authFormat: "Api-Key <KEY>",
-    modelListType: "openai",
+    modelListType: "yandex",
+    requiresFolderId: true,
   },
   {
     id: "replicate",
@@ -120,6 +127,14 @@ const perplexityFallbackModels = [
   "sonar-pro-reasoning",
 ];
 
+// Model name suffixes; prefixed with gpt://<folderId>/ at runtime
+const yandexFallbackModels = [
+  "yandexgpt-lite/latest",
+  "yandexgpt/latest",
+  "yandexgpt-lite/rc",
+  "yandexgpt/rc",
+];
+
 const anthropicFallbackModels = [
   "claude-3-5-sonnet-20240620",
   "claude-3-5-haiku-20241022",
@@ -148,6 +163,19 @@ export const buildAuthHeaders = (
   return {
     [provider.authHeader]: provider.authFormat.replace("<KEY>", apiKey),
   };
+};
+
+export const buildProviderHeaders = (
+  providerId: ProviderId,
+  apiKey: string,
+  folderId?: string,
+): Record<string, string> => {
+  if (!apiKey) return {};
+  const headers = buildAuthHeaders(providerId, apiKey);
+  if (providerId === "yandex" && folderId) {
+    headers["x-folder-id"] = folderId;
+  }
+  return headers;
 };
 
 export const normalizeBaseUrl = (
@@ -203,18 +231,20 @@ export const fetchProviderModels = async ({
   baseUrl,
   apiKey,
   currentModel,
+  folderId,
 }: {
   providerId: ProviderId;
   baseUrl: string;
   apiKey: string;
   currentModel?: string;
+  folderId?: string;
 }): Promise<{ models: string[]; message?: string; error?: string }> => {
   const provider = getProviderConfig(providerId);
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl, {
     appendV1: providerId === "custom",
   });
   const headers = {
-    ...buildAuthHeaders(providerId, apiKey),
+    ...buildProviderHeaders(providerId, apiKey, folderId),
     "Content-Type": "application/json",
   };
 
@@ -227,6 +257,21 @@ export const fetchProviderModels = async ({
       return {
         models: perplexityFallbackModels,
         message: "Using built-in Perplexity model list.",
+      };
+    }
+
+    if (provider.modelListType === "yandex") {
+      if (!folderId) {
+        return {
+          models: [],
+          error: "Folder ID is required for Yandex Cloud.",
+        };
+      }
+      return {
+        models: yandexFallbackModels.map(
+          (model) => `gpt://${folderId}/${model}`,
+        ),
+        message: "Using built-in Yandex Cloud model list.",
       };
     }
 
