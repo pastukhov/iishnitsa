@@ -44,6 +44,7 @@ interface AgentRunInput {
   messages: Message[];
   endpoint: EndpointConfig;
   onChunk: (content: string) => void;
+  onDecision?: (decision: AgentDecision) => void;
   mcpServers: MCPServer[];
   mcpEnabled: boolean;
   systemPrompt?: string;
@@ -111,6 +112,7 @@ export class AgentCore {
     messages,
     endpoint,
     onChunk,
+    onDecision,
     mcpServers,
     mcpEnabled,
     systemPrompt,
@@ -128,6 +130,8 @@ export class AgentCore {
     };
 
     this.state = "RECEIVE_INPUT";
+
+    let decisionEmitted = false;
 
     while (this.state !== "IDLE") {
       switch (this.state) {
@@ -175,6 +179,10 @@ export class AgentCore {
             tools: context.tools,
             mcpEnabled,
           });
+          if (context.decision && !decisionEmitted) {
+            onDecision?.(context.decision);
+            decisionEmitted = true;
+          }
           this.state = "ACT";
           break;
         }
@@ -507,6 +515,7 @@ export async function runAgentChat(
     systemPrompt?: string;
     chatPrompt?: string;
     memorySettings?: MemorySettings;
+    onDecision?: (decision: AgentDecision) => void;
   },
 ): Promise<void> {
   const { systemPrompt, chatPrompt, memorySettings } = options || {};
@@ -530,5 +539,6 @@ export async function runAgentChat(
     mcpEnabled,
     systemPrompt,
     chatPrompt,
+    onDecision: options?.onDecision,
   });
 }
