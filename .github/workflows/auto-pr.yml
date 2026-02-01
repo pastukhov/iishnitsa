@@ -5,6 +5,10 @@ on:
     branches-ignore:
       - main
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   open-pr:
     runs-on: ubuntu-latest
