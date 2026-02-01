@@ -557,6 +557,32 @@ describe("providers", () => {
       expect(result.models).toEqual([]);
     });
 
+    it("derives yandex folderId from current model when missing", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const result = await fetchProviderModels({
+        providerId: "yandex",
+        baseUrl: "https://llm.api.cloud.yandex.net/v1",
+        apiKey: "test",
+        currentModel: "gpt://b1abc123/yandexgpt-lite/latest",
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        "https://llm.api.cloud.yandex.net/v1/chat/completions",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            "x-folder-id": "b1abc123",
+          }),
+        }),
+      );
+      expect(result.models).toContain("gpt://b1abc123/yandexgpt-lite/latest");
+      expect(result.models).toContain("gpt://b1abc123/yandexgpt/latest");
+    });
+
     it("returns error for yandex without folderId", async () => {
       const result = await fetchProviderModels({
         providerId: "yandex",
