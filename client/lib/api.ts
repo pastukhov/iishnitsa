@@ -33,6 +33,7 @@ export async function sendChatMessage(
     systemPrompt?: string;
     chatPrompt?: string;
     memorySettings?: MemorySettings;
+    onDecision?: (decision: { providerId: string; model: string }) => void;
   },
 ): Promise<void> {
   try {
@@ -40,6 +41,13 @@ export async function sendChatMessage(
       systemPrompt: options?.systemPrompt,
       chatPrompt: options?.chatPrompt,
       memorySettings: options?.memorySettings,
+      onDecision: options?.onDecision
+        ? (decision) =>
+            options.onDecision?.({
+              providerId: endpoint.providerId,
+              model: decision.model,
+            })
+        : undefined,
     });
   } catch (error: any) {
     if (options?.queueOnFailure && isNetworkError(error)) {
