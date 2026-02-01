@@ -2,6 +2,8 @@ import {
   registerModel,
   clearModelRegistry,
   getProviderDefaultCapabilities,
+  getProviderDefaultModel,
+  getModelTier,
   getModelCandidates,
 } from "../model-registry";
 import { EndpointConfig } from "@/lib/store";
@@ -83,6 +85,46 @@ describe("model-registry", () => {
     expect(candidates).toHaveLength(1);
     expect(candidates[0].capabilities.supportsVision).toBe(true);
     expect(candidates[0].priority).toBe(2);
+  });
+
+  describe("getProviderDefaultModel", () => {
+    it("returns default model for openai", () => {
+      expect(getProviderDefaultModel("openai")).toBe("gpt-4o-mini");
+    });
+
+    it("returns yandex model with folderId as gpt:// URI", () => {
+      expect(getProviderDefaultModel("yandex", "b1abc123")).toBe(
+        "gpt://b1abc123/yandexgpt-lite/latest",
+      );
+    });
+
+    it("returns plain yandex model without folderId", () => {
+      expect(getProviderDefaultModel("yandex")).toBe("yandexgpt-lite/latest");
+    });
+
+    it("returns undefined for unknown provider", () => {
+      expect(
+        getProviderDefaultModel("custom" as EndpointConfig["providerId"]),
+      ).toBeUndefined();
+    });
+  });
+
+  describe("getModelTier", () => {
+    it("returns premium for yandexgpt/", () => {
+      expect(getModelTier("yandex", "gpt://folder/yandexgpt/latest")).toBe(
+        "premium",
+      );
+    });
+
+    it("returns cheap for yandexgpt-lite/", () => {
+      expect(getModelTier("yandex", "gpt://folder/yandexgpt-lite/latest")).toBe(
+        "cheap",
+      );
+    });
+
+    it("returns standard for unknown model in known provider", () => {
+      expect(getModelTier("yandex", "some-unknown-model")).toBe("standard");
+    });
   });
 
   it("clears the registry", () => {
