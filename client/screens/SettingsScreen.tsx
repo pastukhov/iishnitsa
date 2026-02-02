@@ -512,11 +512,29 @@ export default function SettingsScreen() {
 
   const handleProviderChange = (providerId: ProviderId) => {
     const provider = getProviderConfig(providerId);
+    const currentProviderId = settings.endpoint.providerId;
+
+    // Save current key/folderId for the old provider
+    const providerKeys = { ...settings.providerKeys };
+    const providerFolderIds = { ...settings.providerFolderIds };
+    if (settings.endpoint.apiKey) {
+      providerKeys[currentProviderId] = settings.endpoint.apiKey;
+    }
+    if (settings.endpoint.folderId) {
+      providerFolderIds[currentProviderId] = settings.endpoint.folderId;
+    }
+
+    // Restore saved key/folderId for the new provider
+    const savedKey = providerKeys[providerId] ?? "";
+    const savedFolderId = providerFolderIds[providerId] ?? "";
+
+    updateSettings({ providerKeys, providerFolderIds });
     updateEndpoint({
       providerId,
       baseUrl: providerId === "custom" ? "" : provider.baseUrl,
       model: "",
-      ...(!provider.requiresFolderId ? { folderId: undefined } : {}),
+      apiKey: savedKey,
+      folderId: provider.requiresFolderId ? savedFolderId : undefined,
     });
   };
 
