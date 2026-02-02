@@ -74,6 +74,8 @@ export interface Settings {
   favoritePromptIds: string[];
   recentPromptIds: string[];
   systemPrompt: string;
+  providerKeys: Partial<Record<EndpointConfig["providerId"], string>>;
+  providerFolderIds: Partial<Record<EndpointConfig["providerId"], string>>;
 }
 
 interface ChatStore {
@@ -223,6 +225,8 @@ const defaultSettings: Settings = {
   favoritePromptIds: [],
   recentPromptIds: [],
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  providerKeys: {},
+  providerFolderIds: {},
 };
 
 const generateId = () => {
@@ -271,6 +275,28 @@ const migrateSettings = (
     delete rest.endpoint.systemPrompt;
   } else if (!rest.systemPrompt) {
     rest.systemPrompt = DEFAULT_SYSTEM_PROMPT;
+  }
+
+  // Migrate per-provider keys
+  if (!rest.providerKeys) {
+    rest.providerKeys = {};
+  }
+  if (!rest.providerFolderIds) {
+    rest.providerFolderIds = {};
+  }
+  if (
+    rest.endpoint?.apiKey &&
+    rest.endpoint?.providerId &&
+    !rest.providerKeys[rest.endpoint.providerId]
+  ) {
+    rest.providerKeys[rest.endpoint.providerId] = rest.endpoint.apiKey;
+  }
+  if (
+    rest.endpoint?.folderId &&
+    rest.endpoint?.providerId &&
+    !rest.providerFolderIds[rest.endpoint.providerId]
+  ) {
+    rest.providerFolderIds[rest.endpoint.providerId] = rest.endpoint.folderId;
   }
 
   return rest;
@@ -451,9 +477,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   updateEndpoint: (endpoint) => {
     set((state) => {
+      const newEndpoint = { ...state.settings.endpoint, ...endpoint };
+      const providerKeys = { ...state.settings.providerKeys };
+      const providerFolderIds = { ...state.settings.providerFolderIds };
+
+      if (endpoint.apiKey !== undefined) {
+        providerKeys[newEndpoint.providerId] = endpoint.apiKey;
+      }
+      if (endpoint.folderId !== undefined) {
+        providerFolderIds[newEndpoint.providerId] = endpoint.folderId;
+      }
+
       const settings = {
         ...state.settings,
-        endpoint: { ...state.settings.endpoint, ...endpoint },
+        endpoint: newEndpoint,
+        providerKeys,
+        providerFolderIds,
       };
       AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
       return { settings };
