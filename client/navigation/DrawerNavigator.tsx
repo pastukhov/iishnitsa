@@ -87,13 +87,11 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
     <ThemedView style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
         <View style={styles.profileRow}>
-          <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-            <Image
-              source={require("../../assets/images/android-icon-foreground.png")}
-              style={styles.avatarImage}
-              resizeMode="contain"
-            />
-          </View>
+          <Image
+            source={require("../../assets/images/android-icon-foreground.png")}
+            style={styles.avatar}
+            resizeMode="contain"
+          />
           <View style={styles.profileInfo}>
             <ThemedText style={styles.appName}>{t.appName}</ThemedText>
             <ThemedText
@@ -262,13 +260,6 @@ const styles = StyleSheet.create({
   avatar: {
     width: 48,
     height: 48,
-    borderRadius: BorderRadius.full,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  avatarImage: {
-    width: 36,
-    height: 36,
   },
   profileInfo: {
     marginLeft: Spacing.md,
