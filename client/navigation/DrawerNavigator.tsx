@@ -89,7 +89,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         <View style={styles.profileRow}>
           <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
             <Image
-              source={require("../../assets/images/icon.png")}
+              source={require("../../assets/images/android-icon-foreground.png")}
               style={styles.avatarImage}
               resizeMode="contain"
             />
@@ -267,9 +267,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: BorderRadius.full,
+    width: 36,
+    height: 36,
   },
   profileInfo: {
     marginLeft: Spacing.md,
