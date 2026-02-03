@@ -610,6 +610,26 @@ export default function SettingsScreen() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
+          <SectionHeader title="Appearance" />
+          <View
+            style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
+          >
+            <SelectField
+              label="Theme"
+              value={settings.theme}
+              options={[
+                { label: "System", value: "system" },
+                { label: "Light", value: "light" },
+                { label: "Dark", value: "dark" },
+              ]}
+              onSelect={(value) =>
+                updateSettings({
+                  theme: value as "system" | "light" | "dark",
+                })
+              }
+            />
+          </View>
+
           <SectionHeader title="Endpoint Configuration" />
           <View
             style={[styles.card, { backgroundColor: theme.backgroundDefault }]}

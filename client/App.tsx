@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { StyleSheet } from "react-native";
+import { Appearance, StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -15,15 +15,30 @@ import { useChatStore } from "@/lib/store";
 
 function AppContent() {
   const loadFromStorage = useChatStore((state) => state.loadFromStorage);
+  const themeSetting = useChatStore((state) => state.settings.theme);
 
   useEffect(() => {
     loadFromStorage();
   }, [loadFromStorage]);
 
+  useEffect(() => {
+    Appearance.setColorScheme(themeSetting === "system" ? null : themeSetting);
+  }, [themeSetting]);
+
+  const statusBarStyle =
+    themeSetting === "system"
+      ? "auto"
+      : themeSetting === "dark"
+        ? "light"
+        : "dark";
+
   return (
-    <NavigationContainer>
-      <RootStackNavigator />
-    </NavigationContainer>
+    <>
+      <NavigationContainer>
+        <RootStackNavigator />
+      </NavigationContainer>
+      <StatusBar style={statusBarStyle} />
+    </>
   );
 }
 
@@ -35,7 +50,6 @@ export default function App() {
           <GestureHandlerRootView style={styles.root}>
             <KeyboardProvider>
               <AppContent />
-              <StatusBar style="auto" />
             </KeyboardProvider>
           </GestureHandlerRootView>
         </SafeAreaProvider>
