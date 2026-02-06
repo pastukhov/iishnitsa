@@ -41,7 +41,13 @@ jest.mock("expo-file-system/legacy", () => ({
   makeDirectoryAsync: jest.fn(() => Promise.resolve()),
   copyAsync: jest.fn(() => Promise.resolve()),
   readAsStringAsync: jest.fn(() => Promise.resolve("mockBase64Data")),
+  writeAsStringAsync: jest.fn(() => Promise.resolve()),
   deleteAsync: jest.fn(() => Promise.resolve()),
+  downloadAsync: jest.fn(() =>
+    Promise.resolve({
+      uri: "file:///mock/documents/chat_images/downloaded.png",
+    }),
+  ),
   EncodingType: { Base64: "base64" },
 }));
 

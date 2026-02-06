@@ -38,6 +38,12 @@ import {
   pickImageFromCamera,
   deleteImage,
 } from "@/lib/image-utils";
+import {
+  isImageGenerationModel,
+  detectImageGenerationIntent,
+  getDefaultImageModel,
+  generateImage,
+} from "@/lib/image-generation";
 
 function MessageBubble({
   message,
@@ -251,30 +257,50 @@ export default function ChatScreen() {
       return;
     }
 
+    const effectiveModel = settings.endpoint.model;
+    const isAutoMode = !effectiveModel;
+    const isExplicitImageGen =
+      effectiveModel && isImageGenerationModel(effectiveModel);
+    const autoImageModel =
+      isAutoMode && text && detectImageGenerationIntent(text)
+        ? getDefaultImageModel(settings.endpoint.providerId)
+        : null;
+    const isImageGen = isExplicitImageGen || autoImageModel !== null;
+
     setIsStreaming(true);
     addMessage({ role: "assistant", content: "" });
 
     try {
-      const allMessages = [
-        ...messages,
-        {
-          id: "temp",
-          role: "user" as const,
-          content: text,
-          timestamp: new Date().toISOString(),
-          attachments: hasAttachments ? attachmentsToSend : undefined,
-        },
-      ];
+      if (isImageGen && text) {
+        updateLastAssistantMessage("Generating image...");
+        const imageEndpoint = autoImageModel
+          ? { ...settings.endpoint, model: autoImageModel }
+          : settings.endpoint;
+        const result = await generateImage(imageEndpoint, text);
+        const caption = result.revisedPrompt ? result.revisedPrompt : "";
+        updateLastAssistantMessage(caption, [result.attachment]);
+      } else {
+        const allMessages = [
+          ...messages,
+          {
+            id: "temp",
+            role: "user" as const,
+            content: text,
+            timestamp: new Date().toISOString(),
+            attachments: hasAttachments ? attachmentsToSend : undefined,
+          },
+        ];
 
-      await sendChatMessage(
-        allMessages,
-        settings.endpoint,
-        (chunk) => {
-          updateLastAssistantMessage(chunk);
-        },
-        settings.mcpServers,
-        settings.mcpEnabled,
-      );
+        await sendChatMessage(
+          allMessages,
+          settings.endpoint,
+          (chunk) => {
+            updateLastAssistantMessage(chunk);
+          },
+          settings.mcpServers,
+          settings.mcpEnabled,
+        );
+      }
     } catch (error: any) {
       updateLastAssistantMessage(
         `Error: ${error.message || "Failed to get response from AI"}`,

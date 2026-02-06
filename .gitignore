@@ -43,6 +43,9 @@ yarn-error.*
 
 app-example
 
+# test coverage
+coverage/
+
 # generated native folders
 /ios
 /android
