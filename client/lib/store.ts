@@ -94,7 +94,10 @@ interface ChatStore {
       attachments?: MessageAttachment[];
     },
   ) => void;
-  updateLastAssistantMessage: (content: string) => void;
+  updateLastAssistantMessage: (
+    content: string,
+    attachments?: MessageAttachment[],
+  ) => void;
   getCurrentChat: () => Chat | null;
   updateSettings: (settings: Partial<Settings>) => void;
   updateEndpoint: (endpoint: Partial<EndpointConfig>) => void;
@@ -443,14 +446,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     });
   },
 
-  updateLastAssistantMessage: (content: string) => {
+  updateLastAssistantMessage: (
+    content: string,
+    attachments?: MessageAttachment[],
+  ) => {
     set((state) => {
       const updatedChats = state.chats.map((chat) => {
         if (chat.id === state.currentChatId) {
           const messages = [...chat.messages];
           const lastMessage = messages[messages.length - 1];
           if (lastMessage && lastMessage.role === "assistant") {
-            messages[messages.length - 1] = { ...lastMessage, content };
+            const updated = { ...lastMessage, content };
+            if (attachments) {
+              updated.attachments = [
+                ...(lastMessage.attachments || []),
+                ...attachments,
+              ];
+            }
+            messages[messages.length - 1] = updated;
           }
           return { ...chat, messages, updatedAt: new Date().toISOString() };
         }
