@@ -47,6 +47,7 @@ import {
   pickImageFromCamera,
   deleteImage,
 } from "@/lib/image-utils";
+import { isImageGenerationModel, generateImage } from "@/lib/image-generation";
 import {
   getProviderDefaultCapabilities,
   getProviderDefaultModel,
@@ -383,56 +384,66 @@ export default function ChatScreen() {
       return;
     }
 
+    const effectiveModel = settings.endpoint.model || autoResolvedModel;
+    const isImageGen = isImageGenerationModel(effectiveModel);
+
     setIsStreaming(true);
     addMessage({ role: "assistant", content: "" });
 
     try {
-      const allMessages = [
-        ...messages,
-        {
-          id: "temp",
-          role: "user" as const,
-          content: text,
-          timestamp: new Date().toISOString(),
-          attachments: hasAttachments ? attachmentsToSend : undefined,
-        },
-      ];
+      if (isImageGen && text) {
+        updateLastAssistantMessage("Generating image...");
+        const result = await generateImage(settings.endpoint, text);
+        const caption = result.revisedPrompt ? result.revisedPrompt : "";
+        updateLastAssistantMessage(caption, [result.attachment]);
+      } else {
+        const allMessages = [
+          ...messages,
+          {
+            id: "temp",
+            role: "user" as const,
+            content: text,
+            timestamp: new Date().toISOString(),
+            attachments: hasAttachments ? attachmentsToSend : undefined,
+          },
+        ];
 
-      await sendChatMessage(
-        allMessages,
-        settings.endpoint,
-        (chunk) => {
-          updateLastAssistantMessage(chunk);
-        },
-        settings.mcpServers,
-        settings.mcpEnabled,
-        {
-          queueOnFailure: true,
-          chatId: currentChat?.id,
-          onQueued: () => {
-            updateLastAssistantMessage(
-              "Queued. Will retry when you're back online.",
-            );
+        await sendChatMessage(
+          allMessages,
+          settings.endpoint,
+          (chunk) => {
+            updateLastAssistantMessage(chunk);
           },
-          onDecision: (decision) => {
-            setLastDecision({
-              providerId: decision.providerId,
-              model: decision.model,
-            });
+          settings.mcpServers,
+          settings.mcpEnabled,
+          {
+            queueOnFailure: true,
+            chatId: currentChat?.id,
+            onQueued: () => {
+              updateLastAssistantMessage(
+                "Queued. Will retry when you're back online.",
+              );
+            },
+            onDecision: (decision) => {
+              setLastDecision({
+                providerId: decision.providerId,
+                model: decision.model,
+              });
+            },
+            systemPrompt: settings.systemPrompt,
+            memorySettings: {
+              enabled: settings.memoryEnabled,
+              autoSave: settings.memoryAutoSave,
+              autoSummary:
+                settings.memoryAutoSummary && Boolean(memorySummaryEnabled),
+              limit: settings.memoryLimit,
+              minImportance: settings.memoryMinImportance,
+              summaryTtlMs: settings.memorySummaryTtlDays * 24 * 60 * 60 * 1000,
+            },
+            chatPrompt: selectedPrompt?.prompt,
           },
-          systemPrompt: settings.systemPrompt,
-          memorySettings: {
-            enabled: settings.memoryEnabled,
-            autoSave: settings.memoryAutoSave,
-            autoSummary:
-              settings.memoryAutoSummary && Boolean(memorySummaryEnabled),
-            limit: settings.memoryLimit,
-            minImportance: settings.memoryMinImportance,
-            summaryTtlMs: settings.memorySummaryTtlDays * 24 * 60 * 60 * 1000,
-          },
-          chatPrompt: selectedPrompt?.prompt,
-        },
-      );
+        );
+      }
     } catch (error: any) {
       updateLastAssistantMessage(
         `Error: ${error.message || "Failed to get response from AI"}`,
@@ -452,6 +463,7 @@ export default function ChatScreen() {
     setIsStreaming,
     selectedPrompt?.prompt,
     memorySummaryEnabled,
+    autoResolvedModel,
   ]);
 
   const openDrawer = () => {
