@@ -222,7 +222,7 @@ export function decideAgentAction({
   mcpEnabled,
 }: DecisionInput): AgentDecision {
   const needsVision = hasImageAttachments(messages);
-  const needsTools = mcpEnabled && tools.length > 0;
+  const needsTools = tools.length > 0;
   const needsStreaming = true;
   const isAutoMode = !endpoint.model || endpoint.model.trim() === "";
 

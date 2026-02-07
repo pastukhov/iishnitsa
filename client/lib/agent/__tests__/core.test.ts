@@ -87,7 +87,14 @@ describe("AgentCore", () => {
       { type: "text", text: "Hello" },
       { type: "image_url", image_url: { url: "data:image/png;base64,abc" } },
     ]);
-    expect(call.tools).toEqual([]);
+    expect(call.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "function",
+          function: expect.objectContaining({ name: "generate_image" }),
+        }),
+      ]),
+    );
   });
 
   it("executes tool calls and loops until completion", async () => {
