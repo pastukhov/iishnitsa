@@ -1,4 +1,9 @@
-import { Message, EndpointConfig, MCPServer } from "@/lib/store";
+import {
+  Message,
+  EndpointConfig,
+  MCPServer,
+  MessageAttachment,
+} from "@/lib/store";
 import { getToolsFromServers } from "@/lib/mcp-client";
 import { fetchProviderModels } from "@/lib/providers";
 import { runAgentChat } from "@/lib/agent/core";
@@ -34,6 +39,7 @@ export async function sendChatMessage(
     chatPrompt?: string;
     memorySettings?: MemorySettings;
     onDecision?: (decision: { providerId: string; model: string }) => void;
+    onAttachment?: (attachment: MessageAttachment) => void;
   },
 ): Promise<void> {
   try {
@@ -48,6 +54,7 @@ export async function sendChatMessage(
               model: decision.model,
             })
         : undefined,
+      onAttachment: options?.onAttachment,
     });
   } catch (error: any) {
     if (options?.queueOnFailure && isNetworkError(error)) {

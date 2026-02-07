@@ -408,10 +408,12 @@ export default function ChatScreen() {
           },
         ];
 
+        let currentContent = "";
         await sendChatMessage(
           allMessages,
           settings.endpoint,
           (chunk) => {
+            currentContent = chunk;
             updateLastAssistantMessage(chunk);
           },
           settings.mcpServers,
@@ -429,6 +431,9 @@ export default function ChatScreen() {
                 providerId: decision.providerId,
                 model: decision.model,
               });
+            },
+            onAttachment: (attachment) => {
+              updateLastAssistantMessage(currentContent, [attachment]);
             },
             systemPrompt: settings.systemPrompt,
             memorySettings: {

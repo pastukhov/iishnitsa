@@ -1,4 +1,9 @@
-import { Message, EndpointConfig, MCPServer } from "@/lib/store";
+import {
+  Message,
+  EndpointConfig,
+  MCPServer,
+  MessageAttachment,
+} from "@/lib/store";
 import {
   getToolsFromServers,
   executeToolCall,
@@ -18,6 +23,27 @@ import {
 } from "@/lib/agent/types";
 import { OpenAICompatibleDriver } from "@/lib/agent/openai-driver";
 import { decideAgentAction } from "@/lib/agent/decision-engine";
+import { generateImage } from "@/lib/image-generation";
+
+const BUILTIN_IMAGE_TOOL: OpenAIFunction = {
+  type: "function",
+  function: {
+    name: "generate_image",
+    description:
+      "Generate an image based on a text description. Use this when the user asks to draw, create, or generate an image, picture, illustration, photo, etc.",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description:
+            "Detailed text description of the image to generate in English. Translate user request to English if needed.",
+        },
+      },
+      required: ["prompt"],
+    },
+  },
+};
 
 function formatToolResult(result: MCPToolResult): string {
   if (!result.content || result.content.length === 0) {
@@ -45,6 +71,7 @@ interface AgentRunInput {
   endpoint: EndpointConfig;
   onChunk: (content: string) => void;
   onDecision?: (decision: AgentDecision) => void;
+  onAttachment?: (attachment: MessageAttachment) => void;
   mcpServers: MCPServer[];
   mcpEnabled: boolean;
   systemPrompt?: string;
@@ -113,6 +140,7 @@ export class AgentCore {
     endpoint,
     onChunk,
     onDecision,
+    onAttachment,
     mcpServers,
     mcpEnabled,
     systemPrompt,
@@ -219,6 +247,8 @@ export class AgentCore {
             context.pendingToolCalls,
             context.mcpToolsMap,
             mcpServers,
+            endpoint,
+            onAttachment,
           );
           this.state = "UPDATE_STATE";
           break;
@@ -257,7 +287,7 @@ export class AgentCore {
       MCPTool & { serverName: string; serverId: string }
     >;
   }> {
-    const tools: OpenAIFunction[] = [];
+    const tools: OpenAIFunction[] = [BUILTIN_IMAGE_TOOL];
     const mcpToolsMap: Map<
       string,
       MCPTool & { serverName: string; serverId: string }
@@ -317,28 +347,53 @@ export class AgentCore {
       MCPTool & { serverName: string; serverId: string }
     >,
     mcpServers: MCPServer[],
+    endpoint: EndpointConfig,
+    onAttachment?: (attachment: MessageAttachment) => void,
   ): Promise<void> {
     for (const toolCall of toolCalls) {
-      const { serverId, toolName } = parseToolCallName(toolCall.function.name);
-      const server = mcpServers.find((s) => s.id === serverId);
-      const toolInfo = mcpToolsMap.get(toolCall.function.name);
-
       let result: string;
-      if (!toolInfo) {
-        result = `Error: Unknown tool "${toolCall.function.name}"`;
-      } else if (!server) {
-        result = `Error: Server not found for tool ${toolCall.function.name}`;
-      } else {
+
+      if (toolCall.function.name === "generate_image") {
         try {
           let args: Record<string, any> = {};
           try {
             args = JSON.parse(toolCall.function.arguments);
           } catch {}
 
-          const toolResult = await executeToolCall(server, toolName, args);
-          result = formatToolResult(toolResult);
+          const imageResult = await generateImage(
+            endpoint,
+            args.prompt || "image",
+          );
+          onAttachment?.(imageResult.attachment);
+          result = imageResult.revisedPrompt
+            ? `Image generated successfully. Revised prompt: ${imageResult.revisedPrompt}`
+            : "Image generated successfully.";
         } catch (error: any) {
-          result = `Error executing tool: ${error.message}`;
+          result = `Error generating image: ${error.message}`;
+        }
+      } else {
+        const { serverId, toolName } = parseToolCallName(
+          toolCall.function.name,
+        );
+        const server = mcpServers.find((s) => s.id === serverId);
+        const toolInfo = mcpToolsMap.get(toolCall.function.name);
+
+        if (!toolInfo) {
+          result = `Error: Unknown tool "${toolCall.function.name}"`;
+        } else if (!server) {
+          result = `Error: Server not found for tool ${toolCall.function.name}`;
+        } else {
+          try {
+            let args: Record<string, any> = {};
+            try {
+              args = JSON.parse(toolCall.function.arguments);
+            } catch {}
+
+            const toolResult = await executeToolCall(server, toolName, args);
+            result = formatToolResult(toolResult);
+          } catch (error: any) {
+            result = `Error executing tool: ${error.message}`;
+          }
         }
       }
 
@@ -516,6 +571,7 @@ export async function runAgentChat(
     chatPrompt?: string;
     memorySettings?: MemorySettings;
     onDecision?: (decision: AgentDecision) => void;
+    onAttachment?: (attachment: MessageAttachment) => void;
   },
 ): Promise<void> {
   const { systemPrompt, chatPrompt, memorySettings } = options || {};
@@ -540,5 +596,6 @@ export async function runAgentChat(
     systemPrompt,
     chatPrompt,
     onDecision: options?.onDecision,
+    onAttachment: options?.onAttachment,
   });
 }

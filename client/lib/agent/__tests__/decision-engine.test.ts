@@ -32,7 +32,7 @@ describe("decideAgentAction", () => {
     clearModelRegistry();
   });
 
-  it("disables tools when MCP is off", () => {
+  it("enables tools even when MCP is off if tools are provided", () => {
     const decision = decideAgentAction({
       endpoint,
       messages: baseMessages,
@@ -46,6 +46,18 @@ describe("decideAgentAction", () => {
           },
         },
       ],
+      mcpEnabled: false,
+    });
+
+    expect(decision.toolChoice).toBe("auto");
+    expect(decision.mode).toBe("tool");
+  });
+
+  it("disables tools when no tools are provided", () => {
+    const decision = decideAgentAction({
+      endpoint,
+      messages: baseMessages,
+      tools: [],
       mcpEnabled: false,
     });
 
