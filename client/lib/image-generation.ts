@@ -123,11 +123,11 @@ export async function generateImage(
   }
 
   if (imageData.url) {
+    await ensureImagesDir();
     const downloadResult = await FileSystem.downloadAsync(
       imageData.url,
       `${IMAGES_DIR}${generateId()}.png`,
     );
-    await ensureImagesDir();
 
     return {
       attachment: {
