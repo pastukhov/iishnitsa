@@ -53,6 +53,12 @@ const PROVIDER_DEFAULTS: Record<
   deepseek: { ...DEFAULT_CAPABILITIES },
   groq: { ...DEFAULT_CAPABILITIES },
   dashscope: { ...DEFAULT_CAPABILITIES },
+  openrouter: {
+    supportsVision: true,
+    supportsTools: true,
+    supportsAudio: false,
+    supportsStreaming: true,
+  },
   custom: { ...DEFAULT_CAPABILITIES },
 };
 

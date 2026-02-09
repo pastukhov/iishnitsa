@@ -31,6 +31,7 @@ describe("providers", () => {
       expect(ids).toContain("deepseek");
       expect(ids).toContain("groq");
       expect(ids).toContain("dashscope");
+      expect(ids).toContain("openrouter");
       expect(ids).toContain("custom");
     });
 
