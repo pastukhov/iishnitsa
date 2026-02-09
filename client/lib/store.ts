@@ -48,6 +48,7 @@ export interface EndpointConfig {
     | "deepseek"
     | "groq"
     | "dashscope"
+    | "openrouter"
     | "custom";
   folderId?: string;
 }
