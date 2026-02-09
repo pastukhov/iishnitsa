@@ -9,6 +9,7 @@ export type ProviderId =
   | "deepseek"
   | "groq"
   | "dashscope"
+  | "openrouter"
   | "custom";
 
 export type ModelListType =
@@ -106,6 +107,14 @@ const providers: ProviderConfig[] = [
     id: "dashscope",
     name: "Alibaba DashScope",
     baseUrl: "https://dashscope.aliyuncs.com/api/v1",
+    authHeader: "Authorization",
+    authFormat: "Bearer <KEY>",
+    modelListType: "openai",
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
     authHeader: "Authorization",
     authFormat: "Bearer <KEY>",
     modelListType: "openai",
