@@ -87,11 +87,13 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
     <ThemedView style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
         <View style={styles.profileRow}>
-          <Image
-            source={require("../../assets/images/android-icon-foreground.png")}
-            style={styles.avatar}
-            resizeMode="contain"
-          />
+          <View style={styles.avatarContainer}>
+            <Image
+              source={require("../../assets/images/android-icon-foreground.png")}
+              style={styles.avatarImage}
+              resizeMode="contain"
+            />
+          </View>
           <View style={styles.profileInfo}>
             <ThemedText style={styles.appName}>{t.appName}</ThemedText>
             <ThemedText
@@ -257,7 +259,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  avatar: {
+  avatarContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.full,
+    backgroundColor: "#FFFFFF",
+    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  avatarImage: {
     width: 48,
     height: 48,
   },
