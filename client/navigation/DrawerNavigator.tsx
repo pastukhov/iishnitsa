@@ -269,8 +269,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   avatarImage: {
-    width: 48,
-    height: 48,
+    width: 72,
+    height: 72,
   },
   profileInfo: {
     marginLeft: Spacing.md,
