@@ -1,5 +1,11 @@
-import React, { ReactNode } from "react";
-import { StyleSheet, Pressable, ViewStyle, StyleProp } from "react-native";
+import React, { ReactNode, useMemo } from "react";
+import {
+  StyleSheet,
+  Pressable,
+  ViewStyle,
+  StyleProp,
+  Platform,
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -16,6 +22,7 @@ interface ButtonProps {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   disabled?: boolean;
+  variant?: "filled" | "outlined" | "text";
 }
 
 const springConfig: WithSpringConfig = {
@@ -33,6 +40,7 @@ export function Button({
   children,
   style,
   disabled = false,
+  variant = "filled",
 }: ButtonProps) {
   const { theme } = useTheme();
   const scale = useSharedValue(1);
@@ -53,26 +61,53 @@ export function Button({
     }
   };
 
+  const variantStyles = useMemo(() => {
+    switch (variant) {
+      case "outlined":
+        return {
+          container: {
+            backgroundColor: "transparent" as const,
+            borderWidth: 1,
+            borderColor: theme.outline,
+          },
+          text: { color: theme.primary },
+        };
+      case "text":
+        return {
+          container: { backgroundColor: "transparent" as const },
+          text: { color: theme.primary },
+        };
+      default:
+        return {
+          container: { backgroundColor: theme.link },
+          text: { color: theme.buttonText },
+        };
+    }
+  }, [variant, theme]);
+
   return (
     <AnimatedPressable
       onPress={disabled ? undefined : onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled}
-      style={[
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      android_ripple={{
+        color:
+          variant === "filled" ? theme.primaryContainer : theme.surfaceVariant,
+        borderless: false,
+      }}
+      style={({ pressed }: { pressed: boolean }) => [
         styles.button,
-        {
-          backgroundColor: theme.link,
-          opacity: disabled ? 0.5 : 1,
-        },
+        variantStyles.container,
+        { opacity: disabled ? 0.5 : 1 },
+        Platform.OS === "ios" && pressed && { opacity: 0.7 },
         style,
         animatedStyle,
       ]}
     >
-      <ThemedText
-        type="body"
-        style={[styles.buttonText, { color: theme.buttonText }]}
-      >
+      <ThemedText type="body" style={[styles.buttonText, variantStyles.text]}>
         {children}
       </ThemedText>
     </AnimatedPressable>

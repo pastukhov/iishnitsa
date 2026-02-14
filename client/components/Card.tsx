@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Pressable, ViewStyle } from "react-native";
+import { StyleSheet, Pressable, ViewStyle, Platform } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -9,7 +9,7 @@ import Animated, {
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 
 interface CardProps {
   elevation?: number;
@@ -41,6 +41,19 @@ const getBackgroundColorForElevation = (
       return theme.backgroundTertiary;
     default:
       return theme.backgroundRoot;
+  }
+};
+
+const getShadowForElevation = (elevation: number) => {
+  switch (elevation) {
+    case 1:
+      return Shadows.elevation1;
+    case 2:
+      return Shadows.elevation2;
+    case 3:
+      return Shadows.elevation3;
+    default:
+      return {};
   }
 };
 
@@ -76,11 +89,18 @@ export function Card({
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      style={[
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={title}
+      android_ripple={
+        onPress ? { color: theme.surfaceVariant, borderless: false } : undefined
+      }
+      style={({ pressed }: { pressed: boolean }) => [
         styles.card,
         {
           backgroundColor: cardBackgroundColor,
+          ...getShadowForElevation(elevation),
         },
+        Platform.OS === "ios" && pressed && onPress && { opacity: 0.7 },
         animatedStyle,
         style,
       ]}

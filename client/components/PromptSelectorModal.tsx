@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/hooks/useTheme";
@@ -192,8 +193,9 @@ export function PromptSelectorModal({
       animationType="slide"
       transparent
       onRequestClose={handleClose}
+      accessibilityViewIsModal={true}
     >
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { backgroundColor: theme.modalOverlay }]}>
         <ThemedView
           style={[
             styles.container,
@@ -230,6 +232,8 @@ export function PromptSelectorModal({
               <Pressable
                 onPress={handleRefresh}
                 disabled={isRefreshing}
+                accessibilityRole="button"
+                accessibilityLabel="Refresh prompts"
                 style={({ pressed }) => [
                   styles.refreshButton,
                   { opacity: pressed || isRefreshing ? 0.5 : 1 },
@@ -247,6 +251,8 @@ export function PromptSelectorModal({
               </Pressable>
               <Pressable
                 onPress={handleClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
                 style={({ pressed }) => [
                   styles.closeButton,
                   { opacity: pressed ? 0.6 : 1 },
@@ -278,6 +284,7 @@ export function PromptSelectorModal({
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCorrect={false}
+              accessibilityLabel="Search prompts"
             />
             {searchQuery.length > 0 && (
               <Pressable onPress={() => setSearchQuery("")}>
@@ -310,6 +317,8 @@ export function PromptSelectorModal({
                   },
                 ]}
                 onPress={() => setSelectedTag(null)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedTag === null }}
               >
                 <ThemedText
                   style={[
@@ -340,6 +349,8 @@ export function PromptSelectorModal({
                   onPress={() =>
                     setSelectedTag(selectedTag === tag ? null : tag)
                   }
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: selectedTag === tag }}
                 >
                   <ThemedText
                     style={[
@@ -361,13 +372,15 @@ export function PromptSelectorModal({
             style={({ pressed }) => [
               styles.noneButton,
               {
-                backgroundColor: pressed
-                  ? theme.surfaceVariant
-                  : theme.backgroundSecondary,
+                backgroundColor:
+                  Platform.OS === "ios" && pressed
+                    ? theme.surfaceVariant
+                    : theme.backgroundSecondary,
                 borderColor: theme.outlineVariant,
               },
             ]}
             onPress={() => handleSelect(null)}
+            android_ripple={{ color: theme.surfaceVariant, borderless: false }}
           >
             <MaterialIcons
               name="chat-bubble-outline"
@@ -414,13 +427,20 @@ export function PromptSelectorModal({
                     style={({ pressed }) => [
                       styles.promptItem,
                       {
-                        backgroundColor: pressed
-                          ? theme.surfaceVariant
-                          : theme.surface,
+                        backgroundColor:
+                          Platform.OS === "ios" && pressed
+                            ? theme.surfaceVariant
+                            : theme.surface,
                         borderColor: theme.outlineVariant,
                       },
                     ]}
                     onPress={() => handleSelect(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.title}
+                    android_ripple={{
+                      color: theme.surfaceVariant,
+                      borderless: false,
+                    }}
                   >
                     <View style={styles.promptContent}>
                       <ThemedText style={styles.promptTitle}>
@@ -462,6 +482,12 @@ export function PromptSelectorModal({
                     <Pressable
                       style={styles.starButton}
                       onPress={(e) => handleToggleFavorite(item.id, e)}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        isFavorite
+                          ? "Remove from favorites"
+                          : "Add to favorites"
+                      }
                     >
                       <MaterialIcons
                         name={isFavorite ? "star" : "star-border"}
@@ -479,11 +505,16 @@ export function PromptSelectorModal({
               }}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <MaterialIcons
-                    name="cloud-off"
-                    size={48}
-                    color={theme.textSecondary}
-                  />
+                  <LinearGradient
+                    colors={[theme.primaryContainer, theme.surfaceVariant]}
+                    style={styles.emptyGradientIcon}
+                  >
+                    <MaterialIcons
+                      name="cloud-off"
+                      size={56}
+                      color={theme.primary}
+                    />
+                  </LinearGradient>
                   <ThemedText
                     style={[styles.emptyText, { color: theme.textSecondary }]}
                   >
@@ -515,7 +546,6 @@ export function PromptSelectorModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-end",
   },
   container: {
@@ -559,10 +589,18 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     padding: Spacing.sm,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   closeButton: {
     padding: Spacing.sm,
     marginRight: -Spacing.sm,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   searchContainer: {
     flexDirection: "row",
@@ -628,6 +666,13 @@ const styles = StyleSheet.create({
   promptPreview: {
     ...Typography.bodySmall,
   },
+  emptyGradientIcon: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
@@ -687,5 +732,9 @@ const styles = StyleSheet.create({
   starButton: {
     padding: Spacing.sm,
     marginLeft: Spacing.xs,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

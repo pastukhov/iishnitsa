@@ -33,6 +33,9 @@ import {
   getProviderConfig,
   getProviders,
 } from "@/lib/providers";
+import { useTranslations } from "@/lib/translations";
+import Toast from "react-native-toast-message";
+import { LinearGradient } from "expo-linear-gradient";
 
 function SectionHeader({ title }: { title: string }) {
   const { theme } = useTheme();
@@ -102,11 +105,16 @@ function InputField({
           scrollEnabled={scrollEnabled}
           autoCapitalize="none"
           autoCorrect={false}
+          accessibilityLabel={label}
         />
         {secureTextEntry && (
           <Pressable
             onPress={() => setShowPassword(!showPassword)}
             style={styles.eyeButton}
+            accessibilityRole="button"
+            accessibilityLabel={
+              showPassword ? "Hide password" : "Show password"
+            }
           >
             <MaterialIcons
               name={showPassword ? "visibility-off" : "visibility"}
@@ -144,6 +152,9 @@ function SelectField({
       </ThemedText>
       <Pressable
         onPress={() => setOpen((prev) => !prev)}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ expanded: open }}
         style={[
           styles.selectTrigger,
           {
@@ -228,6 +239,7 @@ function ToggleRow({
         onValueChange={onValueChange}
         trackColor={{ false: theme.surfaceVariant, true: theme.primary }}
         thumbColor={theme.surface}
+        accessibilityLabel={label}
       />
     </View>
   );
@@ -246,7 +258,9 @@ export default function SettingsScreen() {
     toggleMCPServer,
     exportMCPServersYAML,
     importMCPServersYAML,
+    restoreMCPServer,
   } = useChatStore();
+  const t = useTranslations();
 
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
@@ -423,26 +437,23 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleRemoveMCPServer = (id: string, name: string) => {
-    Alert.alert(
-      "Remove MCP Server",
-      `Are you sure you want to remove "${name}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            removeMCPServer(id);
-            if (Platform.OS !== "web") {
-              Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Warning,
-              );
-            }
-          },
-        },
-      ],
-    );
+  const handleRemoveMCPServer = (id: string, _name: string) => {
+    const serverToRemove = settings.mcpServers.find((s) => s.id === id);
+    if (!serverToRemove) return;
+    removeMCPServer(id);
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
+    Toast.show({
+      type: "info",
+      text1: t.serverRemoved,
+      text2: t.tapToUndo,
+      visibilityTime: 5000,
+      onPress: () => {
+        restoreMCPServer(serverToRemove);
+        Toast.hide();
+      },
+    });
   };
 
   const handleTestMCPServer = async (
@@ -570,23 +581,24 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleClearMemories = () => {
-    Alert.alert(
-      "Clear Memory",
-      "This will remove all saved memories from this device.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Clear",
-          style: "destructive",
-          onPress: async () => {
-            await memoryStore.clear();
-            setMemoryEntries([]);
-            setShowMemoryModal(false);
-          },
-        },
-      ],
-    );
+  const handleClearMemories = async () => {
+    const savedEntries = [...memoryEntries];
+    await memoryStore.clear();
+    setMemoryEntries([]);
+    setShowMemoryModal(false);
+    Toast.show({
+      type: "info",
+      text1: t.memoriesCleared,
+      text2: t.tapToUndo,
+      visibilityTime: 5000,
+      onPress: async () => {
+        for (const entry of savedEntries) {
+          await memoryStore.addMemory(entry);
+        }
+        setMemoryEntries(savedEntries);
+        Toast.hide();
+      },
+    });
   };
 
   const formatMemoryTimestamp = (entry: MemoryEntry) => {
@@ -735,6 +747,9 @@ export default function SettingsScreen() {
               disabled={
                 isTesting || !settings.endpoint.apiKey || !resolvedBaseUrl
               }
+              accessibilityRole="button"
+              accessibilityLabel="Test API connection"
+              accessibilityState={{ busy: isTesting }}
               style={({ pressed }) => [
                 styles.testButton,
                 {
@@ -920,6 +935,9 @@ export default function SettingsScreen() {
                       <Pressable
                         onPress={() => toggleMCPServer(server.id)}
                         style={styles.mcpServerInfo}
+                        accessibilityRole="checkbox"
+                        accessibilityLabel={server.name}
+                        accessibilityState={{ checked: server.enabled }}
                       >
                         <MaterialIcons
                           name={
@@ -950,6 +968,8 @@ export default function SettingsScreen() {
                       <Pressable
                         onPress={() => handleTestMCPServer(server)}
                         disabled={testingMCPId === server.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Test ${server.name}`}
                         style={({ pressed }) => [
                           styles.testMcpButton,
                           { opacity: pressed ? 0.6 : 1 },
@@ -972,6 +992,8 @@ export default function SettingsScreen() {
                         onPress={() =>
                           handleRemoveMCPServer(server.id, server.name)
                         }
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${server.name}`}
                         style={({ pressed }) => [
                           styles.removeButton,
                           { opacity: pressed ? 0.6 : 1 },
@@ -1236,7 +1258,9 @@ export default function SettingsScreen() {
         transparent
         onRequestClose={() => setShowImportModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View
+          style={[styles.modalOverlay, { backgroundColor: theme.modalOverlay }]}
+        >
           <View
             style={[
               styles.modalContent,
@@ -1309,7 +1333,9 @@ export default function SettingsScreen() {
         transparent
         onRequestClose={() => setShowMemoryModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View
+          style={[styles.modalOverlay, { backgroundColor: theme.modalOverlay }]}
+        >
           <View
             style={[
               styles.modalContent,
@@ -1319,14 +1345,26 @@ export default function SettingsScreen() {
             <ThemedText style={styles.modalTitle}>Saved Memories</ThemedText>
             <ScrollView style={styles.memoryList} showsVerticalScrollIndicator>
               {memoryEntries.length === 0 ? (
-                <ThemedText
-                  style={[
-                    styles.modalDescription,
-                    { color: theme.textSecondary },
-                  ]}
-                >
-                  No memories saved yet.
-                </ThemedText>
+                <View style={styles.memoryEmptyState}>
+                  <LinearGradient
+                    colors={[theme.primaryContainer, theme.surfaceVariant]}
+                    style={styles.memoryEmptyGradient}
+                  >
+                    <MaterialIcons
+                      name="psychology"
+                      size={40}
+                      color={theme.primary}
+                    />
+                  </LinearGradient>
+                  <ThemedText
+                    style={[
+                      styles.modalDescription,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    No memories saved yet.
+                  </ThemedText>
+                </View>
               ) : (
                 memoryEntries.map((entry) => (
                   <View
@@ -1545,10 +1583,18 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     padding: Spacing.sm,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   testMcpButton: {
     padding: Spacing.sm,
     marginRight: Spacing.xs,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   mcpTestResult: {
     flexDirection: "row",
@@ -1625,6 +1671,19 @@ const styles = StyleSheet.create({
     maxHeight: 320,
     marginBottom: Spacing.lg,
   },
+  memoryEmptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing["2xl"],
+    gap: Spacing.md,
+  },
+  memoryEmptyGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   memoryItem: {
     borderWidth: 1,
     borderRadius: BorderRadius.sm,
@@ -1649,7 +1708,6 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     padding: Spacing.lg,
   },
