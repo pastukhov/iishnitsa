@@ -9,8 +9,8 @@ import {
   StyleSheet,
   Pressable,
   FlatList,
-  Alert,
   Image,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -22,6 +22,8 @@ import ChatScreen from "@/screens/ChatScreen";
 import { useChatStore } from "@/lib/store";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { useTranslations } from "@/lib/translations";
+import Toast from "react-native-toast-message";
+import { LinearGradient } from "expo-linear-gradient";
 
 export type DrawerParamList = {
   Chat: { chatId?: string };
@@ -33,8 +35,14 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const t = useTranslations();
-  const { chats, currentChatId, createNewChat, selectChat, deleteChat } =
-    useChatStore();
+  const {
+    chats,
+    currentChatId,
+    createNewChat,
+    selectChat,
+    deleteChat,
+    restoreChat,
+  } = useChatStore();
   const rootNavigation =
     props.navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -52,15 +60,20 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
     props.navigation.closeDrawer();
   };
 
-  const handleDeleteChat = (chatId: string, title: string) => {
-    Alert.alert(t.deleteChat, `${t.delete} "${title}"?`, [
-      { text: t.cancel, style: "cancel" },
-      {
-        text: t.delete,
-        style: "destructive",
-        onPress: () => deleteChat(chatId),
+  const handleDeleteChat = (chatId: string, _title: string) => {
+    const chatToDelete = chats.find((c) => c.id === chatId);
+    if (!chatToDelete) return;
+    deleteChat(chatId);
+    Toast.show({
+      type: "info",
+      text1: t.chatDeleted,
+      text2: t.tapToUndo,
+      visibilityTime: 5000,
+      onPress: () => {
+        restoreChat(chatToDelete);
+        Toast.hide();
       },
-    ]);
+    });
   };
 
   const formatDate = (dateString: string) => {
@@ -87,7 +100,9 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
     <ThemedView style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
         <View style={styles.profileRow}>
-          <View style={styles.avatarContainer}>
+          <View
+            style={[styles.avatarContainer, { backgroundColor: theme.surface }]}
+          >
             <Image
               source={require("../../assets/images/android-icon-foreground.png")}
               style={styles.avatarImage}
@@ -108,9 +123,13 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
       <Pressable
         style={({ pressed }) => [
           styles.newChatButton,
-          { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 },
+          { backgroundColor: theme.primary },
+          Platform.OS === "ios" && pressed && { opacity: 0.8 },
         ]}
         onPress={handleNewChat}
+        accessibilityRole="button"
+        accessibilityLabel={t.newChat}
+        android_ripple={{ color: theme.primaryContainer, borderless: false }}
       >
         <MaterialIcons name="add" size={20} color={theme.buttonText} />
         <ThemedText style={[styles.newChatText, { color: theme.buttonText }]}>
@@ -134,13 +153,17 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
                 backgroundColor:
                   item.id === currentChatId
                     ? theme.primaryContainer
-                    : pressed
+                    : Platform.OS === "ios" && pressed
                       ? theme.surfaceVariant
                       : "transparent",
               },
             ]}
             onPress={() => handleSelectChat(item.id)}
             onLongPress={() => handleDeleteChat(item.id, item.title)}
+            accessibilityRole="button"
+            accessibilityLabel={item.title}
+            accessibilityHint="Long press to delete"
+            android_ripple={{ color: theme.surfaceVariant, borderless: false }}
           >
             <View style={styles.chatItemContent}>
               <MaterialIcons
@@ -173,6 +196,16 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
+            <LinearGradient
+              colors={[theme.primaryContainer, theme.surfaceVariant]}
+              style={styles.emptyGradientIcon}
+            >
+              <MaterialIcons
+                name="chat-bubble-outline"
+                size={32}
+                color={theme.primary}
+              />
+            </LinearGradient>
             <ThemedText
               style={[styles.emptyText, { color: theme.textSecondary }]}
             >
@@ -188,9 +221,12 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         <Pressable
           style={({ pressed }) => [
             styles.footerItem,
-            { opacity: pressed ? 0.6 : 1 },
+            Platform.OS === "ios" && pressed && { opacity: 0.6 },
           ]}
           onPress={() => rootNavigation?.navigate("About")}
+          accessibilityRole="button"
+          accessibilityLabel={t.about}
+          android_ripple={{ color: theme.surfaceVariant, borderless: false }}
         >
           <MaterialIcons
             name="info-outline"
@@ -206,9 +242,12 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         <Pressable
           style={({ pressed }) => [
             styles.footerItem,
-            { opacity: pressed ? 0.6 : 1 },
+            Platform.OS === "ios" && pressed && { opacity: 0.6 },
           ]}
           onPress={() => rootNavigation?.navigate("Settings")}
+          accessibilityRole="button"
+          accessibilityLabel={t.settings}
+          android_ripple={{ color: theme.surfaceVariant, borderless: false }}
         >
           <MaterialIcons
             name="settings"
@@ -227,7 +266,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
 }
 
 export default function DrawerNavigator() {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
 
   return (
     <Drawer.Navigator
@@ -239,7 +278,7 @@ export default function DrawerNavigator() {
           width: 300,
         },
         drawerType: "front",
-        overlayColor: isDark ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.5)",
+        overlayColor: theme.modalOverlay,
       }}
     >
       <Drawer.Screen name="Chat" component={ChatScreen} />
@@ -263,7 +302,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: BorderRadius.full,
-    backgroundColor: "#FFFFFF",
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
@@ -327,6 +365,14 @@ const styles = StyleSheet.create({
   emptyState: {
     padding: Spacing.xl,
     alignItems: "center",
+  },
+  emptyGradientIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: Spacing.md,
   },
   emptyText: {
     ...Typography.bodyMedium,

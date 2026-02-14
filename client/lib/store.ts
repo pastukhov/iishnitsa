@@ -115,14 +115,21 @@ interface ChatStore {
   importMCPServersYAML: (yaml: string) => void;
   setIsStreaming: (isStreaming: boolean) => void;
   clearCurrentChat: () => void;
+  restoreChat: (chat: Chat) => void;
+  restoreMCPServer: (server: MCPServer) => void;
+  deleteMessage: (messageId: string) => void;
+  deleteMessagesFromIndex: (index: number) => void;
   toggleFavoritePrompt: (promptId: string) => void;
   addRecentPrompt: (promptId: string) => void;
 }
+
+const STORE_VERSION = 1;
 
 const STORAGE_KEYS = {
   CHATS: "@ai_agent_chats",
   CURRENT_CHAT: "@ai_agent_current_chat",
   SETTINGS: "@ai_agent_settings",
+  VERSION: "@ai_agent_store_version",
 };
 
 const DEFAULT_SYSTEM_PROMPT = `# System Prompt for Mobile AI Assistant with MCP Support
@@ -331,11 +338,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   loadFromStorage: async () => {
     try {
-      const [chatsJson, currentChatJson, settingsJson] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.CHATS),
-        AsyncStorage.getItem(STORAGE_KEYS.CURRENT_CHAT),
-        AsyncStorage.getItem(STORAGE_KEYS.SETTINGS),
-      ]);
+      const [chatsJson, currentChatJson, settingsJson, versionJson] =
+        await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEYS.CHATS),
+          AsyncStorage.getItem(STORAGE_KEYS.CURRENT_CHAT),
+          AsyncStorage.getItem(STORAGE_KEYS.SETTINGS),
+          AsyncStorage.getItem(STORAGE_KEYS.VERSION),
+        ]);
+
+      const storedVersion = versionJson ? parseInt(versionJson, 10) : 0;
 
       const rawChats = chatsJson ? JSON.parse(chatsJson) : [];
       const chats = rawChats.map((chat: Chat) => ({
@@ -366,6 +377,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         !chats.find((c: Chat) => c.id === currentChatId)
       ) {
         set({ currentChatId: chats[0]?.id || null });
+      }
+
+      // Persist current version if upgraded
+      if (storedVersion < STORE_VERSION) {
+        AsyncStorage.setItem(STORAGE_KEYS.VERSION, STORE_VERSION.toString());
       }
     } catch (error) {
       console.error("Failed to load from storage:", error);
@@ -624,6 +640,65 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   setIsStreaming: (isStreaming) => {
     set({ isStreaming });
+  },
+
+  restoreChat: (chat: Chat) => {
+    set((state) => {
+      const exists = state.chats.some((c) => c.id === chat.id);
+      if (exists) return {};
+      const newChats = [...state.chats, chat];
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(newChats));
+      return { chats: newChats };
+    });
+  },
+
+  restoreMCPServer: (server: MCPServer) => {
+    set((state) => {
+      const exists = state.settings.mcpServers.some((s) => s.id === server.id);
+      if (exists) return {};
+      const settings = {
+        ...state.settings,
+        mcpServers: [...state.settings.mcpServers, server],
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  deleteMessage: (messageId: string) => {
+    set((state) => {
+      const updatedChats = state.chats.map((chat) => {
+        if (chat.id === state.currentChatId) {
+          return {
+            ...chat,
+            messages: chat.messages.filter((m) => m.id !== messageId),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return chat;
+      });
+
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(updatedChats));
+      return { chats: updatedChats };
+    });
+  },
+
+  deleteMessagesFromIndex: (index: number) => {
+    set((state) => {
+      const updatedChats = state.chats.map((chat) => {
+        if (chat.id === state.currentChatId) {
+          return {
+            ...chat,
+            messages: chat.messages.slice(0, index),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return chat;
+      });
+
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(updatedChats));
+      return { chats: updatedChats };
+    });
   },
 
   clearCurrentChat: () => {

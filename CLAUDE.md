@@ -123,6 +123,10 @@ adb shell input swipe <x1> <y1> <x2> <y2> <duration_ms>
 - Path aliases: `@/*` → `./client/*`
 - Formatting: Prettier (default settings)
 
+## TBD + SemVer Governance
+
+> **ОБЯЗАТЕЛЬНО:** При любых вопросах, связанных с ветвлением, релизами, тегами, CI/CD gates, commit conventions или PR-политикой — **всегда вызывай скилл `/tbd-semver-governance`** перед принятием решений. Скилл содержит каноничные правила для Trunk-Based Development + SemVer в этом репозитории.
+
 ## CI/CD
 
 GitHub Actions workflows (`.github/workflows/`):

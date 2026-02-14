@@ -45,6 +45,8 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
       {__DEV__ ? (
         <Pressable
           onPress={() => setIsModalVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="View error details"
           style={({ pressed }) => [
             styles.topButton,
             {
@@ -68,6 +70,8 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
 
         <Pressable
           onPress={handleRestart}
+          accessibilityRole="button"
+          accessibilityLabel="Try again"
           style={({ pressed }) => [
             styles.button,
             {
@@ -92,8 +96,14 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           animationType="slide"
           transparent={true}
           onRequestClose={() => setIsModalVisible(false)}
+          accessibilityViewIsModal={true}
         >
-          <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalOverlay,
+              { backgroundColor: theme.modalOverlay },
+            ]}
+          >
             <ThemedView style={styles.modalContainer}>
               <View style={styles.modalHeader}>
                 <ThemedText type="h2" style={styles.modalTitle}>
@@ -101,6 +111,8 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                 </ThemedText>
                 <Pressable
                   onPress={() => setIsModalVisible(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close error details"
                   style={({ pressed }) => [
                     styles.closeButton,
                     { opacity: pressed ? 0.6 : 1 },
@@ -201,7 +213,6 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-end",
   },
   modalContainer: {
@@ -225,6 +236,10 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: Spacing.xs,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalScrollView: {
     flex: 1,
