@@ -9,7 +9,7 @@ import Animated, {
 
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius } from "@/constants/theme";
+import { Spacing, BorderRadius, Shadows } from "@/constants/theme";
 
 interface CardProps {
   elevation?: number;
@@ -41,6 +41,19 @@ const getBackgroundColorForElevation = (
       return theme.backgroundTertiary;
     default:
       return theme.backgroundRoot;
+  }
+};
+
+const getShadowForElevation = (elevation: number) => {
+  switch (elevation) {
+    case 1:
+      return Shadows.elevation1;
+    case 2:
+      return Shadows.elevation2;
+    case 3:
+      return Shadows.elevation3;
+    default:
+      return {};
   }
 };
 
@@ -82,6 +95,7 @@ export function Card({
         styles.card,
         {
           backgroundColor: cardBackgroundColor,
+          ...getShadowForElevation(elevation),
         },
         animatedStyle,
         style,
