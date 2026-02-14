@@ -28,6 +28,12 @@ export const TRANSLATIONS = {
     deleteMessage: "Delete Message",
     regenerate: "Regenerate",
 
+    // Undo actions
+    chatDeleted: "Chat deleted",
+    tapToUndo: "Tap to undo",
+    serverRemoved: "Server removed",
+    memoriesCleared: "Memories cleared",
+
     // Date formatting
     yesterday: "Yesterday",
 
@@ -67,6 +73,12 @@ export const TRANSLATIONS = {
     copy: "Копировать",
     deleteMessage: "Удалить сообщение",
     regenerate: "Перегенерировать",
+
+    // Undo actions
+    chatDeleted: "Чат удалён",
+    tapToUndo: "Нажмите для отмены",
+    serverRemoved: "Сервер удалён",
+    memoriesCleared: "Память очищена",
 
     // Date formatting
     yesterday: "Вчера",

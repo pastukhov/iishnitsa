@@ -115,6 +115,8 @@ interface ChatStore {
   importMCPServersYAML: (yaml: string) => void;
   setIsStreaming: (isStreaming: boolean) => void;
   clearCurrentChat: () => void;
+  restoreChat: (chat: Chat) => void;
+  restoreMCPServer: (server: MCPServer) => void;
   deleteMessage: (messageId: string) => void;
   deleteMessagesFromIndex: (index: number) => void;
   toggleFavoritePrompt: (promptId: string) => void;
@@ -626,6 +628,29 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   setIsStreaming: (isStreaming) => {
     set({ isStreaming });
+  },
+
+  restoreChat: (chat: Chat) => {
+    set((state) => {
+      const exists = state.chats.some((c) => c.id === chat.id);
+      if (exists) return {};
+      const newChats = [...state.chats, chat];
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(newChats));
+      return { chats: newChats };
+    });
+  },
+
+  restoreMCPServer: (server: MCPServer) => {
+    set((state) => {
+      const exists = state.settings.mcpServers.some((s) => s.id === server.id);
+      if (exists) return {};
+      const settings = {
+        ...state.settings,
+        mcpServers: [...state.settings.mcpServers, server],
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
   },
 
   deleteMessage: (messageId: string) => {

@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Pressable,
   FlatList,
-  Alert,
   Image,
   Platform,
 } from "react-native";
@@ -23,6 +22,7 @@ import ChatScreen from "@/screens/ChatScreen";
 import { useChatStore } from "@/lib/store";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { useTranslations } from "@/lib/translations";
+import Toast from "react-native-toast-message";
 
 export type DrawerParamList = {
   Chat: { chatId?: string };
@@ -34,8 +34,14 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const t = useTranslations();
-  const { chats, currentChatId, createNewChat, selectChat, deleteChat } =
-    useChatStore();
+  const {
+    chats,
+    currentChatId,
+    createNewChat,
+    selectChat,
+    deleteChat,
+    restoreChat,
+  } = useChatStore();
   const rootNavigation =
     props.navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -53,15 +59,20 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
     props.navigation.closeDrawer();
   };
 
-  const handleDeleteChat = (chatId: string, title: string) => {
-    Alert.alert(t.deleteChat, `${t.delete} "${title}"?`, [
-      { text: t.cancel, style: "cancel" },
-      {
-        text: t.delete,
-        style: "destructive",
-        onPress: () => deleteChat(chatId),
+  const handleDeleteChat = (chatId: string, _title: string) => {
+    const chatToDelete = chats.find((c) => c.id === chatId);
+    if (!chatToDelete) return;
+    deleteChat(chatId);
+    Toast.show({
+      type: "info",
+      text1: t.chatDeleted,
+      text2: t.tapToUndo,
+      visibilityTime: 5000,
+      onPress: () => {
+        restoreChat(chatToDelete);
+        Toast.hide();
       },
-    ]);
+    });
   };
 
   const formatDate = (dateString: string) => {

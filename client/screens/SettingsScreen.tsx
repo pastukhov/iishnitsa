@@ -33,6 +33,8 @@ import {
   getProviderConfig,
   getProviders,
 } from "@/lib/providers";
+import { useTranslations } from "@/lib/translations";
+import Toast from "react-native-toast-message";
 
 function SectionHeader({ title }: { title: string }) {
   const { theme } = useTheme();
@@ -255,7 +257,9 @@ export default function SettingsScreen() {
     toggleMCPServer,
     exportMCPServersYAML,
     importMCPServersYAML,
+    restoreMCPServer,
   } = useChatStore();
+  const t = useTranslations();
 
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
@@ -432,26 +436,23 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleRemoveMCPServer = (id: string, name: string) => {
-    Alert.alert(
-      "Remove MCP Server",
-      `Are you sure you want to remove "${name}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            removeMCPServer(id);
-            if (Platform.OS !== "web") {
-              Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Warning,
-              );
-            }
-          },
-        },
-      ],
-    );
+  const handleRemoveMCPServer = (id: string, _name: string) => {
+    const serverToRemove = settings.mcpServers.find((s) => s.id === id);
+    if (!serverToRemove) return;
+    removeMCPServer(id);
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
+    Toast.show({
+      type: "info",
+      text1: t.serverRemoved,
+      text2: t.tapToUndo,
+      visibilityTime: 5000,
+      onPress: () => {
+        restoreMCPServer(serverToRemove);
+        Toast.hide();
+      },
+    });
   };
 
   const handleTestMCPServer = async (
@@ -579,23 +580,24 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleClearMemories = () => {
-    Alert.alert(
-      "Clear Memory",
-      "This will remove all saved memories from this device.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Clear",
-          style: "destructive",
-          onPress: async () => {
-            await memoryStore.clear();
-            setMemoryEntries([]);
-            setShowMemoryModal(false);
-          },
-        },
-      ],
-    );
+  const handleClearMemories = async () => {
+    const savedEntries = [...memoryEntries];
+    await memoryStore.clear();
+    setMemoryEntries([]);
+    setShowMemoryModal(false);
+    Toast.show({
+      type: "info",
+      text1: t.memoriesCleared,
+      text2: t.tapToUndo,
+      visibilityTime: 5000,
+      onPress: async () => {
+        for (const entry of savedEntries) {
+          await memoryStore.addMemory(entry);
+        }
+        setMemoryEntries(savedEntries);
+        Toast.hide();
+      },
+    });
   };
 
   const formatMemoryTimestamp = (entry: MemoryEntry) => {
