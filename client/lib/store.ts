@@ -123,10 +123,13 @@ interface ChatStore {
   addRecentPrompt: (promptId: string) => void;
 }
 
+const STORE_VERSION = 1;
+
 const STORAGE_KEYS = {
   CHATS: "@ai_agent_chats",
   CURRENT_CHAT: "@ai_agent_current_chat",
   SETTINGS: "@ai_agent_settings",
+  VERSION: "@ai_agent_store_version",
 };
 
 const DEFAULT_SYSTEM_PROMPT = `# System Prompt for Mobile AI Assistant with MCP Support
@@ -335,11 +338,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   loadFromStorage: async () => {
     try {
-      const [chatsJson, currentChatJson, settingsJson] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.CHATS),
-        AsyncStorage.getItem(STORAGE_KEYS.CURRENT_CHAT),
-        AsyncStorage.getItem(STORAGE_KEYS.SETTINGS),
-      ]);
+      const [chatsJson, currentChatJson, settingsJson, versionJson] =
+        await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEYS.CHATS),
+          AsyncStorage.getItem(STORAGE_KEYS.CURRENT_CHAT),
+          AsyncStorage.getItem(STORAGE_KEYS.SETTINGS),
+          AsyncStorage.getItem(STORAGE_KEYS.VERSION),
+        ]);
+
+      const storedVersion = versionJson ? parseInt(versionJson, 10) : 0;
 
       const rawChats = chatsJson ? JSON.parse(chatsJson) : [];
       const chats = rawChats.map((chat: Chat) => ({
@@ -370,6 +377,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         !chats.find((c: Chat) => c.id === currentChatId)
       ) {
         set({ currentChatId: chats[0]?.id || null });
+      }
+
+      // Persist current version if upgraded
+      if (storedVersion < STORE_VERSION) {
+        AsyncStorage.setItem(STORAGE_KEYS.VERSION, STORE_VERSION.toString());
       }
     } catch (error) {
       console.error("Failed to load from storage:", error);
