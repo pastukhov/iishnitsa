@@ -23,6 +23,7 @@ import { useChatStore } from "@/lib/store";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { useTranslations } from "@/lib/translations";
 import Toast from "react-native-toast-message";
+import { LinearGradient } from "expo-linear-gradient";
 
 export type DrawerParamList = {
   Chat: { chatId?: string };
@@ -195,6 +196,16 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
+            <LinearGradient
+              colors={[theme.primaryContainer, theme.surfaceVariant]}
+              style={styles.emptyGradientIcon}
+            >
+              <MaterialIcons
+                name="chat-bubble-outline"
+                size={32}
+                color={theme.primary}
+              />
+            </LinearGradient>
             <ThemedText
               style={[styles.emptyText, { color: theme.textSecondary }]}
             >
@@ -354,6 +365,14 @@ const styles = StyleSheet.create({
   emptyState: {
     padding: Spacing.xl,
     alignItems: "center",
+  },
+  emptyGradientIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: Spacing.md,
   },
   emptyText: {
     ...Typography.bodyMedium,

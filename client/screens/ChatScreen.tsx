@@ -49,6 +49,7 @@ import {
 } from "@/lib/image-utils";
 import { isImageGenerationModel, generateImage } from "@/lib/image-generation";
 import { useTranslations } from "@/lib/translations";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   getProviderDefaultCapabilities,
   getProviderDefaultModel,
@@ -247,11 +248,12 @@ function EmptyState() {
 
   return (
     <View style={styles.emptyState}>
-      <View
-        style={[styles.emptyIcon, { backgroundColor: theme.primaryContainer }]}
+      <LinearGradient
+        colors={[theme.primaryContainer, theme.surfaceVariant]}
+        style={styles.emptyGradientIcon}
       >
-        <MaterialIcons name="chat" size={48} color={theme.primary} />
-      </View>
+        <MaterialIcons name="chat" size={56} color={theme.primary} />
+      </LinearGradient>
       <ThemedText style={styles.emptyTitle}>Start a conversation</ThemedText>
       <ThemedText
         style={[styles.emptySubtitle, { color: theme.textSecondary }]}
@@ -1183,10 +1185,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: Spacing["3xl"],
   },
-  emptyIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: BorderRadius.full,
+  emptyGradientIcon: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: Spacing.xl,

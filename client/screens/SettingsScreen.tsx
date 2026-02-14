@@ -35,6 +35,7 @@ import {
 } from "@/lib/providers";
 import { useTranslations } from "@/lib/translations";
 import Toast from "react-native-toast-message";
+import { LinearGradient } from "expo-linear-gradient";
 
 function SectionHeader({ title }: { title: string }) {
   const { theme } = useTheme();
@@ -1344,14 +1345,26 @@ export default function SettingsScreen() {
             <ThemedText style={styles.modalTitle}>Saved Memories</ThemedText>
             <ScrollView style={styles.memoryList} showsVerticalScrollIndicator>
               {memoryEntries.length === 0 ? (
-                <ThemedText
-                  style={[
-                    styles.modalDescription,
-                    { color: theme.textSecondary },
-                  ]}
-                >
-                  No memories saved yet.
-                </ThemedText>
+                <View style={styles.memoryEmptyState}>
+                  <LinearGradient
+                    colors={[theme.primaryContainer, theme.surfaceVariant]}
+                    style={styles.memoryEmptyGradient}
+                  >
+                    <MaterialIcons
+                      name="psychology"
+                      size={40}
+                      color={theme.primary}
+                    />
+                  </LinearGradient>
+                  <ThemedText
+                    style={[
+                      styles.modalDescription,
+                      { color: theme.textSecondary },
+                    ]}
+                  >
+                    No memories saved yet.
+                  </ThemedText>
+                </View>
               ) : (
                 memoryEntries.map((entry) => (
                   <View
@@ -1657,6 +1670,19 @@ const styles = StyleSheet.create({
   memoryList: {
     maxHeight: 320,
     marginBottom: Spacing.lg,
+  },
+  memoryEmptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing["2xl"],
+    gap: Spacing.md,
+  },
+  memoryEmptyGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
   memoryItem: {
     borderWidth: 1,

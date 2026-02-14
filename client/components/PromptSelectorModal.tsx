@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 
 import { useTheme } from "@/hooks/useTheme";
@@ -504,11 +505,16 @@ export function PromptSelectorModal({
               }}
               ListEmptyComponent={
                 <View style={styles.emptyState}>
-                  <MaterialIcons
-                    name="cloud-off"
-                    size={48}
-                    color={theme.textSecondary}
-                  />
+                  <LinearGradient
+                    colors={[theme.primaryContainer, theme.surfaceVariant]}
+                    style={styles.emptyGradientIcon}
+                  >
+                    <MaterialIcons
+                      name="cloud-off"
+                      size={56}
+                      color={theme.primary}
+                    />
+                  </LinearGradient>
                   <ThemedText
                     style={[styles.emptyText, { color: theme.textSecondary }]}
                   >
@@ -659,6 +665,13 @@ const styles = StyleSheet.create({
   },
   promptPreview: {
     ...Typography.bodySmall,
+  },
+  emptyGradientIcon: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: "center",
+    alignItems: "center",
   },
   emptyState: {
     alignItems: "center",
