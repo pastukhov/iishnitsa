@@ -23,6 +23,11 @@ export const TRANSLATIONS = {
     delete: "Delete",
     cancel: "Cancel",
 
+    // Message actions
+    copy: "Copy",
+    deleteMessage: "Delete Message",
+    regenerate: "Regenerate",
+
     // Date formatting
     yesterday: "Yesterday",
 
@@ -57,6 +62,11 @@ export const TRANSLATIONS = {
     deleteChat: "Удалить чат",
     delete: "Удалить",
     cancel: "Отмена",
+
+    // Message actions
+    copy: "Копировать",
+    deleteMessage: "Удалить сообщение",
+    regenerate: "Перегенерировать",
 
     // Date formatting
     yesterday: "Вчера",

@@ -48,6 +48,7 @@ import {
   deleteImage,
 } from "@/lib/image-utils";
 import { isImageGenerationModel, generateImage } from "@/lib/image-generation";
+import { useTranslations } from "@/lib/translations";
 import {
   getProviderDefaultCapabilities,
   getProviderDefaultModel,
@@ -57,16 +58,68 @@ import { getProviderConfig } from "@/lib/providers";
 function MessageBubble({
   message,
   isUser,
+  onDelete,
+  onRegenerate,
 }: {
   message: Message;
   isUser: boolean;
+  onDelete?: () => void;
+  onRegenerate?: () => void;
 }) {
   const { theme } = useTheme();
+  const t = useTranslations();
 
   const handleCopy = async () => {
     await Clipboard.setStringAsync(message.content);
     if (Platform.OS !== "web") {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const handleLongPress = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+
+    const options: string[] = [t.copy];
+    if (onDelete) options.push(t.deleteMessage);
+    if (onRegenerate) options.push(t.regenerate);
+    options.push(t.cancel);
+    const cancelIndex = options.length - 1;
+    const destructiveIndex = onDelete ? 1 : -1;
+
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex: cancelIndex,
+          destructiveButtonIndex: destructiveIndex,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) handleCopy();
+          else if (onDelete && buttonIndex === 1) onDelete();
+          else if (onRegenerate && buttonIndex === options.length - 2)
+            onRegenerate();
+        },
+      );
+    } else {
+      const buttons: {
+        text: string;
+        style?: "cancel" | "destructive";
+        onPress?: () => void;
+      }[] = [{ text: t.copy, onPress: handleCopy }];
+      if (onDelete) {
+        buttons.push({
+          text: t.deleteMessage,
+          style: "destructive",
+          onPress: onDelete,
+        });
+      }
+      if (onRegenerate) {
+        buttons.push({ text: t.regenerate, onPress: onRegenerate });
+      }
+      buttons.push({ text: t.cancel, style: "cancel" });
+      Alert.alert("", "", buttons);
     }
   };
 
@@ -106,9 +159,9 @@ function MessageBubble({
 
   return (
     <Pressable
-      onLongPress={handleCopy}
+      onLongPress={handleLongPress}
       accessibilityRole="text"
-      accessibilityHint="Long press to copy"
+      accessibilityHint="Long press for options"
       style={[
         styles.messageBubble,
         isUser ? styles.userBubble : styles.aiBubble,
@@ -237,6 +290,8 @@ export default function ChatScreen() {
     loadFromStorage,
     setChatPromptSelection,
     updateEndpoint,
+    deleteMessage,
+    deleteMessagesFromIndex,
   } = useChatStore();
 
   const currentChat = getCurrentChat();
@@ -490,6 +545,114 @@ export default function ChatScreen() {
     [pendingAttachments],
   );
 
+  const handleDeleteMessage = useCallback(
+    (messageId: string) => {
+      deleteMessage(messageId);
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    },
+    [deleteMessage],
+  );
+
+  const handleRegenerateMessage = useCallback(
+    async (messageIndex: number) => {
+      if (isStreaming) return;
+
+      // Find the last user message before this AI message
+      const lastUserMsg = messages
+        .slice(0, messageIndex)
+        .reverse()
+        .find((m) => m.role === "user");
+      if (!lastUserMsg) return;
+
+      // Delete the AI message and everything after it
+      deleteMessagesFromIndex(messageIndex);
+
+      if (!settings.endpoint.apiKey) return;
+
+      const effectiveModel = settings.endpoint.model || autoResolvedModel;
+      const isImageGen = isImageGenerationModel(effectiveModel);
+
+      setIsStreaming(true);
+      addMessage({ role: "assistant", content: "" });
+
+      try {
+        if (isImageGen && lastUserMsg.content) {
+          updateLastAssistantMessage("Generating image...");
+          const result = await generateImage(
+            settings.endpoint,
+            lastUserMsg.content,
+          );
+          const caption = result.revisedPrompt ? result.revisedPrompt : "";
+          updateLastAssistantMessage(caption, [result.attachment]);
+        } else {
+          const allMessages = messages.slice(0, messageIndex);
+          let currentContent = "";
+          await sendChatMessage(
+            allMessages,
+            settings.endpoint,
+            (chunk) => {
+              currentContent = chunk;
+              updateLastAssistantMessage(chunk);
+            },
+            settings.mcpServers,
+            settings.mcpEnabled,
+            {
+              queueOnFailure: true,
+              chatId: currentChat?.id,
+              onQueued: () => {
+                updateLastAssistantMessage(
+                  "Queued. Will retry when you're back online.",
+                );
+              },
+              onDecision: (decision) => {
+                setLastDecision({
+                  providerId: decision.providerId,
+                  model: decision.model,
+                });
+              },
+              onAttachment: (attachment) => {
+                updateLastAssistantMessage(currentContent, [attachment]);
+              },
+              systemPrompt: settings.systemPrompt,
+              memorySettings: {
+                enabled: settings.memoryEnabled,
+                autoSave: settings.memoryAutoSave,
+                autoSummary:
+                  settings.memoryAutoSummary && Boolean(memorySummaryEnabled),
+                limit: settings.memoryLimit,
+                minImportance: settings.memoryMinImportance,
+                summaryTtlMs:
+                  settings.memorySummaryTtlDays * 24 * 60 * 60 * 1000,
+              },
+              chatPrompt: selectedPrompt?.prompt,
+            },
+          );
+        }
+      } catch (error: any) {
+        updateLastAssistantMessage(
+          `Error: ${error.message || "Failed to get response from AI"}`,
+        );
+      } finally {
+        setIsStreaming(false);
+      }
+    },
+    [
+      isStreaming,
+      messages,
+      deleteMessagesFromIndex,
+      settings,
+      addMessage,
+      updateLastAssistantMessage,
+      setIsStreaming,
+      currentChat?.id,
+      selectedPrompt?.prompt,
+      memorySummaryEnabled,
+      autoResolvedModel,
+    ],
+  );
+
   const handlePickImage = useCallback(async (source: "library" | "camera") => {
     try {
       const attachment =
@@ -668,7 +831,16 @@ export default function ChatScreen() {
               return null;
             }
             return (
-              <MessageBubble message={item} isUser={item.role === "user"} />
+              <MessageBubble
+                message={item}
+                isUser={item.role === "user"}
+                onDelete={() => handleDeleteMessage(item.id)}
+                onRegenerate={
+                  item.role === "assistant"
+                    ? () => handleRegenerateMessage(index)
+                    : undefined
+                }
+              />
             );
           }}
           ListEmptyComponent={EmptyState}

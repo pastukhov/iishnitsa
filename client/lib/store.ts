@@ -115,6 +115,8 @@ interface ChatStore {
   importMCPServersYAML: (yaml: string) => void;
   setIsStreaming: (isStreaming: boolean) => void;
   clearCurrentChat: () => void;
+  deleteMessage: (messageId: string) => void;
+  deleteMessagesFromIndex: (index: number) => void;
   toggleFavoritePrompt: (promptId: string) => void;
   addRecentPrompt: (promptId: string) => void;
 }
@@ -624,6 +626,42 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   setIsStreaming: (isStreaming) => {
     set({ isStreaming });
+  },
+
+  deleteMessage: (messageId: string) => {
+    set((state) => {
+      const updatedChats = state.chats.map((chat) => {
+        if (chat.id === state.currentChatId) {
+          return {
+            ...chat,
+            messages: chat.messages.filter((m) => m.id !== messageId),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return chat;
+      });
+
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(updatedChats));
+      return { chats: updatedChats };
+    });
+  },
+
+  deleteMessagesFromIndex: (index: number) => {
+    set((state) => {
+      const updatedChats = state.chats.map((chat) => {
+        if (chat.id === state.currentChatId) {
+          return {
+            ...chat,
+            messages: chat.messages.slice(0, index),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return chat;
+      });
+
+      AsyncStorage.setItem(STORAGE_KEYS.CHATS, JSON.stringify(updatedChats));
+      return { chats: updatedChats };
+    });
   },
 
   clearCurrentChat: () => {
