@@ -1545,10 +1545,18 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     padding: Spacing.sm,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   testMcpButton: {
     padding: Spacing.sm,
     marginRight: Spacing.xs,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   mcpTestResult: {
     flexDirection: "row",

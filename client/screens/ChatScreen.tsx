@@ -1006,8 +1006,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
   },
   attachButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1018,8 +1018,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   sendButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: BorderRadius.full,
     justifyContent: "center",
     alignItems: "center",

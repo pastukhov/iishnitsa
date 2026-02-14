@@ -225,6 +225,10 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: Spacing.xs,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalScrollView: {
     flex: 1,

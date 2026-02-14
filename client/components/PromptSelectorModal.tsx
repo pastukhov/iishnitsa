@@ -559,10 +559,18 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     padding: Spacing.sm,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   closeButton: {
     padding: Spacing.sm,
     marginRight: -Spacing.sm,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
   searchContainer: {
     flexDirection: "row",
@@ -687,5 +695,9 @@ const styles = StyleSheet.create({
   starButton: {
     padding: Spacing.sm,
     marginLeft: Spacing.xs,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
