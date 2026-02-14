@@ -76,6 +76,8 @@ export function Card({
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={title}
       style={[
         styles.card,
         {

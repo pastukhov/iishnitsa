@@ -111,6 +111,8 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
           { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 },
         ]}
         onPress={handleNewChat}
+        accessibilityRole="button"
+        accessibilityLabel={t.newChat}
       >
         <MaterialIcons name="add" size={20} color={theme.buttonText} />
         <ThemedText style={[styles.newChatText, { color: theme.buttonText }]}>
@@ -141,6 +143,9 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
             ]}
             onPress={() => handleSelectChat(item.id)}
             onLongPress={() => handleDeleteChat(item.id, item.title)}
+            accessibilityRole="button"
+            accessibilityLabel={item.title}
+            accessibilityHint="Long press to delete"
           >
             <View style={styles.chatItemContent}>
               <MaterialIcons
@@ -191,6 +196,8 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
             { opacity: pressed ? 0.6 : 1 },
           ]}
           onPress={() => rootNavigation?.navigate("About")}
+          accessibilityRole="button"
+          accessibilityLabel={t.about}
         >
           <MaterialIcons
             name="info-outline"
@@ -209,6 +216,8 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
             { opacity: pressed ? 0.6 : 1 },
           ]}
           onPress={() => rootNavigation?.navigate("Settings")}
+          accessibilityRole="button"
+          accessibilityLabel={t.settings}
         >
           <MaterialIcons
             name="settings"

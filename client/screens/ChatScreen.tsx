@@ -107,6 +107,8 @@ function MessageBubble({
   return (
     <Pressable
       onLongPress={handleCopy}
+      accessibilityRole="text"
+      accessibilityHint="Long press to copy"
       style={[
         styles.messageBubble,
         isUser ? styles.userBubble : styles.aiBubble,
@@ -169,6 +171,8 @@ function TypingIndicator() {
 
   return (
     <View
+      accessibilityLiveRegion="polite"
+      accessibilityLabel="Assistant is typing"
       style={[styles.typingIndicatorContainer, { alignSelf: "flex-start" }]}
     >
       <View style={[styles.avatarSmall, { overflow: "hidden" }]}>
@@ -589,6 +593,8 @@ export default function ChatScreen() {
       >
         <Pressable
           onPress={openDrawer}
+          accessibilityRole="button"
+          accessibilityLabel="Open menu"
           style={({ pressed }) => [
             styles.headerButton,
             { opacity: pressed ? 0.6 : 1 },
@@ -603,6 +609,8 @@ export default function ChatScreen() {
             { opacity: pressed ? 0.6 : 1 },
           ]}
           onPress={handleOpenModelSelector}
+          accessibilityRole="button"
+          accessibilityLabel={`Select model: ${displayedModel}`}
         >
           <View
             style={[
@@ -709,6 +717,9 @@ export default function ChatScreen() {
               <Pressable
                 onPress={showAttachOptions}
                 disabled={isStreaming}
+                accessibilityRole="button"
+                accessibilityLabel="Attach image"
+                accessibilityState={{ disabled: isStreaming }}
                 style={({ pressed }) => [
                   styles.attachButton,
                   { opacity: pressed ? 0.6 : 1 },
@@ -732,6 +743,7 @@ export default function ChatScreen() {
               editable={!isStreaming}
               onSubmitEditing={handleSend}
               blurOnSubmit={false}
+              accessibilityLabel="Message input"
             />
             <Pressable
               onPress={handleSend}
@@ -739,6 +751,13 @@ export default function ChatScreen() {
                 (!inputText.trim() && pendingAttachments.length === 0) ||
                 isStreaming
               }
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
+              accessibilityState={{
+                disabled:
+                  (!inputText.trim() && pendingAttachments.length === 0) ||
+                  isStreaming,
+              }}
               style={({ pressed }) => [
                 styles.sendButton,
                 {
@@ -791,7 +810,11 @@ export default function ChatScreen() {
           >
             <View style={styles.modelSheetHeader}>
               <ThemedText style={styles.modelSheetTitle}>Model</ThemedText>
-              <Pressable onPress={() => setModelSelectorVisible(false)}>
+              <Pressable
+                onPress={() => setModelSelectorVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close model selector"
+              >
                 <MaterialIcons name="close" size={24} color={theme.text} />
               </Pressable>
             </View>
@@ -815,6 +838,10 @@ export default function ChatScreen() {
                     },
                   ]}
                   onPress={() => handleSelectModel("")}
+                  accessibilityRole="radio"
+                  accessibilityState={{
+                    selected: !settings.endpoint.model,
+                  }}
                 >
                   <ThemedText style={{ color: theme.text }}>Auto</ThemedText>
                   {!settings.endpoint.model && (
@@ -840,6 +867,10 @@ export default function ChatScreen() {
                       },
                     ]}
                     onPress={() => handleSelectModel(model)}
+                    accessibilityRole="radio"
+                    accessibilityState={{
+                      selected: settings.endpoint.model === model,
+                    }}
                   >
                     <ThemedText style={{ color: theme.text }} numberOfLines={1}>
                       {model}

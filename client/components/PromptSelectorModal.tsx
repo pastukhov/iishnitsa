@@ -192,6 +192,7 @@ export function PromptSelectorModal({
       animationType="slide"
       transparent
       onRequestClose={handleClose}
+      accessibilityViewIsModal={true}
     >
       <View style={styles.overlay}>
         <ThemedView
@@ -230,6 +231,8 @@ export function PromptSelectorModal({
               <Pressable
                 onPress={handleRefresh}
                 disabled={isRefreshing}
+                accessibilityRole="button"
+                accessibilityLabel="Refresh prompts"
                 style={({ pressed }) => [
                   styles.refreshButton,
                   { opacity: pressed || isRefreshing ? 0.5 : 1 },
@@ -247,6 +250,8 @@ export function PromptSelectorModal({
               </Pressable>
               <Pressable
                 onPress={handleClose}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
                 style={({ pressed }) => [
                   styles.closeButton,
                   { opacity: pressed ? 0.6 : 1 },
@@ -278,6 +283,7 @@ export function PromptSelectorModal({
               value={searchQuery}
               onChangeText={setSearchQuery}
               autoCorrect={false}
+              accessibilityLabel="Search prompts"
             />
             {searchQuery.length > 0 && (
               <Pressable onPress={() => setSearchQuery("")}>
@@ -310,6 +316,8 @@ export function PromptSelectorModal({
                   },
                 ]}
                 onPress={() => setSelectedTag(null)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedTag === null }}
               >
                 <ThemedText
                   style={[
@@ -340,6 +348,8 @@ export function PromptSelectorModal({
                   onPress={() =>
                     setSelectedTag(selectedTag === tag ? null : tag)
                   }
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: selectedTag === tag }}
                 >
                   <ThemedText
                     style={[
@@ -421,6 +431,8 @@ export function PromptSelectorModal({
                       },
                     ]}
                     onPress={() => handleSelect(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={item.title}
                   >
                     <View style={styles.promptContent}>
                       <ThemedText style={styles.promptTitle}>
@@ -462,6 +474,12 @@ export function PromptSelectorModal({
                     <Pressable
                       style={styles.starButton}
                       onPress={(e) => handleToggleFavorite(item.id, e)}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        isFavorite
+                          ? "Remove from favorites"
+                          : "Add to favorites"
+                      }
                     >
                       <MaterialIcons
                         name={isFavorite ? "star" : "star-border"}

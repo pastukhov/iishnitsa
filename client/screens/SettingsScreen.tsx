@@ -102,11 +102,16 @@ function InputField({
           scrollEnabled={scrollEnabled}
           autoCapitalize="none"
           autoCorrect={false}
+          accessibilityLabel={label}
         />
         {secureTextEntry && (
           <Pressable
             onPress={() => setShowPassword(!showPassword)}
             style={styles.eyeButton}
+            accessibilityRole="button"
+            accessibilityLabel={
+              showPassword ? "Hide password" : "Show password"
+            }
           >
             <MaterialIcons
               name={showPassword ? "visibility-off" : "visibility"}
@@ -144,6 +149,9 @@ function SelectField({
       </ThemedText>
       <Pressable
         onPress={() => setOpen((prev) => !prev)}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ expanded: open }}
         style={[
           styles.selectTrigger,
           {
@@ -228,6 +236,7 @@ function ToggleRow({
         onValueChange={onValueChange}
         trackColor={{ false: theme.surfaceVariant, true: theme.primary }}
         thumbColor={theme.surface}
+        accessibilityLabel={label}
       />
     </View>
   );
@@ -735,6 +744,9 @@ export default function SettingsScreen() {
               disabled={
                 isTesting || !settings.endpoint.apiKey || !resolvedBaseUrl
               }
+              accessibilityRole="button"
+              accessibilityLabel="Test API connection"
+              accessibilityState={{ busy: isTesting }}
               style={({ pressed }) => [
                 styles.testButton,
                 {
@@ -920,6 +932,9 @@ export default function SettingsScreen() {
                       <Pressable
                         onPress={() => toggleMCPServer(server.id)}
                         style={styles.mcpServerInfo}
+                        accessibilityRole="checkbox"
+                        accessibilityLabel={server.name}
+                        accessibilityState={{ checked: server.enabled }}
                       >
                         <MaterialIcons
                           name={
@@ -950,6 +965,8 @@ export default function SettingsScreen() {
                       <Pressable
                         onPress={() => handleTestMCPServer(server)}
                         disabled={testingMCPId === server.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Test ${server.name}`}
                         style={({ pressed }) => [
                           styles.testMcpButton,
                           { opacity: pressed ? 0.6 : 1 },
@@ -972,6 +989,8 @@ export default function SettingsScreen() {
                         onPress={() =>
                           handleRemoveMCPServer(server.id, server.name)
                         }
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${server.name}`}
                         style={({ pressed }) => [
                           styles.removeButton,
                           { opacity: pressed ? 0.6 : 1 },

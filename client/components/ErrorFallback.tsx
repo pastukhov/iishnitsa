@@ -45,6 +45,8 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
       {__DEV__ ? (
         <Pressable
           onPress={() => setIsModalVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel="View error details"
           style={({ pressed }) => [
             styles.topButton,
             {
@@ -68,6 +70,8 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
 
         <Pressable
           onPress={handleRestart}
+          accessibilityRole="button"
+          accessibilityLabel="Try again"
           style={({ pressed }) => [
             styles.button,
             {
@@ -92,6 +96,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           animationType="slide"
           transparent={true}
           onRequestClose={() => setIsModalVisible(false)}
+          accessibilityViewIsModal={true}
         >
           <View style={styles.modalOverlay}>
             <ThemedView style={styles.modalContainer}>
@@ -101,6 +106,8 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                 </ThemedText>
                 <Pressable
                   onPress={() => setIsModalVisible(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close error details"
                   style={({ pressed }) => [
                     styles.closeButton,
                     { opacity: pressed ? 0.6 : 1 },

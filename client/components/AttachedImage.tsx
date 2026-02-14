@@ -50,6 +50,8 @@ export function AttachedImage({
         <Pressable
           onPress={onRemove}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel="Remove image"
           style={[styles.removeButton, { backgroundColor: theme.error }]}
         >
           <MaterialIcons name="close" size={16} color="#FFFFFF" />
