@@ -805,7 +805,7 @@ export default function ChatScreen() {
         onRequestClose={() => setModelSelectorVisible(false)}
       >
         <Pressable
-          style={styles.modelOverlay}
+          style={[styles.modelOverlay, { backgroundColor: theme.modalOverlay }]}
           onPress={() => setModelSelectorVisible(false)}
         >
           <View
@@ -1067,7 +1067,6 @@ const styles = StyleSheet.create({
   },
   modelOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-end",
   },
   modelSheet: {

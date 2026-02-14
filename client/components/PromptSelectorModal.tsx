@@ -194,7 +194,7 @@ export function PromptSelectorModal({
       onRequestClose={handleClose}
       accessibilityViewIsModal={true}
     >
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { backgroundColor: theme.modalOverlay }]}>
         <ThemedView
           style={[
             styles.container,
@@ -540,7 +540,6 @@ export function PromptSelectorModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-end",
   },
   container: {

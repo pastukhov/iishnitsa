@@ -1255,7 +1255,9 @@ export default function SettingsScreen() {
         transparent
         onRequestClose={() => setShowImportModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View
+          style={[styles.modalOverlay, { backgroundColor: theme.modalOverlay }]}
+        >
           <View
             style={[
               styles.modalContent,
@@ -1328,7 +1330,9 @@ export default function SettingsScreen() {
         transparent
         onRequestClose={() => setShowMemoryModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View
+          style={[styles.modalOverlay, { backgroundColor: theme.modalOverlay }]}
+        >
           <View
             style={[
               styles.modalContent,
@@ -1676,7 +1680,6 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     padding: Spacing.lg,
   },

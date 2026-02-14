@@ -88,7 +88,9 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
     <ThemedView style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + Spacing.lg }]}>
         <View style={styles.profileRow}>
-          <View style={styles.avatarContainer}>
+          <View
+            style={[styles.avatarContainer, { backgroundColor: theme.surface }]}
+          >
             <Image
               source={require("../../assets/images/android-icon-foreground.png")}
               style={styles.avatarImage}
@@ -242,7 +244,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
 }
 
 export default function DrawerNavigator() {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
 
   return (
     <Drawer.Navigator
@@ -254,7 +256,7 @@ export default function DrawerNavigator() {
           width: 300,
         },
         drawerType: "front",
-        overlayColor: isDark ? "rgba(0,0,0,0.7)" : "rgba(0,0,0,0.5)",
+        overlayColor: theme.modalOverlay,
       }}
     >
       <Drawer.Screen name="Chat" component={ChatScreen} />
@@ -278,7 +280,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: BorderRadius.full,
-    backgroundColor: "#FFFFFF",
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
