@@ -11,6 +11,7 @@ import {
   FlatList,
   Alert,
   Image,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -108,11 +109,13 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
       <Pressable
         style={({ pressed }) => [
           styles.newChatButton,
-          { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 },
+          { backgroundColor: theme.primary },
+          Platform.OS === "ios" && pressed && { opacity: 0.8 },
         ]}
         onPress={handleNewChat}
         accessibilityRole="button"
         accessibilityLabel={t.newChat}
+        android_ripple={{ color: theme.primaryContainer, borderless: false }}
       >
         <MaterialIcons name="add" size={20} color={theme.buttonText} />
         <ThemedText style={[styles.newChatText, { color: theme.buttonText }]}>
@@ -136,7 +139,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
                 backgroundColor:
                   item.id === currentChatId
                     ? theme.primaryContainer
-                    : pressed
+                    : Platform.OS === "ios" && pressed
                       ? theme.surfaceVariant
                       : "transparent",
               },
@@ -146,6 +149,7 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
             accessibilityRole="button"
             accessibilityLabel={item.title}
             accessibilityHint="Long press to delete"
+            android_ripple={{ color: theme.surfaceVariant, borderless: false }}
           >
             <View style={styles.chatItemContent}>
               <MaterialIcons
@@ -193,11 +197,12 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         <Pressable
           style={({ pressed }) => [
             styles.footerItem,
-            { opacity: pressed ? 0.6 : 1 },
+            Platform.OS === "ios" && pressed && { opacity: 0.6 },
           ]}
           onPress={() => rootNavigation?.navigate("About")}
           accessibilityRole="button"
           accessibilityLabel={t.about}
+          android_ripple={{ color: theme.surfaceVariant, borderless: false }}
         >
           <MaterialIcons
             name="info-outline"
@@ -213,11 +218,12 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
         <Pressable
           style={({ pressed }) => [
             styles.footerItem,
-            { opacity: pressed ? 0.6 : 1 },
+            Platform.OS === "ios" && pressed && { opacity: 0.6 },
           ]}
           onPress={() => rootNavigation?.navigate("Settings")}
           accessibilityRole="button"
           accessibilityLabel={t.settings}
+          android_ripple={{ color: theme.surfaceVariant, borderless: false }}
         >
           <MaterialIcons
             name="settings"

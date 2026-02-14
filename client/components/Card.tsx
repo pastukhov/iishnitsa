@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Pressable, ViewStyle } from "react-native";
+import { StyleSheet, Pressable, ViewStyle, Platform } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -91,12 +91,16 @@ export function Card({
       onPressOut={handlePressOut}
       accessibilityRole={onPress ? "button" : undefined}
       accessibilityLabel={title}
-      style={[
+      android_ripple={
+        onPress ? { color: theme.surfaceVariant, borderless: false } : undefined
+      }
+      style={({ pressed }: { pressed: boolean }) => [
         styles.card,
         {
           backgroundColor: cardBackgroundColor,
           ...getShadowForElevation(elevation),
         },
+        Platform.OS === "ios" && pressed && onPress && { opacity: 0.7 },
         animatedStyle,
         style,
       ]}

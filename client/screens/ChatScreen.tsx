@@ -595,9 +595,10 @@ export default function ChatScreen() {
           onPress={openDrawer}
           accessibilityRole="button"
           accessibilityLabel="Open menu"
+          android_ripple={{ color: theme.surfaceVariant, borderless: true }}
           style={({ pressed }) => [
             styles.headerButton,
-            { opacity: pressed ? 0.6 : 1 },
+            Platform.OS === "ios" && pressed && { opacity: 0.6 },
           ]}
         >
           <MaterialIcons name="menu" size={24} color={theme.text} />
@@ -720,9 +721,13 @@ export default function ChatScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Attach image"
                 accessibilityState={{ disabled: isStreaming }}
+                android_ripple={{
+                  color: theme.surfaceVariant,
+                  borderless: true,
+                }}
                 style={({ pressed }) => [
                   styles.attachButton,
-                  { opacity: pressed ? 0.6 : 1 },
+                  Platform.OS === "ios" && pressed && { opacity: 0.6 },
                 ]}
               >
                 <MaterialIcons
@@ -758,6 +763,10 @@ export default function ChatScreen() {
                   (!inputText.trim() && pendingAttachments.length === 0) ||
                   isStreaming,
               }}
+              android_ripple={{
+                color: theme.primaryContainer,
+                borderless: true,
+              }}
               style={({ pressed }) => [
                 styles.sendButton,
                 {
@@ -766,8 +775,8 @@ export default function ChatScreen() {
                     !isStreaming
                       ? theme.primary
                       : theme.surfaceVariant,
-                  opacity: pressed ? 0.8 : 1,
                 },
+                Platform.OS === "ios" && pressed && { opacity: 0.8 },
               ]}
             >
               <MaterialIcons

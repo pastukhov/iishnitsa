@@ -371,13 +371,15 @@ export function PromptSelectorModal({
             style={({ pressed }) => [
               styles.noneButton,
               {
-                backgroundColor: pressed
-                  ? theme.surfaceVariant
-                  : theme.backgroundSecondary,
+                backgroundColor:
+                  Platform.OS === "ios" && pressed
+                    ? theme.surfaceVariant
+                    : theme.backgroundSecondary,
                 borderColor: theme.outlineVariant,
               },
             ]}
             onPress={() => handleSelect(null)}
+            android_ripple={{ color: theme.surfaceVariant, borderless: false }}
           >
             <MaterialIcons
               name="chat-bubble-outline"
@@ -424,15 +426,20 @@ export function PromptSelectorModal({
                     style={({ pressed }) => [
                       styles.promptItem,
                       {
-                        backgroundColor: pressed
-                          ? theme.surfaceVariant
-                          : theme.surface,
+                        backgroundColor:
+                          Platform.OS === "ios" && pressed
+                            ? theme.surfaceVariant
+                            : theme.surface,
                         borderColor: theme.outlineVariant,
                       },
                     ]}
                     onPress={() => handleSelect(item)}
                     accessibilityRole="button"
                     accessibilityLabel={item.title}
+                    android_ripple={{
+                      color: theme.surfaceVariant,
+                      borderless: false,
+                    }}
                   >
                     <View style={styles.promptContent}>
                       <ThemedText style={styles.promptTitle}>

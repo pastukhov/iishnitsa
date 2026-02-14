@@ -1,5 +1,11 @@
 import React, { ReactNode, useMemo } from "react";
-import { StyleSheet, Pressable, ViewStyle, StyleProp } from "react-native";
+import {
+  StyleSheet,
+  Pressable,
+  ViewStyle,
+  StyleProp,
+  Platform,
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -87,10 +93,16 @@ export function Button({
       disabled={disabled}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
-      style={[
+      android_ripple={{
+        color:
+          variant === "filled" ? theme.primaryContainer : theme.surfaceVariant,
+        borderless: false,
+      }}
+      style={({ pressed }: { pressed: boolean }) => [
         styles.button,
         variantStyles.container,
         { opacity: disabled ? 0.5 : 1 },
+        Platform.OS === "ios" && pressed && { opacity: 0.7 },
         style,
         animatedStyle,
       ]}
