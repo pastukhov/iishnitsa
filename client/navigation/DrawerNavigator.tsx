@@ -12,6 +12,7 @@ import {
   Image,
   Platform,
 } from "react-native";
+import * as Linking from "expo-linking";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useTheme } from "@/hooks/useTheme";
@@ -24,6 +25,7 @@ import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { useTranslations } from "@/lib/translations";
 import Toast from "react-native-toast-message";
 import { LinearGradient } from "expo-linear-gradient";
+import { useLatestRelease } from "@/lib/github-releases";
 
 export type DrawerParamList = {
   Chat: { chatId?: string };
@@ -43,6 +45,8 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
     deleteChat,
     restoreChat,
   } = useChatStore();
+  const latestReleaseQuery = useLatestRelease();
+  const latestRelease = latestReleaseQuery.data;
   const rootNavigation =
     props.navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -218,6 +222,36 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
       <View
         style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}
       >
+        {latestRelease?.isUpdateAvailable ? (
+          <Pressable
+            style={({ pressed }) => [
+              styles.footerItem,
+              styles.updateItem,
+              { backgroundColor: theme.primaryContainer },
+              Platform.OS === "ios" && pressed && { opacity: 0.8 },
+            ]}
+            onPress={() => Linking.openURL(latestRelease.downloadUrl)}
+            accessibilityRole="button"
+            accessibilityLabel={t.updateNow}
+            android_ripple={{ color: theme.surfaceVariant, borderless: false }}
+          >
+            <MaterialIcons
+              name="system-update"
+              size={24}
+              color={theme.primary}
+            />
+            <View style={styles.updateCopy}>
+              <ThemedText style={[styles.footerText, { color: theme.primary }]}>
+                {t.updateAvailable}
+              </ThemedText>
+              <ThemedText
+                style={[styles.updateMetaText, { color: theme.textSecondary }]}
+              >
+                {latestRelease.latestVersion}
+              </ThemedText>
+            </View>
+          </Pressable>
+        ) : null}
         <Pressable
           style={({ pressed }) => [
             styles.footerItem,
@@ -381,6 +415,18 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: Spacing.lg,
     paddingHorizontal: Spacing.lg,
+  },
+  updateItem: {
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+  },
+  updateCopy: {
+    flex: 1,
+  },
+  updateMetaText: {
+    ...Typography.bodySmall,
+    marginLeft: Spacing.md,
   },
   footerItem: {
     flexDirection: "row",
