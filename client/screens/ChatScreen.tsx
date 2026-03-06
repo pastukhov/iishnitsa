@@ -54,7 +54,7 @@ import {
   getProviderDefaultCapabilities,
   getProviderDefaultModel,
 } from "@/lib/agent/model-registry";
-import { getProviderConfig } from "@/lib/providers";
+import { getProviderConfig, providerRequiresApiKey } from "@/lib/providers";
 
 function MessageBubble({
   message,
@@ -307,6 +307,20 @@ export default function ChatScreen() {
   const providerLabel = useMemo(() => {
     return getProviderConfig(settings.endpoint.providerId).name;
   }, [settings.endpoint.providerId]);
+  const resolvedBaseUrl = useMemo(() => {
+    return settings.endpoint.providerId === "custom"
+      ? settings.endpoint.baseUrl.trim()
+      : getProviderConfig(settings.endpoint.providerId).baseUrl;
+  }, [settings.endpoint.baseUrl, settings.endpoint.providerId]);
+  const requiresApiKey = useMemo(() => {
+    return providerRequiresApiKey(settings.endpoint.providerId);
+  }, [settings.endpoint.providerId]);
+  const isEndpointConfigured = useMemo(() => {
+    return (
+      Boolean(resolvedBaseUrl) &&
+      (!requiresApiKey || !!settings.endpoint.apiKey)
+    );
+  }, [requiresApiKey, resolvedBaseUrl, settings.endpoint.apiKey]);
   const displayedModel = useMemo(() => {
     if (!settings.endpoint.model) {
       return "Auto";
@@ -333,6 +347,59 @@ export default function ChatScreen() {
     settings.endpoint.model,
     settings.endpoint.providerId,
   ]);
+  const resolveEndpointForRequest = useCallback(async () => {
+    if (!resolvedBaseUrl) {
+      return {
+        error:
+          settings.endpoint.providerId === "custom"
+            ? "Please configure the Base URL in Settings first."
+            : "Please configure your API endpoint in Settings first.",
+      };
+    }
+
+    if (requiresApiKey && !settings.endpoint.apiKey) {
+      return {
+        error: "Please configure your API key in Settings first.",
+      };
+    }
+
+    if (settings.endpoint.model) {
+      return { endpoint: settings.endpoint };
+    }
+
+    if (settings.endpoint.providerId !== "custom") {
+      return { endpoint: settings.endpoint };
+    }
+
+    setModelsLoading(true);
+    try {
+      const result = await testConnection(settings.endpoint);
+      if (!result.success) {
+        return {
+          error: result.message || "Unable to detect models from the server.",
+        };
+      }
+
+      if (!result.models || result.models.length === 0) {
+        return {
+          error:
+            "No models were returned by the server. Enter a model manually in Settings.",
+        };
+      }
+
+      const detectedModel = result.models[0];
+      setModelOptions(result.models);
+      updateEndpoint({ model: detectedModel });
+      return {
+        endpoint: {
+          ...settings.endpoint,
+          model: detectedModel,
+        },
+      };
+    } finally {
+      setModelsLoading(false);
+    }
+  }, [requiresApiKey, resolvedBaseUrl, settings.endpoint, updateEndpoint]);
   const selectedPrompt = useMemo(() => {
     if (!currentChat) return null;
     if (currentChat.promptSelection !== "preset" || !currentChat.promptId) {
@@ -437,15 +504,19 @@ export default function ChatScreen() {
       attachments: hasAttachments ? attachmentsToSend : undefined,
     });
 
-    if (!settings.endpoint.apiKey) {
+    const resolution = await resolveEndpointForRequest();
+    if (!resolution.endpoint) {
       addMessage({
         role: "assistant",
-        content: "Please configure your API endpoint in Settings first.",
+        content:
+          resolution.error ||
+          "Please configure your API endpoint in Settings first.",
       });
       return;
     }
 
-    const effectiveModel = settings.endpoint.model || autoResolvedModel;
+    const requestEndpoint = resolution.endpoint;
+    const effectiveModel = requestEndpoint.model || autoResolvedModel;
     const isImageGen = isImageGenerationModel(effectiveModel);
 
     setIsStreaming(true);
@@ -454,7 +525,7 @@ export default function ChatScreen() {
     try {
       if (isImageGen && text) {
         updateLastAssistantMessage("Generating image...");
-        const result = await generateImage(settings.endpoint, text);
+        const result = await generateImage(requestEndpoint, text);
         const caption = result.revisedPrompt ? result.revisedPrompt : "";
         updateLastAssistantMessage(caption, [result.attachment]);
       } else {
@@ -472,7 +543,7 @@ export default function ChatScreen() {
         let currentContent = "";
         await sendChatMessage(
           allMessages,
-          settings.endpoint,
+          requestEndpoint,
           (chunk) => {
             currentContent = chunk;
             updateLastAssistantMessage(chunk);
@@ -530,6 +601,7 @@ export default function ChatScreen() {
     selectedPrompt?.prompt,
     memorySummaryEnabled,
     autoResolvedModel,
+    resolveEndpointForRequest,
   ]);
 
   const openDrawer = () => {
@@ -571,9 +643,19 @@ export default function ChatScreen() {
       // Delete the AI message and everything after it
       deleteMessagesFromIndex(messageIndex);
 
-      if (!settings.endpoint.apiKey) return;
+      const resolution = await resolveEndpointForRequest();
+      if (!resolution.endpoint) {
+        addMessage({
+          role: "assistant",
+          content:
+            resolution.error ||
+            "Please configure your API endpoint in Settings first.",
+        });
+        return;
+      }
 
-      const effectiveModel = settings.endpoint.model || autoResolvedModel;
+      const requestEndpoint = resolution.endpoint;
+      const effectiveModel = requestEndpoint.model || autoResolvedModel;
       const isImageGen = isImageGenerationModel(effectiveModel);
 
       setIsStreaming(true);
@@ -583,7 +665,7 @@ export default function ChatScreen() {
         if (isImageGen && lastUserMsg.content) {
           updateLastAssistantMessage("Generating image...");
           const result = await generateImage(
-            settings.endpoint,
+            requestEndpoint,
             lastUserMsg.content,
           );
           const caption = result.revisedPrompt ? result.revisedPrompt : "";
@@ -593,7 +675,7 @@ export default function ChatScreen() {
           let currentContent = "";
           await sendChatMessage(
             allMessages,
-            settings.endpoint,
+            requestEndpoint,
             (chunk) => {
               currentContent = chunk;
               updateLastAssistantMessage(chunk);
@@ -652,6 +734,7 @@ export default function ChatScreen() {
       selectedPrompt?.prompt,
       memorySummaryEnabled,
       autoResolvedModel,
+      resolveEndpointForRequest,
     ],
   );
 
@@ -723,7 +806,7 @@ export default function ChatScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setModelSelectorVisible(true);
-    if (modelOptions.length === 0 && settings.endpoint.apiKey) {
+    if (modelOptions.length === 0 && isEndpointConfigured) {
       setModelsLoading(true);
       const result = await testConnection(settings.endpoint);
       if (result.success && result.models && result.models.length > 0) {
@@ -731,7 +814,7 @@ export default function ChatScreen() {
       }
       setModelsLoading(false);
     }
-  }, [modelOptions.length, settings.endpoint]);
+  }, [isEndpointConfigured, modelOptions.length, settings.endpoint]);
 
   const handleSelectModel = useCallback(
     (model: string) => {
@@ -782,7 +865,7 @@ export default function ChatScreen() {
             style={[
               styles.statusDot,
               {
-                backgroundColor: settings.endpoint.apiKey
+                backgroundColor: isEndpointConfigured
                   ? theme.success
                   : theme.error,
               },
@@ -1074,9 +1157,11 @@ export default function ChatScreen() {
                       { color: theme.textSecondary },
                     ]}
                   >
-                    {settings.endpoint.apiKey
-                      ? "No models loaded"
-                      : "Set API key in Settings"}
+                    {!resolvedBaseUrl
+                      ? "Set Base URL in Settings"
+                      : !isEndpointConfigured
+                        ? "Set API key in Settings"
+                        : "No models loaded"}
                   </ThemedText>
                 )}
               </ScrollView>

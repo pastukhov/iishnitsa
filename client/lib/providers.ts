@@ -158,6 +158,10 @@ export const getProviderConfig = (id: ProviderId): ProviderConfig => {
   return providers.find((provider) => provider.id === id) || providers[0];
 };
 
+export const providerRequiresApiKey = (providerId: ProviderId): boolean => {
+  return providerId !== "custom";
+};
+
 export const formatAuthHeaderLabel = (providerId: ProviderId): string => {
   const provider = getProviderConfig(providerId);
   return `${provider.authHeader}: ${provider.authFormat}`;

@@ -32,6 +32,7 @@ import {
   formatAuthHeaderLabel,
   getProviderConfig,
   getProviders,
+  providerRequiresApiKey,
 } from "@/lib/providers";
 import { useTranslations } from "@/lib/translations";
 import Toast from "react-native-toast-message";
@@ -305,6 +306,7 @@ export default function SettingsScreen() {
   const providers = getProviders();
   const providerConfig = getProviderConfig(settings.endpoint.providerId);
   const isCustomProvider = settings.endpoint.providerId === "custom";
+  const requiresApiKey = providerRequiresApiKey(settings.endpoint.providerId);
   const resolvedBaseUrl = isCustomProvider
     ? settings.endpoint.baseUrl
     : providerConfig.baseUrl;
@@ -337,7 +339,7 @@ export default function SettingsScreen() {
 
   // Auto-fetch models when endpoint configuration changes
   useEffect(() => {
-    if (!settings.endpoint.apiKey || !resolvedBaseUrl) {
+    if ((requiresApiKey && !settings.endpoint.apiKey) || !resolvedBaseUrl) {
       return;
     }
 
@@ -370,6 +372,7 @@ export default function SettingsScreen() {
     settings.endpoint.providerId,
     resolvedBaseUrl,
     settings.endpoint.folderId,
+    requiresApiKey,
   ]);
 
   const handleTestConnection = async () => {
@@ -684,6 +687,7 @@ export default function SettingsScreen() {
               style={[styles.helperText, { color: theme.textSecondary }]}
             >
               Auth format: {formatAuthHeaderLabel(settings.endpoint.providerId)}
+              {requiresApiKey ? "" : " (optional for self-hosted servers)"}
             </ThemedText>
 
             {providerConfig.requiresFolderId && (
@@ -745,7 +749,9 @@ export default function SettingsScreen() {
             <Pressable
               onPress={handleTestConnection}
               disabled={
-                isTesting || !settings.endpoint.apiKey || !resolvedBaseUrl
+                isTesting ||
+                !resolvedBaseUrl ||
+                (requiresApiKey && !settings.endpoint.apiKey)
               }
               accessibilityRole="button"
               accessibilityLabel="Test API connection"
@@ -754,7 +760,8 @@ export default function SettingsScreen() {
                 styles.testButton,
                 {
                   backgroundColor:
-                    settings.endpoint.apiKey && resolvedBaseUrl
+                    resolvedBaseUrl &&
+                    (!requiresApiKey || settings.endpoint.apiKey)
                       ? theme.primary
                       : theme.surfaceVariant,
                   opacity: pressed ? 0.8 : 1,
