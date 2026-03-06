@@ -1,0 +1,1 @@
+./scripts/assert-branch-from-main.sh && npm run check:required

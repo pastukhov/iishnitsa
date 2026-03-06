@@ -39,6 +39,15 @@ export const TRANSLATIONS = {
 
     // About screen
     releaseNotes: "Release Notes",
+    checkingForUpdates: "Checking for updates...",
+    updateAvailable: "Update available",
+    upToDate: "You're up to date",
+    currentVersion: "Current version",
+    latestVersion: "Latest version",
+    updateNow: "Update",
+    viewRelease: "View release",
+    updateCheckFailed: "Could not check updates",
+    publishedOn: "Published",
 
     // Prompt selector
     selectPrompt: "Select Prompt",
@@ -85,6 +94,15 @@ export const TRANSLATIONS = {
 
     // About screen
     releaseNotes: "История изменений",
+    checkingForUpdates: "Проверяем обновления...",
+    updateAvailable: "Доступно обновление",
+    upToDate: "У вас актуальная версия",
+    currentVersion: "Текущая версия",
+    latestVersion: "Последняя версия",
+    updateNow: "Обновить",
+    viewRelease: "Открыть релиз",
+    updateCheckFailed: "Не удалось проверить обновления",
+    publishedOn: "Опубликовано",
 
     // Prompt selector
     selectPrompt: "Выбрать промпт",
