@@ -3,7 +3,13 @@ import {
   fetchLatestRelease,
   getLatestReleaseDownloadUrl,
   mapLatestRelease,
+  useLatestRelease,
 } from "../github-releases";
+import { useQuery } from "@tanstack/react-query";
+
+jest.mock("@tanstack/react-query", () => ({
+  useQuery: jest.fn(),
+}));
 
 describe("github-releases", () => {
   describe("compareVersions", () => {
@@ -16,6 +22,7 @@ describe("github-releases", () => {
     it("normalizes prefixes and missing patch versions", () => {
       expect(compareVersions("v1.33", "1.32.9")).toBe(1);
       expect(compareVersions("release-2.0", "2.0.0")).toBe(0);
+      expect(compareVersions("not-a-version", "0.0.0")).toBe(0);
     });
   });
 
@@ -42,6 +49,36 @@ describe("github-releases", () => {
             {
               name: "source.zip",
               browser_download_url: "https://github.com/example/source.zip",
+            },
+          ],
+        }),
+      ).toBe("https://github.com/example/release");
+    });
+
+    it("accepts APK by content type even without apk extension", () => {
+      expect(
+        getLatestReleaseDownloadUrl({
+          html_url: "https://github.com/example/release",
+          assets: [
+            {
+              name: "android-release.bin",
+              content_type: "application/vnd.android.package-archive",
+              browser_download_url:
+                "https://github.com/example/android-release.bin",
+            },
+          ],
+        }),
+      ).toBe("https://github.com/example/android-release.bin");
+    });
+
+    it("handles assets without a name", () => {
+      expect(
+        getLatestReleaseDownloadUrl({
+          html_url: "https://github.com/example/release",
+          assets: [
+            {
+              content_type: "application/octet-stream",
+              browser_download_url: "https://github.com/example/file.bin",
             },
           ],
         }),
@@ -74,6 +111,16 @@ describe("github-releases", () => {
       expect(result.currentVersion).toBe("1.32.7");
       expect(result.isUpdateAvailable).toBe(true);
       expect(result.downloadUrl).toContain(".apk");
+    });
+
+    it("falls back to normalized version and empty URLs when fields are missing", () => {
+      const result = mapLatestRelease({}, "1.32.7");
+
+      expect(result.latestVersion).toBe("0.0.0");
+      expect(result.releaseName).toBe("0.0.0");
+      expect(result.releaseUrl).toBe("");
+      expect(result.downloadUrl).toBe("");
+      expect(result.isUpdateAvailable).toBe(false);
     });
   });
 
@@ -115,6 +162,47 @@ describe("github-releases", () => {
       await expect(
         fetchLatestRelease(fetchMock as unknown as typeof fetch),
       ).rejects.toThrow("rate limited");
+    });
+
+    it("falls back to status message when response body cannot be read", async () => {
+      const fetchMock = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: () => Promise.reject(new Error("unavailable")),
+      });
+
+      await expect(
+        fetchLatestRelease(fetchMock as unknown as typeof fetch),
+      ).rejects.toThrow("GitHub release check failed: 503");
+    });
+  });
+
+  describe("useLatestRelease", () => {
+    it("configures a cached release query", async () => {
+      (useQuery as jest.Mock).mockReturnValue({ data: null });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            tag_name: "v1.33.8",
+            html_url:
+              "https://github.com/pastukhov/iishnitsa/releases/tag/v1.33.8",
+            assets: [],
+          }),
+      });
+
+      useLatestRelease();
+
+      const config = (useQuery as jest.Mock).mock.calls[0][0];
+      await config.queryFn();
+
+      expect(useQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: ["github-latest-release"],
+          staleTime: 1000 * 60 * 60,
+          queryFn: expect.any(Function),
+        }),
+      );
     });
   });
 });

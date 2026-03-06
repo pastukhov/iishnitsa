@@ -1,11 +1,13 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
+
 - `client/` contains the Expo/React Native app (entry: `client/App.tsx`).
 - `assets/` stores static app assets; `dist/` is a build output.
 - Root config files include `app.json`, `eas.json`, and `tsconfig*.json`.
 
 ## Build, Test, and Development Commands
+
 - `npm run expo:dev`: start the Expo dev server for the mobile client in local Replit-style env.
 - `npm run expo:static:build`: build the static Expo bundle (uses `scripts/build.js`).
 - `npm run sync:prompts`: sync and generate the prompt catalog from awesome-ai-prompts.
@@ -17,27 +19,34 @@
 - `npm run check:format` / `npm run format`: Prettier formatting checks and fixes.
 
 ## MCP Tooling
+
 - Expo MCP tools are available for documentation lookups and EAS workflow guidance.
 - Keep EAS profiles in `eas.json` and default to `preview` for APK builds unless noted otherwise.
 
 ## GitHub Helper
+
 - Use the GitHub CLI (`gh`) to inspect Actions runs, releases, and PR status when troubleshooting CI.
-- Always create PR branches from the latest `main` (rebase or update before opening PRs).
-- Each PR must be opened from the latest `main` (refresh the branch immediately before creating the PR).
+- Always create work branches from `origin/main`, never from a local `main` that may contain unpublished history.
+- Each PR branch must have `git merge-base HEAD origin/main == origin/main` before push.
 - After a PR is merged, always start a new branch from the latest `main` for the next change.
 - Prefer `gh api` for repository queries if standard `gh` commands rely on git in environments where git execution is restricted.
+- Treat every local hook and every PR check as mandatory. Never bypass hooks with `HUSKY=0`, `--no-verify`, or similar shortcuts.
+- After push, verify the auto-created PR before reporting success: expected file list only, expected commit count only, and green checks only.
 
 ## Subagent Workflow
+
 - For features, bug fixes, and refactors, follow the CLAUDE.md subagent chain:
   - Explore (haiku) -> Plan (sonnet) -> branch -> implementation -> checks.
   - Use systematic-debugging for failures, senior-devops for CI/CD/build issues, and senior-prompt-engineer for prompt changes.
 
 ## Coding Style & Naming Conventions
+
 - TypeScript/JavaScript with double quotes and 2-space indentation (enforced by Prettier).
 - Prefer descriptive, explicit names for components and hooks (e.g., `ChatView`, `useStore`).
 - New scripts should live in `scripts/` and use lowercase names with hyphens.
 
 ## Testing Guidelines
+
 - No automated test suite is configured.
 - Use `npm run check:types` and `npm run lint` as the primary quality gates.
 - Use `npm run check:providers` to smoke-test provider connectivity (set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TOGETHER_API_KEY`, `MISTRAL_API_KEY`, `PERPLEXITY_API_KEY`, `YANDEX_API_KEY`, `REPLICATE_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, `DASHSCOPE_API_KEY`; optional per-provider `*_BASE_URL` overrides and `ANTHROPIC_MODEL`/`PERPLEXITY_MODEL`).
@@ -46,6 +55,7 @@
 - Be proactive: when checks or validations are feasible, run them instead of asking the user to do so.
 
 ## Commit & Pull Request Guidelines
+
 - Commit messages must follow Conventional Commits (e.g., `feat: add mcp checks`, `chore(ci): update workflows`).
 - Keep commit subjects short and descriptive.
 - Branch names should be two words describing the change, joined with a hyphen (e.g., `mcp-collections`).
@@ -57,5 +67,6 @@
 - Link related issues when applicable; include screenshots only for UI changes.
 
 ## Security & Configuration Tips
+
 - Avoid committing secrets or local credentials; prefer environment variables for tokens.
 - Treat `dist/` as a build artifact and avoid manual edits.

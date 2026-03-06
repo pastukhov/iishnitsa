@@ -34,6 +34,7 @@ npm run check:providers:mock   # Test with mocked providers (for CI)
 Подключен Mobile MCP — используй его для взаимодействия с Android эмулятором вместо adb-команд.
 
 **Основные операции:**
+
 - `mobile_list_available_devices` — список доступных устройств
 - `mobile_take_screenshot` / `mobile_save_screenshot` — скриншоты
 - `mobile_list_elements_on_screen` — получить элементы UI с координатами
@@ -47,8 +48,10 @@ npm run check:providers:mock   # Test with mocked providers (for CI)
 **Package name:** `com.iishnitsa.app`
 
 **Предпочтения:**
+
 - Используй Mobile MCP вместо `adb` для скриншотов, тапов, ввода текста и навигации
 - `adb` оставляй для операций, которые Mobile MCP не покрывает (force-stop, pm clear, etc.)
+
 ## Android Emulator
 
 Для тестирования в эмуляторе:
@@ -78,9 +81,11 @@ adb shell input swipe <x1> <y1> <x2> <y2> <duration_ms>
 
 **Важно:** Скриншоты делай самостоятельно через `adb exec-out screencap` — не проси пользователя.
 Если пользователь кидает скриншот в `./tmp/`, читай его через Read tool.
+
 ## Architecture
 
 ### Directory Structure
+
 - `client/` — Expo/React Native mobile app
   - `App.tsx` — Root component with providers (React Query, Navigation, SafeArea)
   - `lib/` — Core business logic (store, api, providers, mcp-client)
@@ -95,22 +100,26 @@ adb shell input swipe <x1> <y1> <x2> <y2> <duration_ms>
 ### Key Modules
 
 **State Management** (`client/lib/store.ts`)
+
 - Zustand store managing chats, settings, MCP server configurations
 - Persists to AsyncStorage
 - Handles MCP collections (groups of MCP servers)
 
 **AI Provider Integration** (`client/lib/providers.ts`, `client/lib/api.ts`)
+
 - Multi-provider support with provider-specific auth headers and base URLs
 - Streaming chat completions via OpenAI-compatible API
 - Provider configs define auth format (Bearer, Api-Key, etc.)
 
 **MCP Integration** (`client/lib/mcp-client.ts`)
+
 - JSON-RPC client for MCP servers
 - Caches initialized clients per server
 - Tools converted to OpenAI function format for chat completions
 - Session and auth token management
 
 ### Data Flow
+
 1. User sends message → `sendChatMessage()` in `api.ts`
 2. If MCP enabled, fetches tools from configured servers
 3. Streams response; if tool calls detected, executes via MCP client
@@ -122,6 +131,9 @@ adb shell input swipe <x1> <y1> <x2> <y2> <duration_ms>
 - Branch names: two words joined with hyphen (e.g., `mcp-collections`)
 - Path aliases: `@/*` → `./client/*`
 - Formatting: Prettier (default settings)
+- New work must start from `origin/main`, not from local `main`.
+- Never bypass repository hooks or checks (`HUSKY=0`, `--no-verify`, or by calling checks optional). In this repository, local hooks and PR checks are mandatory.
+- Before declaring a PR ready, verify it contains only the intended commits/files and that every reported check is green.
 
 ## TBD + SemVer Governance
 
@@ -130,6 +142,7 @@ adb shell input swipe <x1> <y1> <x2> <y2> <duration_ms>
 ## CI/CD
 
 GitHub Actions workflows (`.github/workflows/`):
+
 - `pr-checks.yml` — Required checks before merge to `main` (lint, types, tests)
 - `release.yml` — Auto-creates version tags on push/merge to `main` using conventional commits
 - `apk-build.yml` — Builds APK via Gradle when triggered by release workflow
@@ -137,6 +150,7 @@ GitHub Actions workflows (`.github/workflows/`):
 - `delete-merged-branches.yml` — Cleans up merged feature branches
 
 Notes:
+
 - APK builds use Gradle directly (not EAS)
 
 ## Feature Implementation Workflow
@@ -144,6 +158,7 @@ Notes:
 > **ОБЯЗАТЕЛЬНО:** При получении задачи на реализацию фичи, исправление бага или рефакторинг — всегда следуй цепочке субагентов ниже. Не пропускай этапы Explore и Plan.
 
 Разработка ведётся по **Trunk-Based Development (TBD)**:
+
 - Единственная основная ветка — `main`
 - Короткоживущие feature-ветки (часы, не дни)
 - Маленькие, атомарные PR
@@ -162,6 +177,7 @@ Notes:
 | `opus` | $$$ | Сложные задачи: архитектурные решения, сложная отладка, критический код |
 
 **Примеры выбора:**
+
 ```
 # haiku — достаточно для:
 - Explore: поиск файлов по паттерну
@@ -186,28 +202,33 @@ Notes:
 Типичная цепочка субагентов для реализации фичи:
 
 ### 1. Explore (Анализ)
+
 ```
 subagent_type: Explore
 model: haiku  # достаточно для поиска и чтения
 Задача: Исследовать кодовую базу для понимания контекста
 ```
+
 - Найти связанные файлы и компоненты
 - Понять существующие паттерны (стили, навигация, стейт)
 - Определить точки интеграции новой фичи
 - Выявить зависимости и потенциальные конфликты
 
 **Ключевые места для анализа:**
+
 - `client/lib/store.ts` — если фича требует нового состояния
 - `client/lib/api.ts` — если нужны новые API-вызовы
 - `client/screens/` — для понимания структуры экранов
 - `client/navigation/` — если нужна новая навигация
 
 ### 2. Plan (Планирование)
+
 ```
 subagent_type: Plan
 model: sonnet  # требуется анализ и синтез
 Задача: Разработать детальный план реализации
 ```
+
 - Определить изменяемые файлы
 - Спроектировать интерфейсы и типы
 - Продумать граничные случаи
@@ -216,51 +237,63 @@ model: sonnet  # требуется анализ и синтез
 **Выходной артефакт:** Пошаговый план с указанием файлов и изменений
 
 ### 3. Bash (Создание ветки)
+
 ```
 git checkout -b <feature-name>
 ```
+
 - Имя ветки: два слова через дефис (например, `chat-export`)
 
 ### 4. Реализация (последовательно)
 
 **4.1. Типы и интерфейсы**
+
 - Добавить новые типы в `client/lib/store.ts` или создать отдельный файл типов
 - Расширить существующие интерфейсы при необходимости
 
 **4.2. Бизнес-логика**
+
 - `client/lib/` — новые утилиты или расширение существующих
 - Zustand actions в `store.ts` для управления состоянием
 
 **4.3. UI компоненты**
+
 - Переиспользовать компоненты из `client/components/`
 - Следовать паттернам ThemedText, ThemedView для темизации
 - Использовать expo-haptics для тактильной обратной связи
 
 **4.4. Интеграция**
+
 - Добавить экран в `client/screens/`
 - Обновить навигацию в `client/navigation/`
 - Подключить к существующему UI
 
 ### 5. Bash (Проверка качества)
+
 ```bash
 npm run check:types && npm run lint:fix && npm run check:format
 ```
+
 - Исправить все ошибки типов
 - Применить автоформатирование
 - Убедиться что линтер не выдаёт ошибок
 
 ### 5.1. Systematic Debugging (при ошибках)
+
 ```
 subagent_type: systematic-debugging
 model: sonnet  # или opus для сложных багов
 Задача: Систематический поиск и исправление ошибок
 ```
+
 Используй когда:
+
 - Тесты падают
 - Runtime ошибки
 - Неожиданное поведение
 
 Методология:
+
 1. Воспроизвести проблему
 2. Сформулировать гипотезы
 3. Проверить каждую систематически
@@ -268,42 +301,51 @@ model: sonnet  # или opus для сложных багов
 5. Исправить и верифицировать
 
 ### 5.2. Senior DevOps (CI/CD и инфра)
+
 ```
 subagent_type: senior-devops
 model: sonnet  # стандартные CI/CD задачи
 Задача: Настройка CI/CD, сборки, деплоя
 ```
+
 Используй когда:
+
 - Изменения в GitHub Actions workflows
 - Настройка EAS Build
 - Проблемы с CI пайплайном
 - Оптимизация сборки
 
 Зона ответственности:
+
 - `.github/workflows/`
 - `eas.json`
 - `app.json` (build config)
 - Секреты и переменные окружения
 
 ### 5.3. Senior Prompt Engineer (системные промпты)
+
 ```
 subagent_type: senior-prompt-engineer
 model: sonnet  # требуется понимание нюансов
 Задача: Оптимизация промптов и инструкций для AI
 ```
+
 Используй когда:
+
 - Изменение системного промпта в `store.ts`
 - Настройка MCP tool descriptions
 - Улучшение качества ответов AI
 - Добавление новых AI-возможностей
 
 Принципы:
+
 - Чёткие инструкции
 - Структурированный формат
 - Примеры использования
 - Ограничения и guardrails
 
 ### 6. Bash (Коммит и PR)
+
 ```bash
 git add -A
 git commit -m "feat: <описание фичи>"
@@ -311,11 +353,14 @@ gh pr create --title "feat: <название>" --body "..."
 ```
 
 **Шаблон PR:**
+
 ```markdown
 ## Summary
+
 - Что добавлено/изменено
 
 ## Test plan
+
 - [ ] Проверить на iOS/Android
 - [ ] Проверить граничные случаи
 - [ ] Проверить с разными провайдерами (если затронуто)
@@ -338,12 +383,14 @@ gh pr create --title "feat: <название>" --body "..."
 ### Параллельное выполнение
 
 Некоторые этапы можно запускать параллельно:
+
 - Explore нескольких областей кодовой базы одновременно
 - Проверки (types, lint, format) в одном вызове через `&&`
 
 ### Откат при ошибках
 
 Если проверки падают:
+
 1. Прочитать вывод ошибки
 2. Исправить код
 3. Повторить проверки
