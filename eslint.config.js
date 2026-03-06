@@ -8,5 +8,12 @@ module.exports = defineConfig([
   eslintPluginPrettierRecommended,
   {
     ignores: ["dist/*"],
+    settings: {
+      "import/resolver": {
+        node: {
+          extensions: [".js", ".jsx", ".ts", ".tsx", ".json"],
+        },
+      },
+    },
   },
 ]);
