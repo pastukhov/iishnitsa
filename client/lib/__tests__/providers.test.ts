@@ -8,6 +8,7 @@ import {
   resolveBaseUrl,
   fetchProviderModels,
   ProviderId,
+  providerRequiresApiKey,
 } from "../providers";
 
 describe("providers", () => {
@@ -158,6 +159,16 @@ describe("providers", () => {
     it("returns empty object for empty api key", () => {
       const headers = buildProviderHeaders("yandex", "", "b1abc123");
       expect(headers).toEqual({});
+    });
+  });
+
+  describe("providerRequiresApiKey", () => {
+    it("requires API key for hosted providers", () => {
+      expect(providerRequiresApiKey("openai")).toBe(true);
+    });
+
+    it("does not require API key for custom provider", () => {
+      expect(providerRequiresApiKey("custom")).toBe(false);
     });
   });
 
@@ -339,6 +350,31 @@ describe("providers", () => {
       );
       expect(result.models).toContain("gpt-4");
       expect(result.models).toContain("gpt-3.5-turbo");
+    });
+
+    it("fetches models for custom provider without API key", async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [{ id: "local-model" }],
+          }),
+      });
+
+      const result = await fetchProviderModels({
+        providerId: "custom",
+        baseUrl: "http://192.168.11.128:8000/v1",
+        apiKey: "",
+      });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        "http://192.168.11.128:8000/v1/models",
+        expect.objectContaining({
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+      expect(result.models).toEqual(["local-model"]);
     });
 
     it("extracts models from various response formats", async () => {
