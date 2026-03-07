@@ -114,7 +114,7 @@ jobs:
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git add package.json app.json
           git commit -m "chore(release): bump version to ${VERSION}"
-          git push origin main
+          git push origin HEAD:refs/heads/main
 
       - name: Trigger APK build
         if: steps.skip.outputs.skip == 'false' && steps.check.outputs.exists == 'false'
