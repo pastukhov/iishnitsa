@@ -106,7 +106,7 @@ jobs:
       - name: Commit and push version bump
         if: steps.skip.outputs.skip == 'false' && steps.check.outputs.exists == 'false'
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           git config user.name "github-actions[bot]"
