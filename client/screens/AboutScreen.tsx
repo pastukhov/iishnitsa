@@ -1,8 +1,16 @@
-import React from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
+import React, { useState } from "react";
+import {
+  ActivityIndicator,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Markdown from "react-native-markdown-display";
 import * as Linking from "expo-linking";
+
+import { downloadAndInstallApk } from "@/lib/apk-installer";
 
 import { Button } from "@/components/Button";
 import { ThemedText } from "@/components/ThemedText";
@@ -42,6 +50,23 @@ export default function AboutScreen() {
       marginTop: Spacing.xs,
       marginBottom: Spacing.md,
     },
+  };
+
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleUpdatePress = async (downloadUrl: string) => {
+    if (Platform.OS === "android") {
+      setIsDownloading(true);
+      try {
+        await downloadAndInstallApk(downloadUrl);
+      } catch {
+        await Linking.openURL(downloadUrl);
+      } finally {
+        setIsDownloading(false);
+      }
+    } else {
+      await Linking.openURL(downloadUrl);
+    }
   };
 
   const versionLabel = appInfo.androidVersionCode
@@ -140,11 +165,18 @@ export default function AboutScreen() {
               <View style={styles.updateButtons}>
                 {latestRelease.isUpdateAvailable ? (
                   <Button
-                    disabled={!latestRelease.downloadUrl}
-                    onPress={() => Linking.openURL(latestRelease.downloadUrl)}
+                    disabled={!latestRelease.downloadUrl || isDownloading}
+                    onPress={() => handleUpdatePress(latestRelease.downloadUrl)}
                     style={styles.primaryButton}
                   >
-                    {t.updateNow}
+                    {isDownloading ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={theme.buttonText}
+                      />
+                    ) : (
+                      t.updateNow
+                    )}
                   </Button>
                 ) : null}
                 <Button

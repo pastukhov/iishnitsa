@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   createDrawerNavigator,
   DrawerContentComponentProps,
@@ -26,6 +26,7 @@ import { useTranslations } from "@/lib/translations";
 import Toast from "react-native-toast-message";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLatestRelease } from "@/lib/github-releases";
+import { downloadAndInstallApk } from "@/lib/apk-installer";
 
 export type DrawerParamList = {
   Chat: { chatId?: string };
@@ -47,6 +48,23 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
   } = useChatStore();
   const latestReleaseQuery = useLatestRelease();
   const latestRelease = latestReleaseQuery.data;
+  const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
+
+  const handleUpdatePress = async (downloadUrl: string) => {
+    if (Platform.OS === "android") {
+      setIsDownloadingUpdate(true);
+      try {
+        await downloadAndInstallApk(downloadUrl);
+      } catch {
+        await Linking.openURL(downloadUrl);
+      } finally {
+        setIsDownloadingUpdate(false);
+      }
+    } else {
+      await Linking.openURL(downloadUrl);
+    }
+  };
+
   const rootNavigation =
     props.navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -230,7 +248,10 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
               { backgroundColor: theme.primaryContainer },
               Platform.OS === "ios" && pressed && { opacity: 0.8 },
             ]}
-            onPress={() => Linking.openURL(latestRelease.downloadUrl)}
+            onPress={() =>
+              !isDownloadingUpdate &&
+              handleUpdatePress(latestRelease.downloadUrl)
+            }
             accessibilityRole="button"
             accessibilityLabel={t.updateNow}
             android_ripple={{ color: theme.surfaceVariant, borderless: false }}
