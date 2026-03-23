@@ -49,6 +49,7 @@ export interface EndpointConfig {
     | "groq"
     | "dashscope"
     | "openrouter"
+    | "pocketpal"
     | "custom";
   folderId?: string;
 }

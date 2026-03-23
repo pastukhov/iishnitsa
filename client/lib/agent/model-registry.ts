@@ -59,6 +59,7 @@ const PROVIDER_DEFAULTS: Record<
     supportsAudio: false,
     supportsStreaming: true,
   },
+  pocketpal: { ...DEFAULT_CAPABILITIES },
   custom: { ...DEFAULT_CAPABILITIES },
 };
 
