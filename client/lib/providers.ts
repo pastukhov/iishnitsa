@@ -10,6 +10,7 @@ export type ProviderId =
   | "groq"
   | "dashscope"
   | "openrouter"
+  | "pocketpal"
   | "custom";
 
 export type ModelListType =
@@ -120,6 +121,14 @@ const providers: ProviderConfig[] = [
     modelListType: "openai",
   },
   {
+    id: "pocketpal",
+    name: "PocketPal AI",
+    baseUrl: "http://localhost:8080/v1",
+    authHeader: "Authorization",
+    authFormat: "Bearer <KEY>",
+    modelListType: "openai",
+  },
+  {
     id: "custom",
     name: "Custom / Self-hosted",
     baseUrl: "",
@@ -159,7 +168,7 @@ export const getProviderConfig = (id: ProviderId): ProviderConfig => {
 };
 
 export const providerRequiresApiKey = (providerId: ProviderId): boolean => {
-  return providerId !== "custom";
+  return providerId !== "custom" && providerId !== "pocketpal";
 };
 
 export const formatAuthHeaderLabel = (providerId: ProviderId): string => {
