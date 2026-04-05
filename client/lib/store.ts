@@ -352,6 +352,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const rawChats = chatsJson ? JSON.parse(chatsJson) : [];
       const chats = rawChats.map((chat: Chat) => ({
         ...chat,
+        messages: Array.isArray(chat.messages) ? chat.messages : [],
         promptSelection: chat.promptSelection ?? "unset",
         promptId: chat.promptId ?? null,
         memorySummaryEnabled: chat.memorySummaryEnabled ?? true,
@@ -690,7 +691,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         if (chat.id === state.currentChatId) {
           return {
             ...chat,
-            messages: chat.messages.slice(0, index),
+            messages: (chat.messages || []).slice(0, index),
             updatedAt: new Date().toISOString(),
           };
         }

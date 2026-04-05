@@ -475,8 +475,8 @@ export function PromptSelectorModal({
                         ]}
                         numberOfLines={2}
                       >
-                        {item.prompt.slice(0, 150)}
-                        {item.prompt.length > 150 ? "..." : ""}
+                        {(item.prompt || "").slice(0, 150)}
+                        {(item.prompt || "").length > 150 ? "..." : ""}
                       </ThemedText>
                     </View>
                     <Pressable
