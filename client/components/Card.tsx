@@ -77,10 +77,12 @@ export function Card({
   }));
 
   const handlePressIn = () => {
+    // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate outside React's render cycle by design
     scale.value = withSpring(0.98, springConfig);
   };
 
   const handlePressOut = () => {
+    // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate outside React's render cycle by design
     scale.value = withSpring(1, springConfig);
   };
 

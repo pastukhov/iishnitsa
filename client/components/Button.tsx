@@ -51,12 +51,14 @@ export function Button({
 
   const handlePressIn = () => {
     if (!disabled) {
+      // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate outside React's render cycle by design
       scale.value = withSpring(0.98, springConfig);
     }
   };
 
   const handlePressOut = () => {
     if (!disabled) {
+      // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate outside React's render cycle by design
       scale.value = withSpring(1, springConfig);
     }
   };

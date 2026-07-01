@@ -33,7 +33,9 @@ function AppContent() {
   }, [loadFromStorage]);
 
   useEffect(() => {
-    Appearance.setColorScheme(themeSetting === "system" ? null : themeSetting);
+    Appearance.setColorScheme(
+      themeSetting === "system" ? "unspecified" : themeSetting,
+    );
   }, [themeSetting]);
 
   const statusBarStyle =
