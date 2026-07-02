@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "iishnitsa",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.iishnitsa.app"
@@ -18,7 +17,6 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "softwareKeyboardLayoutMode": "resize",
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.iishnitsa.app",
       "versionCode": 10801,
@@ -45,7 +43,11 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-localization",
+      "expo-status-bar"
     ],
     "experiments": {
       "reactCompiler": true

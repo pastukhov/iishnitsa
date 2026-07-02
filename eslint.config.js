@@ -15,5 +15,14 @@ module.exports = defineConfig([
         },
       },
     },
+    rules: {
+      // React Compiler diagnostics added by eslint-config-expo 57. Both are
+      // advisory rather than correctness rules: set-state-in-effect flags our
+      // pre-existing "reset derived UI state when upstream props change"
+      // effects, and preserve-manual-memoization just means the compiler
+      // leaves already-correct manual useMemo/useCallback as-is.
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/preserve-manual-memoization": "off",
+    },
   },
 ]);
