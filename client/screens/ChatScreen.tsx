@@ -439,6 +439,11 @@ export default function ChatScreen() {
         onItemFinish: () => {
           setIsStreaming(false);
         },
+        onItemError: (error: any) => {
+          updateLastAssistantMessage(
+            `Error: ${error?.message || "Failed to get response from AI"}`,
+          );
+        },
         memorySettings: {
           enabled: settings.memoryEnabled,
           autoSave: settings.memoryAutoSave,
@@ -906,13 +911,14 @@ export default function ChatScreen() {
             { paddingBottom: Spacing["2xl"] },
           ]}
           renderItem={({ item, index }) => {
-            // Don't render empty assistant message while streaming (TypingIndicator handles this)
-            if (
+            // Never render an assistant bubble with no content and no attachments
+            // (e.g. a placeholder left behind by a failed/streaming response).
+            // The active streaming placeholder is handled by TypingIndicator instead.
+            const isEmptyAssistant =
               item.role === "assistant" &&
               !item.content &&
-              isStreaming &&
-              index === messages.length - 1
-            ) {
+              (!item.attachments || item.attachments.length === 0);
+            if (isEmptyAssistant) {
               return null;
             }
             return (
