@@ -83,6 +83,7 @@ export async function flushQueuedChatMessages(options: {
   onChunk: (content: string) => void;
   onItemStart?: () => void;
   onItemFinish?: () => void;
+  onItemError?: (error: any) => void;
   memorySettings?: MemorySettings;
 }): Promise<{ processed: number; failed: number; remaining: number }> {
   return await flushQueuedChatRequests({
@@ -102,6 +103,9 @@ export async function flushQueuedChatMessages(options: {
             memorySettings: payload.memorySettings ?? options.memorySettings,
           },
         );
+      } catch (error) {
+        options.onItemError?.(error);
+        throw error;
       } finally {
         options.onItemFinish?.();
       }
