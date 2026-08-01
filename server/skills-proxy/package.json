@@ -1,0 +1,10 @@
+{
+  "name": "skills-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Vercel OIDC-authenticated proxy for the skills.sh v1 API, used by the Iishnitsa mobile app to browse the skills marketplace.",
+  "dependencies": {
+    "@vercel/oidc": "^3.8.1"
+  }
+}
