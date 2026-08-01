@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useChatStore } from "../store";
+import { useChatStore, getEffectiveSystemPrompt } from "../store";
 import { getTranslations } from "../translations";
 
 // Simple act replacement for state updates
@@ -22,6 +22,7 @@ const resetStore = () => {
       },
       mcpServers: [],
       mcpEnabled: false,
+      skills: [],
       theme: "system",
       memoryEnabled: true,
       memoryAutoSave: true,
@@ -578,6 +579,219 @@ describe("useChatStore", () => {
           true,
         );
       });
+    });
+  });
+
+  describe("Skill management", () => {
+    describe("addSkill", () => {
+      it("adds new skill", () => {
+        const { addSkill } = useChatStore.getState();
+
+        act(() => {
+          addSkill({
+            name: "Test Skill",
+            description: "Does a thing",
+            content: "Always do the thing.",
+            enabled: true,
+          });
+        });
+
+        const skills = useChatStore.getState().settings.skills;
+        expect(skills).toHaveLength(1);
+        expect(skills[0].name).toBe("Test Skill");
+        expect(skills[0].description).toBe("Does a thing");
+        expect(skills[0].content).toBe("Always do the thing.");
+        expect(skills[0].enabled).toBe(true);
+        expect(skills[0].id).toBeDefined();
+      });
+    });
+
+    describe("updateSkill", () => {
+      it("updates existing skill", () => {
+        const { addSkill, updateSkill } = useChatStore.getState();
+
+        act(() => {
+          addSkill({
+            name: "Test",
+            description: "",
+            content: "Content",
+            enabled: true,
+          });
+        });
+
+        const skillId = useChatStore.getState().settings.skills[0].id;
+
+        act(() => {
+          updateSkill(skillId, { name: "Updated", content: "New content" });
+        });
+
+        const skill = useChatStore.getState().settings.skills[0];
+        expect(skill.name).toBe("Updated");
+        expect(skill.content).toBe("New content");
+      });
+    });
+
+    describe("removeSkill", () => {
+      it("removes skill by id", () => {
+        const { addSkill, removeSkill } = useChatStore.getState();
+
+        act(() => {
+          addSkill({
+            name: "Test",
+            description: "",
+            content: "Content",
+            enabled: true,
+          });
+        });
+
+        const skillId = useChatStore.getState().settings.skills[0].id;
+
+        act(() => {
+          removeSkill(skillId);
+        });
+
+        expect(useChatStore.getState().settings.skills).toHaveLength(0);
+      });
+    });
+
+    describe("toggleSkill", () => {
+      it("toggles skill enabled state", () => {
+        const { addSkill, toggleSkill } = useChatStore.getState();
+
+        act(() => {
+          addSkill({
+            name: "Test",
+            description: "",
+            content: "Content",
+            enabled: true,
+          });
+        });
+
+        const skillId = useChatStore.getState().settings.skills[0].id;
+
+        act(() => {
+          toggleSkill(skillId);
+        });
+
+        expect(useChatStore.getState().settings.skills[0].enabled).toBe(false);
+
+        act(() => {
+          toggleSkill(skillId);
+        });
+
+        expect(useChatStore.getState().settings.skills[0].enabled).toBe(true);
+      });
+    });
+
+    describe("restoreSkill", () => {
+      it("restores a removed skill", () => {
+        const { addSkill, removeSkill, restoreSkill } = useChatStore.getState();
+
+        act(() => {
+          addSkill({
+            name: "Test",
+            description: "",
+            content: "Content",
+            enabled: true,
+          });
+        });
+
+        const skill = useChatStore.getState().settings.skills[0];
+
+        act(() => {
+          removeSkill(skill.id);
+        });
+        expect(useChatStore.getState().settings.skills).toHaveLength(0);
+
+        act(() => {
+          restoreSkill(skill);
+        });
+
+        expect(useChatStore.getState().settings.skills).toHaveLength(1);
+        expect(useChatStore.getState().settings.skills[0].id).toBe(skill.id);
+      });
+    });
+  });
+
+  describe("getEffectiveSystemPrompt", () => {
+    it("returns the base system prompt unchanged when there are no skills", () => {
+      const settings = {
+        ...useChatStore.getState().settings,
+        systemPrompt: "  Base prompt  ",
+        skills: [],
+      };
+      expect(getEffectiveSystemPrompt(settings)).toBe("Base prompt");
+    });
+
+    it("excludes disabled skills", () => {
+      const settings = {
+        ...useChatStore.getState().settings,
+        systemPrompt: "Base prompt",
+        skills: [
+          {
+            id: "1",
+            name: "Disabled",
+            description: "",
+            content: "Should not appear",
+            enabled: false,
+          },
+        ],
+      };
+
+      const result = getEffectiveSystemPrompt(settings);
+      expect(result).toBe("Base prompt");
+      expect(result).not.toContain("Should not appear");
+    });
+
+    it("appends enabled skills content in order", () => {
+      const settings = {
+        ...useChatStore.getState().settings,
+        systemPrompt: "Base prompt",
+        skills: [
+          {
+            id: "1",
+            name: "First",
+            description: "",
+            content: "First content",
+            enabled: true,
+          },
+          {
+            id: "2",
+            name: "Second",
+            description: "",
+            content: "Second content",
+            enabled: true,
+          },
+        ],
+      };
+
+      const result = getEffectiveSystemPrompt(settings);
+      expect(result).toContain("Base prompt");
+      expect(result).toContain("## Skill: First\nFirst content");
+      expect(result).toContain("## Skill: Second\nSecond content");
+      expect(result.indexOf("First content")).toBeLessThan(
+        result.indexOf("Second content"),
+      );
+    });
+
+    it("produces valid output with an empty system prompt and enabled skills", () => {
+      const settings = {
+        ...useChatStore.getState().settings,
+        systemPrompt: "",
+        skills: [
+          {
+            id: "1",
+            name: "Only",
+            description: "",
+            content: "Only content",
+            enabled: true,
+          },
+        ],
+      };
+
+      const result = getEffectiveSystemPrompt(settings);
+      expect(result).toBe("## Skill: Only\nOnly content");
+      expect(result.startsWith("\n")).toBe(false);
     });
   });
 
