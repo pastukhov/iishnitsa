@@ -1,12 +1,10 @@
 import {
-  getCuratedSkills,
-  searchMarketplaceSkills,
-  getMarketplaceSkillDetail,
-  getMarketplaceSkillAudit,
-  extractSkillMdContent,
+  parseSkillReference,
+  findSkillFiles,
+  fetchRawFile,
   extractSkillDescription,
-  SkillsMarketplaceError,
-  SKILLS_MARKETPLACE_PROXY_URL,
+  hashContent,
+  GitHubSkillError,
 } from "../skills-marketplace";
 
 describe("skills-marketplace", () => {
@@ -14,142 +12,178 @@ describe("skills-marketplace", () => {
     (global.fetch as jest.Mock).mockReset();
   });
 
-  const mockResponse = (status: number, body: unknown) => ({
+  const mockResponse = (status: number, body: unknown, isJson = true) => ({
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
+    text: async () => (isJson ? JSON.stringify(body) : (body as string)),
   });
 
-  describe("getCuratedSkills", () => {
-    it("fetches the curated endpoint", async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(
-        mockResponse(200, {
-          data: [{ owner: "vercel-labs", totalInstalls: 1, skills: [] }],
-          totalOwners: 1,
-          totalSkills: 1,
-        }),
-      );
-
-      const result = await getCuratedSkills();
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${SKILLS_MARKETPLACE_PROXY_URL}/api/v1/skills/curated`,
-      );
-      expect(result.totalOwners).toBe(1);
+  describe("parseSkillReference", () => {
+    it("parses a skills.sh URL with a slug", () => {
+      expect(
+        parseSkillReference("https://skills.sh/vercel-labs/skills/find-skills"),
+      ).toEqual({ owner: "vercel-labs", repo: "skills", slug: "find-skills" });
     });
-  });
 
-  describe("searchMarketplaceSkills", () => {
-    it("builds query params for search", async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(
-        mockResponse(200, { data: [], searchType: "semantic" }),
-      );
+    it("parses a skills.sh URL without a slug", () => {
+      expect(
+        parseSkillReference("https://skills.sh/mintlify.com/mintlify"),
+      ).toEqual({ owner: "mintlify.com", repo: "mintlify", slug: undefined });
+    });
 
-      await searchMarketplaceSkills("react native", {
-        limit: 5,
+    it("parses a plain GitHub repo URL", () => {
+      expect(
+        parseSkillReference("https://github.com/vercel-labs/skills"),
+      ).toEqual({ owner: "vercel-labs", repo: "skills" });
+    });
+
+    it("parses a GitHub tree URL, using the last path segment as slug", () => {
+      expect(
+        parseSkillReference(
+          "https://github.com/vercel-labs/skills/tree/main/find-skills",
+        ),
+      ).toEqual({ owner: "vercel-labs", repo: "skills", slug: "find-skills" });
+    });
+
+    it("parses a bare owner/repo string", () => {
+      expect(parseSkillReference("expo/skills")).toEqual({
         owner: "expo",
+        repo: "skills",
+        slug: undefined,
       });
+    });
 
-      const calledUrl = (global.fetch as jest.Mock).mock.calls[0][0];
-      expect(calledUrl).toContain("/api/v1/skills/search?");
-      expect(calledUrl).toContain("q=react+native");
-      expect(calledUrl).toContain("limit=5");
-      expect(calledUrl).toContain("owner=expo");
+    it("parses a bare owner/repo/slug string", () => {
+      expect(parseSkillReference("expo/skills/react-native")).toEqual({
+        owner: "expo",
+        repo: "skills",
+        slug: "react-native",
+      });
+    });
+
+    it("returns null for unrecognized input", () => {
+      expect(parseSkillReference("not a reference")).toBeNull();
+      expect(parseSkillReference("")).toBeNull();
     });
   });
 
-  describe("getMarketplaceSkillDetail", () => {
-    it("fetches a skill's detail by id", async () => {
+  describe("findSkillFiles", () => {
+    it("matches a skill at the repo root by slug", async () => {
       (global.fetch as jest.Mock).mockResolvedValue(
         mockResponse(200, {
-          id: "vercel-labs/skills/find-skills",
-          source: "vercel-labs/skills",
-          slug: "find-skills",
-          installs: 1,
-          hash: "abc",
-          files: [{ path: "SKILL.md", contents: "---\nname: X\n---\nBody" }],
-        }),
-      );
-
-      const detail = await getMarketplaceSkillDetail(
-        "vercel-labs/skills/find-skills",
-      );
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        `${SKILLS_MARKETPLACE_PROXY_URL}/api/v1/skills/vercel-labs/skills/find-skills`,
-      );
-      expect(detail.hash).toBe("abc");
-    });
-
-    it("throws a SkillsMarketplaceError on non-2xx responses", async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(
-        mockResponse(404, { error: "not_found", message: "Skill not found." }),
-      );
-
-      await expect(getMarketplaceSkillDetail("missing/skill")).rejects.toThrow(
-        SkillsMarketplaceError,
-      );
-    });
-  });
-
-  describe("getMarketplaceSkillAudit", () => {
-    it("returns null when no audit exists (404)", async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(
-        mockResponse(404, { error: "not_found", message: "No audits yet." }),
-      );
-
-      const result = await getMarketplaceSkillAudit("owner/repo/skill");
-      expect(result).toBeNull();
-    });
-
-    it("returns audit data when available", async () => {
-      (global.fetch as jest.Mock).mockResolvedValue(
-        mockResponse(200, {
-          id: "owner/repo/skill",
-          source: "owner/repo",
-          slug: "skill",
-          audits: [
-            {
-              provider: "Socket",
-              slug: "socket",
-              status: "pass",
-              summary: "No alerts",
-              auditedAt: "2026-01-01T00:00:00.000Z",
-            },
+          tree: [
+            { path: "find-skills/SKILL.md", type: "blob" },
+            { path: "other-skill/SKILL.md", type: "blob" },
           ],
         }),
       );
 
-      const result = await getMarketplaceSkillAudit("owner/repo/skill");
-      expect(result?.audits).toHaveLength(1);
-      expect(result?.audits[0].status).toBe("pass");
+      const matches = await findSkillFiles(
+        "vercel-labs",
+        "skills",
+        "find-skills",
+      );
+      expect(matches).toEqual([
+        { path: "find-skills/SKILL.md", name: "find-skills" },
+      ]);
     });
 
-    it("rethrows non-404 errors", async () => {
+    it("matches a nested skill path", async () => {
       (global.fetch as jest.Mock).mockResolvedValue(
-        mockResponse(500, { error: "server_error", message: "Boom" }),
+        mockResponse(200, {
+          tree: [{ path: "packages/find-skills/SKILL.md", type: "blob" }],
+        }),
       );
 
+      const matches = await findSkillFiles(
+        "vercel-labs",
+        "skills",
+        "find-skills",
+      );
+      expect(matches).toEqual([
+        { path: "packages/find-skills/SKILL.md", name: "find-skills" },
+      ]);
+    });
+
+    it("matches a root-level SKILL.md when the repo name equals the slug", () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        mockResponse(200, { tree: [{ path: "SKILL.md", type: "blob" }] }),
+      );
+
+      return expect(
+        findSkillFiles("mintlify.com", "mintlify", "mintlify"),
+      ).resolves.toEqual([{ path: "SKILL.md", name: "mintlify" }]);
+    });
+
+    it("returns all skill files when no slug is given", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        mockResponse(200, {
+          tree: [
+            { path: "a/SKILL.md", type: "blob" },
+            { path: "b/SKILL.md", type: "blob" },
+            { path: "b/examples/file.ts", type: "blob" },
+          ],
+        }),
+      );
+
+      const matches = await findSkillFiles("owner", "repo");
+      expect(matches).toEqual([
+        { path: "a/SKILL.md", name: "a" },
+        { path: "b/SKILL.md", name: "b" },
+      ]);
+    });
+
+    it("falls back to all skill files when the slug doesn't match any", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        mockResponse(200, { tree: [{ path: "a/SKILL.md", type: "blob" }] }),
+      );
+
+      const matches = await findSkillFiles("owner", "repo", "missing");
+      expect(matches).toEqual([{ path: "a/SKILL.md", name: "a" }]);
+    });
+
+    it("throws repo_not_found on 404", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(mockResponse(404, {}));
+
+      await expect(findSkillFiles("owner", "missing-repo")).rejects.toThrow(
+        GitHubSkillError,
+      );
       await expect(
-        getMarketplaceSkillAudit("owner/repo/skill"),
-      ).rejects.toThrow(SkillsMarketplaceError);
+        findSkillFiles("owner", "missing-repo"),
+      ).rejects.toMatchObject({ code: "repo_not_found" });
+    });
+
+    it("throws rate_limited on 403", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(mockResponse(403, {}));
+
+      await expect(findSkillFiles("owner", "repo")).rejects.toMatchObject({
+        code: "rate_limited",
+      });
     });
   });
 
-  describe("extractSkillMdContent", () => {
-    it("finds SKILL.md case-insensitively", () => {
-      const content = extractSkillMdContent([
-        { path: "examples/a.ts", contents: "code" },
-        { path: "SKILL.md", contents: "# Hello" },
-      ]);
+  describe("fetchRawFile", () => {
+    it("returns the file's text content", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        mockResponse(200, "# Hello", false),
+      );
+
+      const content = await fetchRawFile("owner", "repo", "a/SKILL.md");
       expect(content).toBe("# Hello");
+      expect(global.fetch).toHaveBeenCalledWith(
+        "https://raw.githubusercontent.com/owner/repo/HEAD/a/SKILL.md",
+      );
     });
 
-    it("returns null when there is no SKILL.md or files is null", () => {
-      expect(extractSkillMdContent([{ path: "a.ts", contents: "x" }])).toBe(
-        null,
+    it("throws file_not_found on 404", async () => {
+      (global.fetch as jest.Mock).mockResolvedValue(
+        mockResponse(404, "", false),
       );
-      expect(extractSkillMdContent(null)).toBe(null);
+
+      await expect(
+        fetchRawFile("owner", "repo", "missing/SKILL.md"),
+      ).rejects.toMatchObject({ code: "file_not_found" });
     });
   });
 
@@ -167,6 +201,16 @@ describe("skills-marketplace", () => {
     it("returns empty string when there is no frontmatter or description", () => {
       expect(extractSkillDescription("# Just a heading\nBody")).toBe("");
       expect(extractSkillDescription("---\nname: X\n---\nBody")).toBe("");
+    });
+  });
+
+  describe("hashContent", () => {
+    it("is deterministic", () => {
+      expect(hashContent("hello world")).toBe(hashContent("hello world"));
+    });
+
+    it("differs for different content", () => {
+      expect(hashContent("hello")).not.toBe(hashContent("world"));
     });
   });
 });
