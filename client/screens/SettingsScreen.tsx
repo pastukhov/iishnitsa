@@ -37,6 +37,7 @@ import {
 import { useTranslations } from "@/lib/translations";
 import Toast from "react-native-toast-message";
 import { LinearGradient } from "expo-linear-gradient";
+import { SkillMarketplaceModal } from "@/components/SkillMarketplaceModal";
 
 function SectionHeader({ title }: { title: string }) {
   const { theme } = useTheme();
@@ -287,6 +288,7 @@ export default function SettingsScreen() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importYaml, setImportYaml] = useState("");
   const [showSkillModal, setShowSkillModal] = useState(false);
+  const [showSkillMarketplace, setShowSkillMarketplace] = useState(false);
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
   const [skillName, setSkillName] = useState("");
   const [skillDescription, setSkillDescription] = useState("");
@@ -1325,6 +1327,29 @@ export default function SettingsScreen() {
                 Add Skill
               </ThemedText>
             </Pressable>
+
+            <Pressable
+              onPress={() => setShowSkillMarketplace(true)}
+              style={({ pressed }) => [
+                styles.addServerButton,
+                {
+                  borderColor: theme.primary,
+                  opacity: pressed ? 0.8 : 1,
+                  marginTop: Spacing.sm,
+                },
+              ]}
+            >
+              <MaterialIcons
+                name="storefront"
+                size={20}
+                color={theme.primary}
+              />
+              <ThemedText
+                style={[styles.addServerText, { color: theme.primary }]}
+              >
+                Browse marketplace
+              </ThemedText>
+            </Pressable>
           </View>
 
           <SectionHeader title="Memory & Context" />
@@ -1699,6 +1724,11 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      <SkillMarketplaceModal
+        visible={showSkillMarketplace}
+        onClose={() => setShowSkillMarketplace(false)}
+      />
     </KeyboardAvoidingView>
   );
 }

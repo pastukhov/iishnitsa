@@ -68,6 +68,10 @@ export interface Skill {
   description: string;
   content: string;
   enabled: boolean;
+  /** Stable "{source}/{slug}" id from skills.sh, present only for marketplace-installed skills. */
+  sourceId?: string;
+  /** SHA-256 hash of the installed skill's files, from skills.sh, used to detect upstream updates. */
+  sourceHash?: string;
 }
 
 export interface Settings {
