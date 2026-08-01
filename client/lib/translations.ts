@@ -32,6 +32,7 @@ export const TRANSLATIONS = {
     chatDeleted: "Chat deleted",
     tapToUndo: "Tap to undo",
     serverRemoved: "Server removed",
+    skillRemoved: "Skill removed",
     memoriesCleared: "Memories cleared",
 
     // Date formatting
@@ -87,6 +88,7 @@ export const TRANSLATIONS = {
     chatDeleted: "Чат удалён",
     tapToUndo: "Нажмите для отмены",
     serverRemoved: "Сервер удалён",
+    skillRemoved: "Скилл удалён",
     memoriesCleared: "Память очищена",
 
     // Date formatting

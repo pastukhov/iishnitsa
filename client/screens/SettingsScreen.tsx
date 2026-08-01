@@ -260,6 +260,11 @@ export default function SettingsScreen() {
     exportMCPServersYAML,
     importMCPServersYAML,
     restoreMCPServer,
+    addSkill,
+    updateSkill,
+    removeSkill,
+    toggleSkill,
+    restoreSkill,
   } = useChatStore();
   const t = useTranslations();
 
@@ -281,6 +286,11 @@ export default function SettingsScreen() {
   } | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importYaml, setImportYaml] = useState("");
+  const [showSkillModal, setShowSkillModal] = useState(false);
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
+  const [skillName, setSkillName] = useState("");
+  const [skillDescription, setSkillDescription] = useState("");
+  const [skillContent, setSkillContent] = useState("");
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelStatus, setModelStatus] = useState<{
     loading: boolean;
@@ -454,6 +464,73 @@ export default function SettingsScreen() {
       visibilityTime: 5000,
       onPress: () => {
         restoreMCPServer(serverToRemove);
+        Toast.hide();
+      },
+    });
+  };
+
+  const openAddSkillModal = () => {
+    setEditingSkillId(null);
+    setSkillName("");
+    setSkillDescription("");
+    setSkillContent("");
+    setShowSkillModal(true);
+  };
+
+  const openEditSkillModal = (skill: (typeof settings.skills)[0]) => {
+    setEditingSkillId(skill.id);
+    setSkillName(skill.name);
+    setSkillDescription(skill.description);
+    setSkillContent(skill.content);
+    setShowSkillModal(true);
+  };
+
+  const handleSaveSkill = () => {
+    if (!skillName.trim() || !skillContent.trim()) {
+      Alert.alert("Error", "Please enter both name and content");
+      return;
+    }
+
+    if (editingSkillId) {
+      updateSkill(editingSkillId, {
+        name: skillName.trim(),
+        description: skillDescription.trim(),
+        content: skillContent.trim(),
+      });
+    } else {
+      addSkill({
+        name: skillName.trim(),
+        description: skillDescription.trim(),
+        content: skillContent.trim(),
+        enabled: true,
+      });
+    }
+
+    setShowSkillModal(false);
+    setEditingSkillId(null);
+    setSkillName("");
+    setSkillDescription("");
+    setSkillContent("");
+
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const handleRemoveSkill = (id: string) => {
+    const skillToRemove = settings.skills.find((s) => s.id === id);
+    if (!skillToRemove) return;
+    removeSkill(id);
+    if (Platform.OS !== "web") {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
+    Toast.show({
+      type: "info",
+      text1: t.skillRemoved,
+      text2: t.tapToUndo,
+      visibilityTime: 5000,
+      onPress: () => {
+        restoreSkill(skillToRemove);
         Toast.hide();
       },
     });
@@ -1148,6 +1225,108 @@ export default function SettingsScreen() {
             )}
           </View>
 
+          <SectionHeader title="Skills" />
+          <View
+            style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
+          >
+            {settings.skills.length === 0 && (
+              <ThemedText
+                style={[styles.helperText, { color: theme.textSecondary }]}
+              >
+                No skills yet. Add reusable instructions that get appended to
+                the system prompt when enabled.
+              </ThemedText>
+            )}
+
+            {settings.skills.map((skill) => (
+              <View key={skill.id}>
+                <View style={styles.mcpServerRow}>
+                  <Pressable
+                    onPress={() => toggleSkill(skill.id)}
+                    style={styles.mcpServerInfo}
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={skill.name}
+                    accessibilityState={{ checked: skill.enabled }}
+                  >
+                    <MaterialIcons
+                      name={
+                        skill.enabled ? "check-box" : "check-box-outline-blank"
+                      }
+                      size={24}
+                      color={
+                        skill.enabled ? theme.primary : theme.textSecondary
+                      }
+                    />
+                    <View style={styles.mcpServerText}>
+                      <ThemedText style={styles.mcpServerName}>
+                        {skill.name}
+                      </ThemedText>
+                      {!!skill.description && (
+                        <ThemedText
+                          style={[
+                            styles.mcpServerUrl,
+                            { color: theme.textSecondary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {skill.description}
+                        </ThemedText>
+                      )}
+                    </View>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => openEditSkillModal(skill)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${skill.name}`}
+                    style={({ pressed }) => [
+                      styles.testMcpButton,
+                      { opacity: pressed ? 0.6 : 1 },
+                    ]}
+                  >
+                    <MaterialIcons
+                      name="edit"
+                      size={18}
+                      color={theme.primary}
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => handleRemoveSkill(skill.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${skill.name}`}
+                    style={({ pressed }) => [
+                      styles.removeButton,
+                      { opacity: pressed ? 0.6 : 1 },
+                    ]}
+                  >
+                    <MaterialIcons
+                      name="delete-outline"
+                      size={20}
+                      color={theme.error}
+                    />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+
+            <Pressable
+              onPress={openAddSkillModal}
+              style={({ pressed }) => [
+                styles.addServerButton,
+                {
+                  borderColor: theme.primary,
+                  opacity: pressed ? 0.8 : 1,
+                },
+              ]}
+            >
+              <MaterialIcons name="add" size={20} color={theme.primary} />
+              <ThemedText
+                style={[styles.addServerText, { color: theme.primary }]}
+              >
+                Add Skill
+              </ThemedText>
+            </Pressable>
+          </View>
+
           <SectionHeader title="Memory & Context" />
           <View
             style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
@@ -1327,6 +1506,94 @@ export default function SettingsScreen() {
               >
                 <ThemedText style={{ color: theme.buttonText }}>
                   Import
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showSkillModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowSkillModal(false)}
+      >
+        <View
+          style={[styles.modalOverlay, { backgroundColor: theme.modalOverlay }]}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.backgroundDefault },
+            ]}
+          >
+            <ThemedText style={styles.modalTitle}>
+              {editingSkillId ? "Edit Skill" : "Add Skill"}
+            </ThemedText>
+            <InputField
+              label="Name"
+              value={skillName}
+              onChangeText={setSkillName}
+              placeholder="e.g. Code reviewer"
+            />
+            <InputField
+              label="Description (optional)"
+              value={skillDescription}
+              onChangeText={setSkillDescription}
+              placeholder="Short summary of what this skill does"
+            />
+            <ThemedText
+              style={[styles.helperText, { color: theme.textSecondary }]}
+            >
+              Content
+            </ThemedText>
+            <TextInput
+              style={[
+                styles.importInput,
+                {
+                  backgroundColor: theme.inputBackground,
+                  borderColor: theme.outlineVariant,
+                  color: theme.text,
+                },
+              ]}
+              value={skillContent}
+              onChangeText={setSkillContent}
+              placeholder="Instructions appended to the system prompt when this skill is enabled."
+              placeholderTextColor={theme.textSecondary}
+              multiline
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                onPress={() => setShowSkillModal(false)}
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  {
+                    borderColor: theme.outline,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <ThemedText>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                onPress={handleSaveSkill}
+                disabled={!skillName.trim() || !skillContent.trim()}
+                style={({ pressed }) => [
+                  styles.addButton,
+                  {
+                    backgroundColor:
+                      skillName.trim() && skillContent.trim()
+                        ? theme.primary
+                        : theme.surfaceVariant,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <ThemedText style={{ color: theme.buttonText }}>
+                  Save
                 </ThemedText>
               </Pressable>
             </View>

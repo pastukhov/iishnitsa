@@ -62,10 +62,19 @@ export interface MCPServer {
   token?: string;
 }
 
+export interface Skill {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  enabled: boolean;
+}
+
 export interface Settings {
   endpoint: EndpointConfig;
   mcpServers: MCPServer[];
   mcpEnabled: boolean;
+  skills: Skill[];
   theme: "light" | "dark" | "system";
   memoryEnabled: boolean;
   memoryAutoSave: boolean;
@@ -114,6 +123,11 @@ interface ChatStore {
   toggleMCPServer: (id: string) => void;
   exportMCPServersYAML: () => string;
   importMCPServersYAML: (yaml: string) => void;
+  addSkill: (skill: Omit<Skill, "id">) => void;
+  updateSkill: (id: string, updates: Partial<Skill>) => void;
+  removeSkill: (id: string) => void;
+  toggleSkill: (id: string) => void;
+  restoreSkill: (skill: Skill) => void;
   setIsStreaming: (isStreaming: boolean) => void;
   clearCurrentChat: () => void;
   restoreChat: (chat: Chat) => void;
@@ -227,6 +241,7 @@ const defaultSettings: Settings = {
     },
   ],
   mcpEnabled: true,
+  skills: [],
   theme: "system",
   memoryEnabled: true,
   memoryAutoSave: true,
@@ -289,6 +304,10 @@ const migrateSettings = (
     rest.systemPrompt = DEFAULT_SYSTEM_PROMPT;
   }
 
+  if (!rest.skills) {
+    rest.skills = [];
+  }
+
   // Migrate per-provider keys
   if (!rest.providerKeys) {
     rest.providerKeys = {};
@@ -313,6 +332,16 @@ const migrateSettings = (
 
   return rest;
 };
+
+export function getEffectiveSystemPrompt(settings: Settings): string {
+  const enabledSkills = (settings.skills || []).filter((s) => s.enabled);
+  const skillsBlock = enabledSkills
+    .map((s) => `## Skill: ${s.name}\n${s.content.trim()}`)
+    .join("\n\n");
+  return [settings.systemPrompt?.trim(), skillsBlock]
+    .filter(Boolean)
+    .join("\n\n");
+}
 
 const getDefaultChatTitle = (): string => {
   const t = getTranslations();
@@ -635,6 +664,68 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     );
     set((state) => {
       const settings = { ...state.settings, mcpServers: servers };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  addSkill: (skill) => {
+    const newSkill: Skill = { ...skill, id: generateId() };
+    set((state) => {
+      const settings = {
+        ...state.settings,
+        skills: [...state.settings.skills, newSkill],
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  updateSkill: (id, updates) => {
+    set((state) => {
+      const settings = {
+        ...state.settings,
+        skills: state.settings.skills.map((skill) =>
+          skill.id === id ? { ...skill, ...updates } : skill,
+        ),
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  removeSkill: (id) => {
+    set((state) => {
+      const settings = {
+        ...state.settings,
+        skills: state.settings.skills.filter((s) => s.id !== id),
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  toggleSkill: (id) => {
+    set((state) => {
+      const settings = {
+        ...state.settings,
+        skills: state.settings.skills.map((s) =>
+          s.id === id ? { ...s, enabled: !s.enabled } : s,
+        ),
+      };
+      AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+      return { settings };
+    });
+  },
+
+  restoreSkill: (skill: Skill) => {
+    set((state) => {
+      const exists = state.settings.skills.some((s) => s.id === skill.id);
+      if (exists) return {};
+      const settings = {
+        ...state.settings,
+        skills: [...state.settings.skills, skill],
+      };
       AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
       return { settings };
     });

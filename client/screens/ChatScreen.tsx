@@ -34,7 +34,12 @@ import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { AttachedImage } from "@/components/AttachedImage";
 import { Spacing, BorderRadius, Typography, Shadows } from "@/constants/theme";
-import { useChatStore, Message, MessageAttachment } from "@/lib/store";
+import {
+  useChatStore,
+  Message,
+  MessageAttachment,
+  getEffectiveSystemPrompt,
+} from "@/lib/store";
 import {
   sendChatMessage,
   flushQueuedChatMessages,
@@ -572,7 +577,7 @@ export default function ChatScreen() {
             onAttachment: (attachment) => {
               updateLastAssistantMessage(currentContent, [attachment]);
             },
-            systemPrompt: settings.systemPrompt,
+            systemPrompt: getEffectiveSystemPrompt(settings),
             memorySettings: {
               enabled: settings.memoryEnabled,
               autoSave: settings.memoryAutoSave,
@@ -704,7 +709,7 @@ export default function ChatScreen() {
               onAttachment: (attachment) => {
                 updateLastAssistantMessage(currentContent, [attachment]);
               },
-              systemPrompt: settings.systemPrompt,
+              systemPrompt: getEffectiveSystemPrompt(settings),
               memorySettings: {
                 enabled: settings.memoryEnabled,
                 autoSave: settings.memoryAutoSave,
