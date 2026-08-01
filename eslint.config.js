@@ -4,16 +4,10 @@ const expoConfig = require("eslint-config-expo/flat");
 const eslintPluginPrettierRecommended = require("eslint-plugin-prettier/recommended");
 
 module.exports = defineConfig([
-  {
-    // server/skills-proxy is a separate Vercel deployable with its own
-    // dependency graph (@vercel/oidc); root `npm ci` never installs it, so
-    // it must be excluded from every config below (a global ignore requires
-    // its own object with no other keys).
-    ignores: ["dist/*", "server/skills-proxy/**"],
-  },
   expoConfig,
   eslintPluginPrettierRecommended,
   {
+    ignores: ["dist/*"],
     settings: {
       "import/resolver": {
         node: {

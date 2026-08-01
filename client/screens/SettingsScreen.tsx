@@ -37,7 +37,7 @@ import {
 import { useTranslations } from "@/lib/translations";
 import Toast from "react-native-toast-message";
 import { LinearGradient } from "expo-linear-gradient";
-import { SkillMarketplaceModal } from "@/components/SkillMarketplaceModal";
+import { SkillInstallModal } from "@/components/SkillInstallModal";
 
 function SectionHeader({ title }: { title: string }) {
   const { theme } = useTheme();
@@ -288,7 +288,7 @@ export default function SettingsScreen() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importYaml, setImportYaml] = useState("");
   const [showSkillModal, setShowSkillModal] = useState(false);
-  const [showSkillMarketplace, setShowSkillMarketplace] = useState(false);
+  const [showSkillInstall, setShowSkillInstall] = useState(false);
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
   const [skillName, setSkillName] = useState("");
   const [skillDescription, setSkillDescription] = useState("");
@@ -1329,7 +1329,7 @@ export default function SettingsScreen() {
             </Pressable>
 
             <Pressable
-              onPress={() => setShowSkillMarketplace(true)}
+              onPress={() => setShowSkillInstall(true)}
               style={({ pressed }) => [
                 styles.addServerButton,
                 {
@@ -1339,15 +1339,11 @@ export default function SettingsScreen() {
                 },
               ]}
             >
-              <MaterialIcons
-                name="storefront"
-                size={20}
-                color={theme.primary}
-              />
+              <MaterialIcons name="download" size={20} color={theme.primary} />
               <ThemedText
                 style={[styles.addServerText, { color: theme.primary }]}
               >
-                Browse marketplace
+                Install from skills.sh
               </ThemedText>
             </Pressable>
           </View>
@@ -1725,9 +1721,9 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      <SkillMarketplaceModal
-        visible={showSkillMarketplace}
-        onClose={() => setShowSkillMarketplace(false)}
+      <SkillInstallModal
+        visible={showSkillInstall}
+        onClose={() => setShowSkillInstall(false)}
       />
     </KeyboardAvoidingView>
   );

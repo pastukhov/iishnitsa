@@ -32,8 +32,6 @@ export const Colors = {
     inputBackground: "#F7F2F9",
     success: "#386A20",
     successContainer: "#C4EFAB",
-    warning: "#7D5700",
-    warningContainer: "#FFDDB0",
     modalOverlay: "rgba(0, 0, 0, 0.5)",
   },
   dark: {
@@ -64,8 +62,6 @@ export const Colors = {
     inputBackground: "#2B2930",
     success: "#A7D48E",
     successContainer: "#1F5209",
-    warning: "#FFB77C",
-    warningContainer: "#5F4200",
     modalOverlay: "rgba(0, 0, 0, 0.7)",
   },
 };
