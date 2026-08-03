@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, StyleSheet, Pressable, Platform } from "react-native";
+import { AppState, View, StyleSheet, Pressable, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -22,9 +22,25 @@ export function UpdateReadyBanner() {
 
   useEffect(() => {
     if (Platform.OS !== "android") return;
-    getPendingUpdate()
-      .then(setPending)
-      .catch(() => {});
+
+    const checkPendingUpdate = () => {
+      getPendingUpdate()
+        .then(setPending)
+        .catch(() => {});
+    };
+
+    checkPendingUpdate();
+
+    // The background task can finish a download while the app is open but
+    // backgrounded; re-check when the user comes back so the banner isn't
+    // stuck waiting for the next full app restart.
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        checkPendingUpdate();
+      }
+    });
+
+    return () => subscription.remove();
   }, []);
 
   if (!pending || dismissed) return null;

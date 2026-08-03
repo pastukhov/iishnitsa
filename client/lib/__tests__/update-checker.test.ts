@@ -150,6 +150,11 @@ describe("update-checker", () => {
       expect(await getPendingUpdate()).toBeNull();
     });
 
+    it("returns null when the stored record is corrupted", async () => {
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValue("not json");
+      expect(await getPendingUpdate()).toBeNull();
+    });
+
     it("clears and returns null when the current app already matches or exceeds the pending version", async () => {
       (AsyncStorage.getItem as jest.Mock).mockResolvedValue(
         JSON.stringify({ ...storedPending, version: "1.0.0-test" }),
@@ -219,5 +224,73 @@ describe("update-checker", () => {
 
       expect(BackgroundTask.registerTaskAsync).not.toHaveBeenCalled();
     });
+
+    it("swallows registration errors", async () => {
+      Platform.OS = "android";
+      (BackgroundTask.registerTaskAsync as jest.Mock).mockRejectedValueOnce(
+        new Error("boom"),
+      );
+
+      await expect(registerBackgroundUpdateCheck()).resolves.toBeUndefined();
+    });
+  });
+});
+
+// The module-scope `TaskManager.defineTask(...)` call only runs on Android,
+// which isn't jest-expo's default Platform.OS for a plain static import, so
+// these tests force a fresh, isolated import with Platform.OS set first to
+// capture and exercise the actual registered task executor.
+describe("background task executor", () => {
+  const runIsolatedTaskExecutor = (
+    setup: (deps: { releases: typeof import("../github-releases") }) => void,
+  ) => {
+    let executor: (() => Promise<unknown>) | undefined;
+
+    jest.isolateModules(() => {
+      /* eslint-disable @typescript-eslint/no-require-imports -- jest.isolateModules needs dynamic require to re-evaluate the module graph */
+      const RN = require("react-native");
+      RN.Platform.OS = "android";
+
+      const taskManager = require("expo-task-manager");
+      taskManager.defineTask.mockImplementation(
+        (_name: string, fn: () => Promise<unknown>) => {
+          executor = fn;
+        },
+      );
+
+      const releases = require("../github-releases");
+      setup({ releases });
+
+      require("../update-checker");
+      /* eslint-enable @typescript-eslint/no-require-imports */
+    });
+
+    return executor;
+  };
+
+  it("returns Success when the check completes cleanly", async () => {
+    const executor = runIsolatedTaskExecutor(({ releases }) => {
+      (releases.fetchLatestRelease as jest.Mock).mockResolvedValue(
+        notUpdateAvailable,
+      );
+    });
+
+    expect(executor).toBeDefined();
+    await expect(executor!()).resolves.toBe(
+      BackgroundTask.BackgroundTaskResult.Success,
+    );
+  });
+
+  it("returns Failed when the check throws", async () => {
+    const executor = runIsolatedTaskExecutor(({ releases }) => {
+      (releases.fetchLatestRelease as jest.Mock).mockRejectedValue(
+        new Error("boom"),
+      );
+    });
+
+    expect(executor).toBeDefined();
+    await expect(executor!()).resolves.toBe(
+      BackgroundTask.BackgroundTaskResult.Failed,
+    );
   });
 });

@@ -47,8 +47,8 @@
 
 ## Testing Guidelines
 
-- No automated test suite is configured.
-- Use `npm run check:types` and `npm run lint` as the primary quality gates.
+- `npm run test`: run the Jest suite (`npm run test:watch` for watch mode, `npm run test:coverage` for coverage).
+- Use `npm run check:types` and `npm run lint` as additional quality gates.
 - Use `npm run check:providers` to smoke-test provider connectivity (set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TOGETHER_API_KEY`, `MISTRAL_API_KEY`, `PERPLEXITY_API_KEY`, `YANDEX_API_KEY`, `REPLICATE_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, `DASHSCOPE_API_KEY`; optional per-provider `*_BASE_URL` overrides and `ANTHROPIC_MODEL`/`PERPLEXITY_MODEL`).
 - Use `npm run check:providers:mock` (or `MOCK_PROVIDERS=1`) to run mocked provider checks when CI secrets are unavailable.
 - If you add tests, document how to run them in this file and update scripts accordingly.
