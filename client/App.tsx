@@ -18,9 +18,11 @@ import { queryClient } from "@/lib/query-client";
 
 import RootStackNavigator from "@/navigation/RootStackNavigator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { UpdateReadyBanner } from "@/components/UpdateReadyBanner";
 import { useChatStore } from "@/lib/store";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing } from "@/constants/theme";
+import { registerBackgroundUpdateCheck } from "@/lib/update-checker";
 
 function AppContent() {
   const loadFromStorage = useChatStore((state) => state.loadFromStorage);
@@ -31,6 +33,10 @@ function AppContent() {
   useEffect(() => {
     loadFromStorage().then(() => setIsHydrated(true));
   }, [loadFromStorage]);
+
+  useEffect(() => {
+    registerBackgroundUpdateCheck();
+  }, []);
 
   useEffect(() => {
     Appearance.setColorScheme(
@@ -71,6 +77,7 @@ function AppContent() {
       <NavigationContainer>
         <RootStackNavigator />
       </NavigationContainer>
+      <UpdateReadyBanner />
       <Toast />
       <StatusBar style={statusBarStyle} />
     </>
