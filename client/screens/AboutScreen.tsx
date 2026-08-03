@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -11,6 +11,11 @@ import Markdown from "react-native-markdown-display";
 import * as Linking from "expo-linking";
 
 import { downloadAndInstallApk } from "@/lib/apk-installer";
+import {
+  getPendingUpdate,
+  installPendingUpdate,
+  PendingUpdate,
+} from "@/lib/update-checker";
 
 import { Button } from "@/components/Button";
 import { ThemedText } from "@/components/ThemedText";
@@ -20,7 +25,7 @@ import { appInfo } from "@/lib/app-info";
 import { releaseNotes, releaseTag } from "@/constants/releaseNotes";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useTranslations } from "@/lib/translations";
-import { useLatestRelease } from "@/lib/github-releases";
+import { AppUpdateInfo, useLatestRelease } from "@/lib/github-releases";
 
 export default function AboutScreen() {
   const { theme } = useTheme();
@@ -28,6 +33,16 @@ export default function AboutScreen() {
   const t = useTranslations();
   const displayName = t.appName;
   const latestReleaseQuery = useLatestRelease();
+  const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    getPendingUpdate()
+      .then(setPendingUpdate)
+      .catch(() => {});
+  }, []);
 
   const markdownStyles = {
     body: {
@@ -54,18 +69,22 @@ export default function AboutScreen() {
 
   const [isDownloading, setIsDownloading] = useState(false);
 
-  const handleUpdatePress = async (downloadUrl: string) => {
+  const handleUpdatePress = async (release: AppUpdateInfo) => {
     if (Platform.OS === "android") {
       setIsDownloading(true);
       try {
-        await downloadAndInstallApk(downloadUrl);
+        if (pendingUpdate && pendingUpdate.version === release.latestVersion) {
+          await installPendingUpdate(pendingUpdate);
+        } else {
+          await downloadAndInstallApk(release.downloadUrl);
+        }
       } catch {
-        await Linking.openURL(downloadUrl);
+        await Linking.openURL(release.downloadUrl);
       } finally {
         setIsDownloading(false);
       }
     } else {
-      await Linking.openURL(downloadUrl);
+      await Linking.openURL(release.downloadUrl);
     }
   };
 
@@ -166,7 +185,7 @@ export default function AboutScreen() {
                 {latestRelease.isUpdateAvailable ? (
                   <Button
                     disabled={!latestRelease.downloadUrl || isDownloading}
-                    onPress={() => handleUpdatePress(latestRelease.downloadUrl)}
+                    onPress={() => handleUpdatePress(latestRelease)}
                     style={styles.primaryButton}
                   >
                     {isDownloading ? (

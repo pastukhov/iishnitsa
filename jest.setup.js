@@ -37,6 +37,7 @@ jest.mock("expo-image-picker", () => ({
 // Mock expo-file-system/legacy
 jest.mock("expo-file-system/legacy", () => ({
   documentDirectory: "file:///mock/documents/",
+  cacheDirectory: "file:///mock/cache/",
   getInfoAsync: jest.fn(() => Promise.resolve({ exists: true })),
   makeDirectoryAsync: jest.fn(() => Promise.resolve()),
   copyAsync: jest.fn(() => Promise.resolve()),
@@ -45,6 +46,12 @@ jest.mock("expo-file-system/legacy", () => ({
   downloadAsync: jest.fn(() =>
     Promise.resolve({ uri: "file:///mock/documents/downloaded.png" }),
   ),
+  createDownloadResumable: jest.fn(() => ({
+    downloadAsync: jest.fn(() =>
+      Promise.resolve({ uri: "file:///mock/documents/update.apk" }),
+    ),
+  })),
+  getContentUriAsync: jest.fn((uri) => Promise.resolve(`content://mock${uri}`)),
   deleteAsync: jest.fn(() => Promise.resolve()),
   EncodingType: { Base64: "base64" },
 }));
