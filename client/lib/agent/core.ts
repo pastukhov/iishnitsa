@@ -72,6 +72,7 @@ interface AgentRunInput {
   onChunk: (content: string) => void;
   onDecision?: (decision: AgentDecision) => void;
   onAttachment?: (attachment: MessageAttachment) => void;
+  onToolExecutionAttempt?: () => void;
   mcpServers: MCPServer[];
   mcpEnabled: boolean;
   systemPrompt?: string;
@@ -141,6 +142,7 @@ export class AgentCore {
     onChunk,
     onDecision,
     onAttachment,
+    onToolExecutionAttempt,
     mcpServers,
     mcpEnabled,
     systemPrompt,
@@ -249,6 +251,7 @@ export class AgentCore {
             mcpServers,
             endpoint,
             onAttachment,
+            onToolExecutionAttempt,
           );
           this.state = "UPDATE_STATE";
           break;
@@ -349,6 +352,7 @@ export class AgentCore {
     mcpServers: MCPServer[],
     endpoint: EndpointConfig,
     onAttachment?: (attachment: MessageAttachment) => void,
+    onToolExecutionAttempt?: () => void,
   ): Promise<void> {
     for (const toolCall of toolCalls) {
       let result: string;
@@ -360,6 +364,7 @@ export class AgentCore {
             args = JSON.parse(toolCall.function.arguments);
           } catch {}
 
+          onToolExecutionAttempt?.();
           const imageResult = await generateImage(
             endpoint,
             args.prompt || "image",
@@ -389,6 +394,8 @@ export class AgentCore {
               args = JSON.parse(toolCall.function.arguments);
             } catch {}
 
+            // Mark before awaiting: a lost response does not mean no side effect.
+            onToolExecutionAttempt?.();
             const toolResult = await executeToolCall(server, toolName, args);
             result = formatToolResult(toolResult);
           } catch (error: any) {
@@ -572,6 +579,7 @@ export async function runAgentChat(
     memorySettings?: MemorySettings;
     onDecision?: (decision: AgentDecision) => void;
     onAttachment?: (attachment: MessageAttachment) => void;
+    onToolExecutionAttempt?: () => void;
   },
 ): Promise<void> {
   const { systemPrompt, chatPrompt, memorySettings } = options || {};
@@ -597,5 +605,6 @@ export async function runAgentChat(
     chatPrompt,
     onDecision: options?.onDecision,
     onAttachment: options?.onAttachment,
+    onToolExecutionAttempt: options?.onToolExecutionAttempt,
   });
 }

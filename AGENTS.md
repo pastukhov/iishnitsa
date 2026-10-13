@@ -25,6 +25,7 @@
 
 ## GitHub Helper
 
+- The canonical `tbd-semver-governance` skill is maintained at https://github.com/pastukhov/tbd-semver-governance. Read its `SKILL.md` and referenced policy before making branching, commit, PR, CI/CD, or release decisions. If the skill is not installed locally, read or clone that repository instead of treating it as unavailable.
 - Use the GitHub CLI (`gh`) to inspect Actions runs, releases, and PR status when troubleshooting CI.
 - Always create work branches from `origin/main`, never from a local `main` that may contain unpublished history.
 - Each PR branch must have `git merge-base HEAD origin/main == origin/main` before push.
@@ -48,6 +49,7 @@
 ## Testing Guidelines
 
 - `npm run test`: run the Jest suite (`npm run test:watch` for watch mode, `npm run test:coverage` for coverage).
+- `npm test -- --runInBand client/lib/__tests__/mcp-replay.test.ts`: run offline replay safety regressions with the real agent/API/queue and mocked external services; included in the standard test command.
 - Use `npm run check:types` and `npm run lint` as additional quality gates.
 - Use `npm run check:providers` to smoke-test provider connectivity (set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TOGETHER_API_KEY`, `MISTRAL_API_KEY`, `PERPLEXITY_API_KEY`, `YANDEX_API_KEY`, `REPLICATE_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, `DASHSCOPE_API_KEY`; optional per-provider `*_BASE_URL` overrides and `ANTHROPIC_MODEL`/`PERPLEXITY_MODEL`).
 - Use `npm run check:providers:mock` (or `MOCK_PROVIDERS=1`) to run mocked provider checks when CI secrets are unavailable.

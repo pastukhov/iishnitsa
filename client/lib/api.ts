@@ -25,6 +25,17 @@ function isNetworkError(error: any): boolean {
   return NETWORK_ERROR_HINTS.some((hint) => message.includes(hint));
 }
 
+class UnsafeChatReplayError extends Error {
+  constructor(cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(
+      `Automatic replay stopped: a tool may already have performed an action. Check its result before retrying. ${detail}`,
+      { cause },
+    );
+    this.name = "UnsafeChatReplayError";
+  }
+}
+
 export async function sendChatMessage(
   messages: Message[],
   endpoint: EndpointConfig,
@@ -42,6 +53,7 @@ export async function sendChatMessage(
     onAttachment?: (attachment: MessageAttachment) => void;
   },
 ): Promise<void> {
+  let toolExecutionAttempted = false;
   try {
     await runAgentChat(messages, endpoint, onChunk, mcpServers, mcpEnabled, {
       systemPrompt: options?.systemPrompt,
@@ -55,8 +67,12 @@ export async function sendChatMessage(
             })
         : undefined,
       onAttachment: options?.onAttachment,
+      onToolExecutionAttempt: () => {
+        toolExecutionAttempted = true;
+      },
     });
   } catch (error: any) {
+    if (toolExecutionAttempted) throw new UnsafeChatReplayError(error);
     if (options?.queueOnFailure && isNetworkError(error)) {
       const payload = {
         chatId: options.chatId,
@@ -88,7 +104,9 @@ export async function flushQueuedChatMessages(options: {
 }): Promise<{ processed: number; failed: number; remaining: number }> {
   return await flushQueuedChatRequests({
     filter: (item) => !options.chatId || item.payload.chatId === options.chatId,
+    shouldRetry: (error) => !(error instanceof UnsafeChatReplayError),
     handler: async (payload) => {
+      let toolExecutionAttempted = false;
       options.onItemStart?.();
       try {
         await runAgentChat(
@@ -101,11 +119,17 @@ export async function flushQueuedChatMessages(options: {
             systemPrompt: payload.systemPrompt,
             chatPrompt: payload.chatPrompt,
             memorySettings: payload.memorySettings ?? options.memorySettings,
+            onToolExecutionAttempt: () => {
+              toolExecutionAttempted = true;
+            },
           },
         );
       } catch (error) {
-        options.onItemError?.(error);
-        throw error;
+        const failure = toolExecutionAttempted
+          ? new UnsafeChatReplayError(error)
+          : error;
+        options.onItemError?.(failure);
+        throw failure;
       } finally {
         options.onItemFinish?.();
       }
