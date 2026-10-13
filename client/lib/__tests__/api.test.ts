@@ -61,6 +61,7 @@ describe("api", () => {
           systemPrompt: undefined,
           chatPrompt: undefined,
           memorySettings: undefined,
+          onToolExecutionAttempt: expect.any(Function),
         },
       );
     });
@@ -94,6 +95,7 @@ describe("api", () => {
           systemPrompt: undefined,
           chatPrompt: undefined,
           memorySettings: undefined,
+          onToolExecutionAttempt: expect.any(Function),
         },
       );
     });
@@ -176,6 +178,7 @@ describe("api", () => {
           systemPrompt: undefined,
           chatPrompt: "Prompt text",
           memorySettings: undefined,
+          onToolExecutionAttempt: expect.any(Function),
         },
       );
     });
@@ -204,6 +207,7 @@ describe("api", () => {
           systemPrompt: undefined,
           chatPrompt: undefined,
           memorySettings,
+          onToolExecutionAttempt: expect.any(Function),
         },
       );
     });

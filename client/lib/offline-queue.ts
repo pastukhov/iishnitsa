@@ -65,6 +65,7 @@ export async function flushQueuedChatRequests(options: {
   handler: (payload: QueuedChatPayload) => Promise<void>;
   filter?: (item: QueuedChatRequest) => boolean;
   maxItems?: number;
+  shouldRetry?: (error: unknown) => boolean;
 }): Promise<{ processed: number; failed: number; remaining: number }> {
   const queue = await loadQueue();
   const remaining: QueuedChatRequest[] = [];
@@ -85,6 +86,7 @@ export async function flushQueuedChatRequests(options: {
       processed += 1;
     } catch (error: any) {
       failed += 1;
+      if (options.shouldRetry && !options.shouldRetry(error)) continue;
       remaining.push({
         ...item,
         attempts: item.attempts + 1,
