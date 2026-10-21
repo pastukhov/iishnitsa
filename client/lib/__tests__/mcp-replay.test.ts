@@ -98,6 +98,80 @@ describe("automatic replay after tool execution", () => {
     (generateImage as jest.Mock).mockReset();
   });
 
+  function streamedTool(complete: boolean) {
+    const data = {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call-1",
+                function: { name: "counter__increment", arguments: "{}" },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const bytes = new TextEncoder().encode(
+      `data: ${JSON.stringify(data)}\n\n${complete ? "data: [DONE]\n\n" : ""}`,
+    );
+    let offset = 0;
+    return {
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: async () =>
+            offset < bytes.length
+              ? { done: false, value: bytes.slice(offset, ++offset) }
+              : { done: true },
+        }),
+      },
+    };
+  }
+
+  it("executes a byte-split SSE call once and preserves conversation context", async () => {
+    mockFetch
+      .mockResolvedValueOnce(streamedTool(true))
+      .mockResolvedValueOnce(response({ content: "Done" }));
+    await send();
+    expect(counter).toBe(1);
+    const followup = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(followup.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: "user", content: "Increment once" }),
+        expect.objectContaining({
+          role: "assistant",
+          tool_calls: [
+            expect.objectContaining({
+              id: "call-1",
+              function: { name: "counter__increment", arguments: "{}" },
+            }),
+          ],
+        }),
+        { role: "tool", tool_call_id: "call-1", content: "receipt-1" },
+      ]),
+    );
+  });
+
+  it("does not execute a call when SSE ends without a completion marker", async () => {
+    mockFetch.mockResolvedValueOnce(streamedTool(false));
+    await expect(send()).rejects.toThrow();
+    expect(counter).toBe(0);
+    expect(await getQueuedChatRequests()).toEqual([]);
+  });
+
+  it("does not replay a streamed action after a follow-up network failure", async () => {
+    mockFetch
+      .mockResolvedValueOnce(streamedTool(true))
+      .mockRejectedValueOnce(new Error("Network request failed"));
+    await expect(send()).rejects.toThrow("Automatic replay stopped");
+    await flushQueuedChatMessages({ onChunk: jest.fn() });
+    expect(counter).toBe(1);
+    expect(await getQueuedChatRequests()).toEqual([]);
+  });
+
   it("does not enqueue or repeat an action after the follow-up request fails", async () => {
     mockFetch
       .mockResolvedValueOnce(requestTool())

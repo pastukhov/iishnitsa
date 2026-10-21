@@ -67,77 +67,124 @@ export class OpenAICompatibleDriver {
 
     let fullContent = "";
     let toolCalls: ToolCall[] = [];
-    let currentToolCallIndex = -1;
+    const streamedCalls = new Map<number, ToolCall>();
     let usage: LLMUsage | undefined;
+    let line = "";
+    let dataLines: string[] = [];
+    let skipLF = false;
+    let streamDone = false;
+    let finishReason: string | undefined;
 
-    const parseChunk = (chunk: string) => {
-      const lines = chunk.split("\n").filter((line) => line.trim() !== "");
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) {
-          continue;
+    const parseEvent = (data: string) => {
+      if (streamDone) return;
+      if (data === "[DONE]") {
+        streamDone = true;
+        return;
+      }
+      // A malformed event must fail the turn, not silently alter tool arguments.
+      const json = JSON.parse(data);
+      const choice = json.choices?.[0];
+      const delta = choice?.delta;
+      if (choice?.finish_reason) finishReason = choice.finish_reason;
+      if (json.usage) {
+        usage = {
+          promptTokens: json.usage.prompt_tokens,
+          completionTokens: json.usage.completion_tokens,
+          totalTokens: json.usage.total_tokens,
+        };
+      }
+      if (delta?.content) {
+        fullContent += delta.content;
+        onChunk(fullContent);
+      }
+      for (const fragment of delta?.tool_calls ?? []) {
+        const index = fragment.index ?? 0;
+        if (!Number.isInteger(index) || index < 0) {
+          throw new Error("Invalid tool call index");
         }
-        const data = line.slice(6);
-        if (data === "[DONE]") continue;
+        const call = streamedCalls.get(index) ?? {
+          id: "",
+          type: "function",
+          function: { name: "", arguments: "" },
+        };
+        call.id += fragment.id ?? "";
+        call.function.name += fragment.function?.name ?? "";
+        call.function.arguments += fragment.function?.arguments ?? "";
+        streamedCalls.set(index, call);
+      }
+    };
 
-        try {
-          const json = JSON.parse(data);
-          const delta = json.choices?.[0]?.delta;
-          if (json.usage) {
-            usage = {
-              promptTokens: json.usage.prompt_tokens,
-              completionTokens: json.usage.completion_tokens,
-              totalTokens: json.usage.total_tokens,
-            };
-          }
+    const parseLine = () => {
+      if (line === "") {
+        if (dataLines.length > 0) parseEvent(dataLines.join("\n"));
+        dataLines = [];
+      } else {
+        const colon = line.indexOf(":");
+        const field = colon === -1 ? line : line.slice(0, colon);
+        let value = colon === -1 ? "" : line.slice(colon + 1);
+        if (value.startsWith(" ")) value = value.slice(1);
+        if (field === "data") dataLines.push(value);
+      }
+      line = "";
+    };
 
-          if (delta?.content) {
-            fullContent += delta.content;
-            onChunk(fullContent);
-          }
+    // Network reads can split UTF-8, fields, JSON, or CRLF at any byte.
+    const parseChunk = (chunk: string) => {
+      for (const character of chunk) {
+        if (skipLF) {
+          skipLF = false;
+          if (character === "\n") continue;
+        }
+        if (character === "\r" || character === "\n") {
+          parseLine();
+          skipLF = character === "\r";
+        } else {
+          line += character;
+        }
+      }
+    };
 
-          if (delta?.tool_calls) {
-            for (const toolCall of delta.tool_calls) {
-              const index = toolCall.index ?? 0;
-
-              if (index > currentToolCallIndex) {
-                currentToolCallIndex = index;
-                toolCalls.push({
-                  id: toolCall.id || `call_${Date.now()}_${index}`,
-                  type: "function",
-                  function: {
-                    name: toolCall.function?.name || "",
-                    arguments: toolCall.function?.arguments || "",
-                  },
-                });
-              } else if (toolCalls[index]) {
-                if (toolCall.function?.name) {
-                  toolCalls[index].function.name += toolCall.function.name;
-                }
-                if (toolCall.function?.arguments) {
-                  toolCalls[index].function.arguments +=
-                    toolCall.function.arguments;
-                }
-              }
-            }
-          }
-        } catch {}
+    const finishStream = () => {
+      if (line.length > 0 || dataLines.length > 0) {
+        throw new Error("Incomplete SSE event");
+      }
+      toolCalls = [...streamedCalls.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([, call]) => call);
+      if (toolCalls.length === 0) return;
+      if (
+        (!streamDone && finishReason !== "tool_calls") ||
+        (finishReason && finishReason !== "tool_calls")
+      ) {
+        throw new Error("Incomplete tool call stream");
+      }
+      for (const call of toolCalls) {
+        if (!call.id.trim() || !call.function.name.trim()) {
+          throw new Error("Incomplete tool call identity");
+        }
+        const args = JSON.parse(call.function.arguments);
+        if (args === null || typeof args !== "object" || Array.isArray(args)) {
+          throw new Error("Tool call arguments must be a JSON object");
+        }
       }
     };
 
     const reader = response.body?.getReader();
     if (reader) {
-      const decoder = new TextDecoder();
+      const decoder = new TextDecoder("utf-8", { fatal: true });
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         parseChunk(chunk);
       }
+      parseChunk(decoder.decode());
+      finishStream();
     } else {
       const responseText = await response.text();
-      if (responseText.includes("data: ")) {
+      if (/^data(?::|$)/m.test(responseText)) {
         parseChunk(responseText);
+        finishStream();
       } else if (responseText.trim()) {
         try {
           const json = JSON.parse(responseText);
