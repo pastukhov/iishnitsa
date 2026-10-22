@@ -11,6 +11,8 @@ permissions:
 
 jobs:
   open-pr:
+    # Dependabot creates its own PRs and uses a separate credential context.
+    if: github.actor != 'dependabot[bot]' && !startsWith(github.ref, 'refs/heads/dependabot/')
     runs-on: ubuntu-latest
     steps:
       - name: Create or update PR

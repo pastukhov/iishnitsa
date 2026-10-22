@@ -48,6 +48,7 @@
 
 ## Testing Guidelines
 
+- `npm test -- --runInBand client/lib/__tests__/auto-pr-workflow.test.ts`: check Auto PR gating for Dependabot, human reruns, and ordinary branch pushes; included in the standard test command.
 - `npm run test`: run the Jest suite (`npm run test:watch` for watch mode, `npm run test:coverage` for coverage).
 - `npm test -- --runInBand client/lib/__tests__/mcp-replay.test.ts`: run offline replay safety regressions with the real agent/API/queue and mocked external services; included in the standard test command.
 - `npm test -- --runInBand client/lib/agent/__tests__/openai-driver.test.ts client/lib/__tests__/mcp-replay.test.ts`: run SSE byte-boundary, incomplete tool-call, conversation context, and replay safety regressions; included in the standard test command.
