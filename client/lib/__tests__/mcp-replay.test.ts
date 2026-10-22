@@ -172,6 +172,81 @@ describe("automatic replay after tool execution", () => {
     expect(await getQueuedChatRequests()).toEqual([]);
   });
 
+  function sse(wire: string) {
+    return { ok: true, body: null, text: async () => wire };
+  }
+  function sseCall(args = "{}", index = 0) {
+    return `data: ${JSON.stringify({
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index,
+                id: `call-${index}`,
+                function: { name: "counter__increment", arguments: args },
+              },
+            ],
+          },
+        },
+      ],
+    })}\n\n`;
+  }
+
+  it("executes a completed call with trailing comment and preserves exact arguments", async () => {
+    const args = '{ "city": "Москва", "count": 1e2 }';
+    mockFetch
+      .mockResolvedValueOnce(sse(sseCall(args) + "data: [DONE]\n\n: heartbeat"))
+      .mockResolvedValueOnce(response({ content: "Done" }));
+    await send();
+    expect(counter).toBe(1);
+    expect(mcp.executeToolCall).toHaveBeenCalledWith(server, "increment", {
+      city: "Москва",
+      count: 100,
+    });
+    const followup = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(followup.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "assistant",
+          tool_calls: [
+            expect.objectContaining({
+              function: { name: "counter__increment", arguments: args },
+            }),
+          ],
+        }),
+      ]),
+    );
+  });
+
+  it.each([
+    ["malformed event", sseCall() + "data: {broken}\n\n"],
+    [
+      "invalid second call",
+      sseCall() + sseCall('{"incomplete":', 1) + "data: [DONE]\n\n",
+    ],
+  ])("executes no MCP calls for %s", async (_name, wire) => {
+    mockFetch.mockResolvedValueOnce(sse(wire));
+    await expect(send()).rejects.toThrow();
+    expect(mcp.executeToolCall).not.toHaveBeenCalled();
+    expect(await getQueuedChatRequests()).toEqual([]);
+  });
+
+  it.each(["data: {broken}\n\n", "data: {unfinished"])(
+    "does not replay an executed call after follow-up SSE failure %j",
+    async (wire) => {
+      mockFetch
+        .mockResolvedValueOnce(streamedTool(true))
+        .mockResolvedValueOnce(sse(wire));
+      await expect(send()).rejects.toThrow("Automatic replay stopped");
+      expect(await getQueuedChatRequests()).toEqual([]);
+      await flushQueuedChatMessages({ onChunk: jest.fn() });
+      expect(counter).toBe(1);
+      expect(mcp.executeToolCall).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it("does not enqueue or repeat an action after the follow-up request fails", async () => {
     mockFetch
       .mockResolvedValueOnce(requestTool())

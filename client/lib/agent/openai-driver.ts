@@ -145,7 +145,8 @@ export class OpenAICompatibleDriver {
     };
 
     const finishStream = () => {
-      if (line.length > 0 || dataLines.length > 0) {
+      // DONE already ended the event stream; trailing SSE fields are inert.
+      if (!streamDone && (line.length > 0 || dataLines.length > 0)) {
         throw new Error("Incomplete SSE event");
       }
       toolCalls = [...streamedCalls.entries()]

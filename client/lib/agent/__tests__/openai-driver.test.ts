@@ -159,7 +159,7 @@ describe("OpenAICompatibleDriver", () => {
         },
       ],
     });
-  const runStream = (chunks: (string | Uint8Array)[]) => {
+  const runStream = (chunks: (string | Uint8Array)[], onChunk = jest.fn()) => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       body: createMockStream(chunks),
@@ -168,7 +168,7 @@ describe("OpenAICompatibleDriver", () => {
       endpoint,
       messages: [],
       tools,
-      onChunk: jest.fn(),
+      onChunk,
     });
   };
 
@@ -280,6 +280,131 @@ describe("OpenAICompatibleDriver", () => {
     ],
   ])("rejects %s before returning executable calls", async (_name, wire) => {
     await expect(runStream([wire])).rejects.toThrow();
+  });
+
+  describe("SSE completion semantics", () => {
+    const args = '{ "city": "Москва", "count": 1e2 }';
+    const completed =
+      event({
+        choices: [{ delta: { content: "original" } }],
+        usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+      }) +
+      toolEvent(args) +
+      "data: [DONE]\n\n";
+
+    it.each(["reader", "text"])(
+      "ignores post-DONE events and unfinished tails via %s",
+      async (transport) => {
+        const expected = await runStream([completed]);
+        for (const tail of [
+          ": heartbeat",
+          "event: ignored",
+          "data: {unfinished",
+          "data: {unfinished\n",
+          "data: {broken}\n\n",
+          toolEvent('{"changed":true}', "other", "other") +
+            event({
+              choices: [{ delta: { content: "ignored" } }],
+              usage: {
+                prompt_tokens: 99,
+                completion_tokens: 99,
+                total_tokens: 198,
+              },
+            }),
+        ]) {
+          const wire = completed + tail;
+          const onChunk = jest.fn();
+          if (transport === "reader") {
+            expect(await runStream([completed, tail], onChunk)).toEqual(
+              expected,
+            );
+          } else {
+            mockFetch.mockResolvedValueOnce({
+              ok: true,
+              body: null,
+              text: async () => wire,
+            });
+            expect(
+              await new OpenAICompatibleDriver().streamChat({
+                endpoint,
+                messages: [],
+                tools,
+                onChunk,
+              }),
+            ).toEqual(expected);
+          }
+          expect(expected.toolCalls[0].function.arguments).toBe(args);
+          expect(onChunk).toHaveBeenCalledTimes(1);
+          expect(onChunk).toHaveBeenCalledWith("original");
+        }
+      },
+    );
+
+    it.each(["data: {unfinished", toolEvent().trimEnd() + "\n"])(
+      "rejects unfinished SSE before completion: %j",
+      async (tail) => {
+        await expect(runStream([toolEvent(), tail])).rejects.toThrow(
+          "Incomplete SSE event",
+        );
+      },
+    );
+
+    it("rejects malformed JSON after a valid call before DONE", async () => {
+      await expect(
+        runStream([toolEvent(), "data: {broken}\n\n", "data: [DONE]\n\n"]),
+      ).rejects.toThrow();
+    });
+
+    it.each(["stop", "length", "content_filter"])(
+      "does not let DONE override finish_reason %s for tools",
+      async (finishReason) => {
+        await expect(
+          runStream([
+            toolEvent(),
+            event({ choices: [{ delta: {}, finish_reason: finishReason }] }),
+            "data: [DONE]\n\n",
+          ]),
+        ).rejects.toThrow("Incomplete tool call stream");
+      },
+    );
+
+    it.each([-1, 0.5, "0"])("rejects invalid tool index %j", async (index) => {
+      await expect(
+        runStream([
+          event({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index,
+                      id: "call",
+                      function: { name: "tool", arguments: "{}" },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        ]),
+      ).rejects.toThrow("Invalid tool call index");
+    });
+
+    it("rejects an unfinished UTF-8 sequence at EOF", async () => {
+      await expect(
+        runStream([toolEvent(), new Uint8Array([0xd0])]),
+      ).rejects.toThrow();
+    });
+
+    it("accepts the default tool index and an empty SSE data field in multiline JSON", async () => {
+      const wire =
+        'data\ndata: {"choices":[{"delta":{"tool_calls":[{"id":"call","function":{"name":"tool","arguments":"{}"}}]}}]}\n\ndata: [DONE]\n\n';
+      expect((await runStream([wire])).toolCalls[0]).toEqual({
+        id: "call",
+        type: "function",
+        function: { name: "tool", arguments: "{}" },
+      });
+    });
   });
 
   it("throws API error with message", async () => {

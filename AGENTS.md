@@ -51,7 +51,7 @@
 - `npm test -- --runInBand client/lib/__tests__/auto-pr-workflow.test.ts`: check Auto PR gating for Dependabot, human reruns, and ordinary branch pushes; included in the standard test command.
 - `npm run test`: run the Jest suite (`npm run test:watch` for watch mode, `npm run test:coverage` for coverage).
 - `npm test -- --runInBand client/lib/__tests__/mcp-replay.test.ts`: run offline replay safety regressions with the real agent/API/queue and mocked external services; included in the standard test command.
-- `npm test -- --runInBand client/lib/agent/__tests__/openai-driver.test.ts client/lib/__tests__/mcp-replay.test.ts`: run SSE byte-boundary, incomplete tool-call, conversation context, and replay safety regressions; included in the standard test command.
+- `npm test -- --runInBand client/lib/agent/__tests__/openai-driver.test.ts client/lib/__tests__/mcp-replay.test.ts`: run SSE byte-boundary, post-DONE tails, malformed/incomplete events, atomic tool validation, conversation context, and replay safety regressions; included in the standard test command.
 - Use `npm run check:types` and `npm run lint` as additional quality gates.
 - Use `npm run check:providers` to smoke-test provider connectivity (set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `TOGETHER_API_KEY`, `MISTRAL_API_KEY`, `PERPLEXITY_API_KEY`, `YANDEX_API_KEY`, `REPLICATE_API_KEY`, `DEEPSEEK_API_KEY`, `GROQ_API_KEY`, `DASHSCOPE_API_KEY`; optional per-provider `*_BASE_URL` overrides and `ANTHROPIC_MODEL`/`PERPLEXITY_MODEL`).
 - Use `npm run check:providers:mock` (or `MOCK_PROVIDERS=1`) to run mocked provider checks when CI secrets are unavailable.
