@@ -131,6 +131,82 @@ describe("automatic replay after tool execution", () => {
     };
   }
 
+  it.each([false, true])(
+    "executes a queued MCP action once across concurrent flushes (follow-up fails: %s)",
+    async (failFollowup) => {
+      await enqueueChatRequest({
+        ...payload,
+        chatId: "queued-chat",
+        systemPrompt: "Keep context",
+        chatPrompt: "Task context",
+      });
+      let entered!: () => void, release!: () => void;
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      (mcp.executeToolCall as jest.Mock).mockImplementation(async () => {
+        const receipt = `receipt-${++counter}`;
+        entered();
+        await blocked;
+        return { content: [{ type: "text", text: receipt }] };
+      });
+      mockFetch.mockImplementation(async (_url, init) => {
+        const request = JSON.parse(init.body);
+        if (
+          request.messages.some(
+            (message: { role: string }) => message.role === "tool",
+          )
+        ) {
+          if (failFollowup) throw new Error("Network request failed");
+          return response({ content: "Done" });
+        }
+        return requestTool();
+      });
+      const firstChunks: string[] = [],
+        secondChunks: string[] = [],
+        errors: string[] = [];
+      const first = flushQueuedChatMessages({
+        chatId: "queued-chat",
+        onChunk: (text) => firstChunks.push(text),
+        onItemError: (error) => errors.push(error.message),
+      });
+      await started;
+      const second = flushQueuedChatMessages({
+        chatId: "queued-chat",
+        onChunk: (text) => secondChunks.push(text),
+      });
+      release();
+      expect(await Promise.all([first, second])).toEqual([
+        {
+          processed: failFollowup ? 0 : 1,
+          failed: failFollowup ? 1 : 0,
+          remaining: 0,
+        },
+        { processed: 0, failed: 0, remaining: 0 },
+      ]);
+      expect(counter).toBe(1);
+      expect(secondChunks).toEqual([]);
+      if (failFollowup) expect(errors[0]).toContain("Automatic replay stopped");
+      else expect(firstChunks.at(-1)).toBe("Done");
+      const followup = JSON.parse(mockFetch.mock.calls[1][1].body);
+      expect(followup.model).toBe("gpt-4");
+      expect(followup.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ role: "user", content: "Increment once" }),
+          expect.objectContaining({
+            role: "assistant",
+            tool_calls: [expect.objectContaining({ id: "call-1" })],
+          }),
+          { role: "tool", tool_call_id: "call-1", content: "receipt-1" },
+        ]),
+      );
+      expect(await getQueuedChatRequests()).toEqual([]);
+    },
+  );
+
   it("executes a byte-split SSE call once and preserves conversation context", async () => {
     mockFetch
       .mockResolvedValueOnce(streamedTool(true))
