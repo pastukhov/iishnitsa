@@ -48,7 +48,7 @@
 
 ## Testing Guidelines
 
-- `npm test -- --runInBand client/lib/__tests__/dependency-security.test.ts`: run real dependency security and compatibility regressions for shell quoting, navigation IDs, Markdown, brace globbing, and HTTP readiness; automatically included in `npm test` and `check:required`.
+- `npm test -- --runInBand client/lib/__tests__/dependency-security.test.ts`: run real dependency security and compatibility regressions for shell quoting, navigation IDs, Markdown, brace globbing, and HTTP readiness, Metro image parsing (including malformed-image termination), and Expo/Jest merge prototype safety; automatically included in `npm test` and `check:required`.
 
 - `npm test -- --runInBand client/lib/__tests__/auto-pr-workflow.test.ts`: check Auto PR gating for Dependabot, human reruns, and ordinary branch pushes; included in the standard test command.
 - `npm run test`: run the Jest suite (`npm run test:watch` for watch mode, `npm run test:coverage` for coverage).
