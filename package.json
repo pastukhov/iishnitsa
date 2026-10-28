@@ -70,7 +70,9 @@
     "ws": "^8.18.0",
     "yaml": "^2.8.3",
     "zod": "^3.24.2",
-    "zustand": "^5.0.9"
+    "zustand": "^5.0.9",
+    "deepmerge": "file:vendor/deepmerge",
+    "image-size": "file:vendor/image-size"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.2.0",
@@ -97,6 +99,8 @@
     "shell-quote": "^1.11.0",
     "brace-expansion@^1": "^1.1.21",
     "brace-expansion@^2": "^2.1.7",
-    "brace-expansion@^5": "^5.0.12"
+    "brace-expansion@^5": "^5.0.12",
+    "deepmerge": "$deepmerge",
+    "image-size": "$image-size"
   }
 }

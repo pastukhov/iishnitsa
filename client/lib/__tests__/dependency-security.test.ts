@@ -15,6 +15,96 @@ function runDependencyCheck(source: string, timeout = 10000) {
 }
 
 describe("dependency security and compatibility", () => {
+  it("rejects zero-length ICNS entries without hanging", () => {
+    runDependencyCheck(
+      `
+      const assert = require('node:assert/strict');
+      const { createRequire } = require('node:module');
+      const sizeOf = createRequire(require.resolve('metro'))('image-size');
+      const input = Buffer.alloc(16);
+      input.write('icns'); input.writeUInt32BE(16, 4); input.write('ic07', 8);
+      assert.throws(() => sizeOf(input));
+    `,
+      10000,
+    );
+  });
+
+  it("rejects zero-length JXL boxes without hanging", () => {
+    runDependencyCheck(
+      `
+      const assert = require('node:assert/strict');
+      const { createRequire } = require('node:module');
+      const sizeOf = createRequire(require.resolve('metro'))('image-size');
+      const input = Buffer.alloc(36);
+      input.writeUInt32BE(12); input.write('JXL ', 4);
+      input.writeUInt32BE(16, 12); input.write('ftyp', 16);
+      input.write('jxl ', 20); input.write('jxlp', 32);
+      assert.throws(() => sizeOf(input));
+    `,
+      10000,
+    );
+  });
+
+  it("keeps Metro buffer and filename image APIs working", () => {
+    runDependencyCheck(`
+      const assert = require('node:assert/strict');
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const { createRequire } = require('node:module');
+      const metroRequire = createRequire(require.resolve('metro'));
+      const sizeOf = metroRequire('image-size');
+      const assets = require(path.join(path.dirname(require.resolve('metro/package.json')), 'src/Assets.js'));
+      const file = path.resolve('assets/images/icon.png');
+      const buffer = fs.readFileSync(file);
+      const expected = { height: 1024, width: 1024, type: 'png' };
+      assert.deepEqual(sizeOf(buffer), expected);
+      assert.deepEqual(sizeOf(file), expected);
+      assert.deepEqual(assets.getAssetSize('png', buffer, file), { width: expected.width, height: expected.height });
+      (async () => {
+        const data = await assets.getAssetData(file, 'assets/images/icon.png', [], 'android', '/assets');
+        assert.equal(data.width, expected.width);
+        assert.equal(data.height, expected.height);
+      })().catch(error => { console.error(error); process.exitCode = 1; });
+    `);
+  });
+
+  it("prevents deepmerge result prototype poisoning through both inputs", () => {
+    runDependencyCheck(`
+      const assert = require('node:assert/strict');
+      const { createRequire } = require('node:module');
+      for (const parent of ['@expo/config', 'jest-config']) {
+        const merge = createRequire(require.resolve(parent))('deepmerge');
+        const payload = JSON.parse('{"__proto__":{"polluted":true}}');
+        for (const result of [merge(Object.create(null), payload), merge(payload, {}), merge(payload, payload), merge({ nested: null }, { nested: payload }).nested, merge.all([Object.create(null), payload])]) {
+          assert.equal(Object.getPrototypeOf(result), Object.prototype);
+          assert.equal(result.polluted, undefined);
+          assert.equal({}.polluted, undefined);
+        }
+      }
+    `);
+  });
+
+  it("preserves Expo and Jest deepmerge cloning, arrays, symbols and custom merge", () => {
+    runDependencyCheck(`
+      const assert = require('node:assert/strict');
+      const { createRequire } = require('node:module');
+      for (const parent of ['@expo/config', 'jest-config']) {
+        const merge = createRequire(require.resolve(parent))('deepmerge');
+        const symbol = Symbol('config');
+        const target = { nested: { left: true }, list: [1], [symbol]: { enabled: true } };
+        const result = merge(target, { nested: { right: true }, list: [2] });
+        assert.deepEqual(result.nested, { left: true, right: true });
+        assert.deepEqual(result.list, [1, 2]);
+        assert.deepEqual(result[symbol], { enabled: true });
+        assert.notEqual(result.nested, target.nested);
+        assert.notEqual(result[symbol], target[symbol]);
+        assert.deepEqual(merge.all([{ a: 1 }, { b: 2 }]), { a: 1, b: 2 });
+        assert.deepEqual(merge({ list: [1] }, { list: [2] }, { arrayMerge: (_, source) => source }), { list: [2] });
+        assert.deepEqual(merge({ nested: { a: 1 } }, { nested: { b: 2 } }, { customMerge: key => key === 'nested' ? () => 'custom' : undefined }), { nested: 'custom' });
+      }
+    `);
+  });
+
   it("rejects line terminators after shell comment tokens without executing a shell", () => {
     runDependencyCheck(`
       const assert = require('node:assert/strict');
