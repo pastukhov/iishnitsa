@@ -21,6 +21,11 @@ import {
   OpenAIFunction,
   ToolCall,
 } from "@/lib/agent/types";
+import {
+  createAgentLifecycle,
+  type AgentLifecycleOptions,
+  type AgentLifecycleSubscriber,
+} from "@/lib/agent/lifecycle";
 import { OpenAICompatibleDriver } from "@/lib/agent/openai-driver";
 import { decideAgentAction } from "@/lib/agent/decision-engine";
 import { generateImage } from "@/lib/image-generation";
@@ -73,6 +78,7 @@ interface AgentRunInput {
   onDecision?: (decision: AgentDecision) => void;
   onAttachment?: (attachment: MessageAttachment) => void;
   onToolExecutionAttempt?: () => void;
+  onLifecycleEvent?: AgentLifecycleSubscriber;
   mcpServers: MCPServer[];
   mcpEnabled: boolean;
   systemPrompt?: string;
@@ -93,7 +99,7 @@ interface AgentContext {
 }
 
 export class AgentCore {
-  private state: AgentState = "IDLE";
+  private lifecycle: AgentLifecycleOptions;
   private maxDepth: number;
   private driver: OpenAICompatibleDriver;
   private memoryStore: MemoryStore;
@@ -114,6 +120,7 @@ export class AgentCore {
     memoryAutoSave = true,
     memoryAutoSummary = false,
     memorySummaryTtlMs = SUMMARY_TTL_MS,
+    lifecycle = {},
   }: {
     maxDepth?: number;
     driver?: OpenAICompatibleDriver;
@@ -124,7 +131,9 @@ export class AgentCore {
     memoryAutoSave?: boolean;
     memoryAutoSummary?: boolean;
     memorySummaryTtlMs?: number;
+    lifecycle?: AgentLifecycleOptions;
   } = {}) {
+    this.lifecycle = lifecycle;
     this.maxDepth = maxDepth;
     this.driver = driver;
     this.memoryStore = memoryStore;
@@ -136,18 +145,34 @@ export class AgentCore {
     this.memorySummaryTtlMs = memorySummaryTtlMs;
   }
 
-  async runChat({
-    messages,
-    endpoint,
-    onChunk,
-    onDecision,
-    onAttachment,
-    onToolExecutionAttempt,
-    mcpServers,
-    mcpEnabled,
-    systemPrompt,
-    chatPrompt,
-  }: AgentRunInput): Promise<void> {
+  async runChat(input: AgentRunInput): Promise<void> {
+    const lifecycle = createAgentLifecycle(this.lifecycle);
+    if (input.onLifecycleEvent) lifecycle.subscribe(input.onLifecycleEvent);
+    lifecycle.start();
+    try {
+      await this.executeChat(input, lifecycle.enter);
+    } catch (error) {
+      lifecycle.finish("failed");
+      throw error;
+    }
+    lifecycle.finish("completed");
+  }
+
+  private async executeChat(
+    {
+      messages,
+      endpoint,
+      onChunk,
+      onDecision,
+      onAttachment,
+      onToolExecutionAttempt,
+      mcpServers,
+      mcpEnabled,
+      systemPrompt,
+      chatPrompt,
+    }: AgentRunInput,
+    enterState: ReturnType<typeof createAgentLifecycle>["enter"],
+  ): Promise<void> {
     const context: AgentContext = {
       rawMessages: messages,
       chatMessages: [],
@@ -159,14 +184,15 @@ export class AgentCore {
       toolsLoaded: false,
     };
 
-    this.state = "RECEIVE_INPUT";
+    let state: AgentState = "RECEIVE_INPUT";
 
     let decisionEmitted = false;
 
-    while (this.state !== "IDLE") {
-      switch (this.state) {
+    while (state !== "IDLE") {
+      enterState(state);
+      switch (state) {
         case "RECEIVE_INPUT": {
-          this.state = "BUILD_CONTEXT";
+          state = "BUILD_CONTEXT";
           break;
         }
         case "BUILD_CONTEXT": {
@@ -195,11 +221,11 @@ export class AgentCore {
             context.toolsLoaded = true;
           }
 
-          this.state = "THINK";
+          state = "THINK";
           break;
         }
         case "THINK": {
-          this.state = "DECIDE";
+          state = "DECIDE";
           break;
         }
         case "DECIDE": {
@@ -213,7 +239,7 @@ export class AgentCore {
             onDecision?.(context.decision);
             decisionEmitted = true;
           }
-          this.state = "ACT";
+          state = "ACT";
           break;
         }
         case "ACT": {
@@ -229,7 +255,7 @@ export class AgentCore {
 
           if (toolCalls.length === 0) {
             context.lastAssistantMessage = fullContent || "";
-            this.state = "IDLE";
+            state = "IDLE";
             break;
           }
 
@@ -239,7 +265,7 @@ export class AgentCore {
             tool_calls: toolCalls,
           });
           context.pendingToolCalls = toolCalls;
-          this.state = "OBSERVE";
+          state = "OBSERVE";
           break;
         }
         case "OBSERVE": {
@@ -253,7 +279,7 @@ export class AgentCore {
             onAttachment,
             onToolExecutionAttempt,
           );
-          this.state = "UPDATE_STATE";
+          state = "UPDATE_STATE";
           break;
         }
         case "UPDATE_STATE": {
@@ -261,11 +287,11 @@ export class AgentCore {
           if (context.depth >= this.maxDepth) {
             throw new Error("Maximum tool call depth exceeded");
           }
-          this.state = "BUILD_CONTEXT";
+          state = "BUILD_CONTEXT";
           break;
         }
         default: {
-          this.state = "IDLE";
+          state = "IDLE";
           break;
         }
       }
@@ -580,6 +606,7 @@ export async function runAgentChat(
     onDecision?: (decision: AgentDecision) => void;
     onAttachment?: (attachment: MessageAttachment) => void;
     onToolExecutionAttempt?: () => void;
+    onLifecycleEvent?: AgentLifecycleSubscriber;
   },
 ): Promise<void> {
   const { systemPrompt, chatPrompt, memorySettings } = options || {};
@@ -606,5 +633,6 @@ export async function runAgentChat(
     onDecision: options?.onDecision,
     onAttachment: options?.onAttachment,
     onToolExecutionAttempt: options?.onToolExecutionAttempt,
+    onLifecycleEvent: options?.onLifecycleEvent,
   });
 }
