@@ -67,6 +67,7 @@ export class MCPClient {
     method: string,
     params?: Record<string, any>,
     boundary?: BoundaryObserver,
+    beforeDispatch?: () => void,
   ): Promise<any> {
     const request: MCPRequest = {
       jsonrpc: "2.0",
@@ -99,6 +100,7 @@ export class MCPClient {
     };
     try {
       const body = JSON.stringify(request);
+      beforeDispatch?.();
       try {
         boundary?.dispatched();
       } catch {
@@ -251,6 +253,7 @@ export class MCPClient {
     toolName: string,
     args: Record<string, any>,
     boundary?: BoundaryObserver,
+    beforeDispatch?: () => void,
   ): Promise<MCPToolResult> {
     const result = await this.sendRequest(
       "tools/call",
@@ -259,6 +262,7 @@ export class MCPClient {
         arguments: args,
       },
       boundary,
+      beforeDispatch,
     );
     return result;
   }
@@ -350,6 +354,7 @@ export async function executeToolCall(
   toolName: string,
   args: Record<string, any>,
   boundary?: BoundaryObserver,
+  beforeDispatch?: () => void,
 ): Promise<MCPToolResult> {
   const client = getOrCreateClient(server);
   try {
@@ -362,7 +367,7 @@ export async function executeToolCall(
     }
     throw error;
   }
-  return await client.callTool(toolName, args, boundary);
+  return await client.callTool(toolName, args, boundary, beforeDispatch);
 }
 
 export function mcpToolsToOpenAIFunctions(

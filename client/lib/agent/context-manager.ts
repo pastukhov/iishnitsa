@@ -6,6 +6,7 @@ import { MemoryEntry, MemoryStore } from "@/lib/agent/memory";
 interface ContextBuildInput {
   messages: Message[];
   endpoint: EndpointConfig;
+  untrustedSkillContext?: string;
   systemPrompt?: string;
   chatPrompt?: string;
   memoryStore?: MemoryStore;
@@ -76,6 +77,7 @@ export async function buildAgentContext({
   endpoint,
   systemPrompt,
   chatPrompt,
+  untrustedSkillContext,
   memoryStore,
   memoryLimit,
   memoryMinImportance,
@@ -109,6 +111,9 @@ export async function buildAgentContext({
     }
   }
 
+  if (untrustedSkillContext !== undefined) {
+    chatMessages.push({ role: "user", content: untrustedSkillContext });
+  }
   const conversationMessages = await buildConversationMessages(messages);
   chatMessages.push(...conversationMessages);
 

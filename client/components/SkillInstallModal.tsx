@@ -141,8 +141,8 @@ export function SkillInstallModal({
     }
     Toast.show({
       type: "success",
-      text1: "Skill installed",
-      text2: "Enable it in Settings > Skills to use it.",
+      text1: "Skill reference saved",
+      text2: "Saved references are not automatically applied to conversations.",
       visibilityTime: 4000,
     });
     closePreview();
@@ -195,8 +195,8 @@ export function SkillInstallModal({
               <ThemedText
                 style={[styles.warningNote, { color: theme.textSecondary }]}
               >
-                Community-submitted content — review before enabling. Installed
-                skills start disabled.
+                Community-submitted content. Saving keeps a reference only; it
+                does not apply instructions to conversations.
               </ThemedText>
               <ScrollView
                 style={[

@@ -1,4 +1,8 @@
 import {
+  resolveSkillContext,
+  type SkillContextOptions,
+} from "@/lib/skill-registry";
+import {
   createToolExecutionPolicy,
   ToolPolicyDeniedError,
   type ToolPolicyOptions,
@@ -93,6 +97,7 @@ interface AgentRunInput {
   onAttachment?: (attachment: MessageAttachment) => void;
   onToolExecutionAttempt?: () => void;
   onLifecycleEvent?: AgentLifecycleSubscriber;
+  skillContext?: SkillContextOptions;
   toolPolicy?: ToolPolicyOptions;
   trace?: AttemptTrace;
   mcpServers: MCPServer[];
@@ -162,12 +167,21 @@ export class AgentCore {
   }
 
   async runChat(input: AgentRunInput): Promise<void> {
+    const skillContext =
+      input.skillContext === undefined
+        ? undefined
+        : Object.freeze({ ...input.skillContext });
+    resolveSkillContext(skillContext);
     const lifecycle = createAgentLifecycle(this.lifecycle);
     if (input.onLifecycleEvent) lifecycle.subscribe(input.onLifecycleEvent);
     const policy = createToolExecutionPolicy(input.toolPolicy);
     lifecycle.start();
     try {
-      await this.executeChat(input, lifecycle.enter, policy);
+      await this.executeChat(
+        { ...input, skillContext },
+        lifecycle.enter,
+        policy,
+      );
     } catch (error) {
       lifecycle.finish("failed");
       throw error;
@@ -190,6 +204,7 @@ export class AgentCore {
       mcpEnabled,
       systemPrompt,
       chatPrompt,
+      skillContext,
     }: AgentRunInput,
     enterState: ReturnType<typeof createAgentLifecycle>["enter"],
     policy: ReturnType<typeof createToolExecutionPolicy>,
@@ -223,7 +238,11 @@ export class AgentCore {
               endpoint,
               systemPrompt,
               chatPrompt,
-              memoryStore: this.memoryEnabled ? this.memoryStore : undefined,
+              untrustedSkillContext: resolveSkillContext(skillContext),
+              memoryStore:
+                this.memoryEnabled && !skillContext
+                  ? this.memoryStore
+                  : undefined,
               memoryLimit: this.memoryEnabled ? this.memoryLimit : undefined,
               memoryMinImportance: this.memoryEnabled
                 ? this.memoryMinImportance
@@ -264,6 +283,7 @@ export class AgentCore {
           break;
         }
         case "ACT": {
+          resolveSkillContext(skillContext);
           const decisionTools =
             context.decision?.toolChoice === "auto" ? context.tools : [];
           const { fullContent, toolCalls } = await this.driver.streamChat({
@@ -273,6 +293,13 @@ export class AgentCore {
             onChunk,
             decision: context.decision,
             ...(trace ? { boundary: trace.boundary("llm") } : {}),
+            ...(skillContext
+              ? {
+                  beforeDispatch: () => {
+                    resolveSkillContext(skillContext);
+                  },
+                }
+              : {}),
           });
 
           if (toolCalls.length === 0) {
@@ -299,6 +326,7 @@ export class AgentCore {
             mcpServers,
             endpoint,
             policy,
+            skillContext,
             onAttachment,
             onToolExecutionAttempt,
             trace,
@@ -321,7 +349,7 @@ export class AgentCore {
       }
     }
 
-    if (this.memoryEnabled && context.lastAssistantMessage) {
+    if (!skillContext && this.memoryEnabled && context.lastAssistantMessage) {
       await this.persistMemories({
         messages: context.rawMessages,
         assistantMessage: context.lastAssistantMessage,
@@ -403,11 +431,13 @@ export class AgentCore {
     mcpServers: MCPServer[],
     endpoint: EndpointConfig,
     policy: ReturnType<typeof createToolExecutionPolicy>,
+    skillContext: SkillContextOptions | undefined,
     onAttachment?: (attachment: MessageAttachment) => void,
     onToolExecutionAttempt?: () => void,
     trace?: AttemptTrace,
   ): Promise<void> {
     for (const toolCall of toolCalls) {
+      resolveSkillContext(skillContext);
       let result: string;
 
       if (toolCall.function.name === "generate_image") {
@@ -423,7 +453,9 @@ export class AgentCore {
                 !approvedArgs.prompt
               )
                 throw new ToolPolicyDeniedError();
+              resolveSkillContext(skillContext);
               onToolExecutionAttempt?.();
+              resolveSkillContext(skillContext);
               return generateImage(target.endpoint, approvedArgs.prompt);
             },
           );
@@ -460,7 +492,19 @@ export class AgentCore {
               async (target, approvedArgs) => {
                 if (target.kind !== "mcp") throw new ToolPolicyDeniedError();
                 // Mark before awaiting: a lost response does not mean no side effect.
+                resolveSkillContext(skillContext);
                 onToolExecutionAttempt?.();
+                if (skillContext) {
+                  return executeToolCall(
+                    target.server,
+                    target.name,
+                    approvedArgs,
+                    boundary,
+                    () => {
+                      resolveSkillContext(skillContext);
+                    },
+                  );
+                }
                 return boundary
                   ? executeToolCall(
                       target.server,
@@ -665,6 +709,7 @@ export async function runAgentChat(
     onAttachment?: (attachment: MessageAttachment) => void;
     onToolExecutionAttempt?: () => void;
     onLifecycleEvent?: AgentLifecycleSubscriber;
+    skillContext?: SkillContextOptions;
     toolPolicy?: ToolPolicyOptions;
     trace?: AttemptTrace;
   },
@@ -694,6 +739,7 @@ export async function runAgentChat(
     onAttachment: options?.onAttachment,
     onToolExecutionAttempt: options?.onToolExecutionAttempt,
     onLifecycleEvent: options?.onLifecycleEvent,
+    skillContext: options?.skillContext,
     toolPolicy: options?.toolPolicy,
     trace: options?.trace,
   });

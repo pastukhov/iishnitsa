@@ -70,7 +70,7 @@ export interface Skill {
   enabled: boolean;
   /** Stable "{source}/{slug}" id from skills.sh, present only for marketplace-installed skills. */
   sourceId?: string;
-  /** SHA-256 hash of the installed skill's files, from skills.sh, used to detect upstream updates. */
+  /** Noncryptographic content change detector; not a signature or trust guarantee. */
   sourceHash?: string;
 }
 
@@ -338,13 +338,8 @@ const migrateSettings = (
 };
 
 export function getEffectiveSystemPrompt(settings: Settings): string {
-  const enabledSkills = (settings.skills || []).filter((s) => s.enabled);
-  const skillsBlock = enabledSkills
-    .map((s) => `## Skill: ${s.name}\n${s.content.trim()}`)
-    .join("\n\n");
-  return [settings.systemPrompt?.trim(), skillsBlock]
-    .filter(Boolean)
-    .join("\n\n");
+  // Saved legacy references never become trusted system instructions.
+  return settings.systemPrompt?.trim() || "";
 }
 
 const getDefaultChatTitle = (): string => {
