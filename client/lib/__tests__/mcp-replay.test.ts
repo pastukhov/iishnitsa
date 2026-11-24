@@ -1,3 +1,4 @@
+import type { ToolPolicyOptions } from "../agent/tool-policy";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { sendChatMessage, flushQueuedChatMessages } from "../api";
 import { enqueueChatRequest, getQueuedChatRequests } from "../offline-queue";
@@ -26,6 +27,16 @@ const server: MCPServer = {
   url: "https://mcp.invalid",
   enabled: true,
 };
+const toolPolicy: ToolPolicyOptions = {
+  registry: [
+    { target: { kind: "mcp", name: "increment", server }, risk: "mutating" },
+    {
+      target: { kind: "builtin", name: "generate_image", endpoint },
+      risk: "mutating",
+    },
+  ],
+  requestApproval: (request) => ({ decision: "approve", request }),
+};
 const messages: Message[] = [
   { id: "user", role: "user", content: "Increment once", timestamp: 1 },
 ];
@@ -53,13 +64,18 @@ function requestTool(name = "counter__increment") {
       {
         id: "call-1",
         type: "function",
-        function: { name, arguments: "{}" },
+        function: {
+          name,
+          arguments:
+            name === "generate_image" ? '{"prompt":"A test image"}' : "{}",
+        },
       },
     ],
   });
 }
 function send() {
   return sendChatMessage(messages, endpoint, jest.fn(), [server], true, {
+    toolPolicy,
     queueOnFailure: true,
     memorySettings,
   });
@@ -169,12 +185,14 @@ describe("automatic replay after tool execution", () => {
         secondChunks: string[] = [],
         errors: string[] = [];
       const first = flushQueuedChatMessages({
+        toolPolicy,
         chatId: "queued-chat",
         onChunk: (text) => firstChunks.push(text),
         onItemError: (error) => errors.push(error.message),
       });
       await started;
       const second = flushQueuedChatMessages({
+        toolPolicy,
         chatId: "queued-chat",
         onChunk: (text) => secondChunks.push(text),
       });
@@ -243,7 +261,7 @@ describe("automatic replay after tool execution", () => {
       .mockResolvedValueOnce(streamedTool(true))
       .mockRejectedValueOnce(new Error("Network request failed"));
     await expect(send()).rejects.toThrow("Automatic replay stopped");
-    await flushQueuedChatMessages({ onChunk: jest.fn() });
+    await flushQueuedChatMessages({ toolPolicy, onChunk: jest.fn() });
     expect(counter).toBe(1);
     expect(await getQueuedChatRequests()).toEqual([]);
   });
@@ -316,7 +334,7 @@ describe("automatic replay after tool execution", () => {
         .mockResolvedValueOnce(sse(wire));
       await expect(send()).rejects.toThrow("Automatic replay stopped");
       expect(await getQueuedChatRequests()).toEqual([]);
-      await flushQueuedChatMessages({ onChunk: jest.fn() });
+      await flushQueuedChatMessages({ toolPolicy, onChunk: jest.fn() });
       expect(counter).toBe(1);
       expect(mcp.executeToolCall).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -340,7 +358,7 @@ describe("automatic replay after tool execution", () => {
         { role: "tool", tool_call_id: "call-1", content: "receipt-1" },
       ]),
     );
-    await flushQueuedChatMessages({ onChunk: jest.fn() });
+    await flushQueuedChatMessages({ toolPolicy, onChunk: jest.fn() });
     expect(counter).toBe(1);
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
@@ -353,7 +371,7 @@ describe("automatic replay after tool execution", () => {
       .mockResolvedValueOnce(requestTool())
       .mockResolvedValueOnce(response({ content: "Done" }));
     const onChunk = jest.fn();
-    expect(await flushQueuedChatMessages({ onChunk })).toEqual({
+    expect(await flushQueuedChatMessages({ toolPolicy, onChunk })).toEqual({
       processed: 1,
       failed: 0,
       remaining: 0,
@@ -371,6 +389,7 @@ describe("automatic replay after tool execution", () => {
     const onItemFinish = jest.fn();
     expect(
       await flushQueuedChatMessages({
+        toolPolicy,
         onChunk: jest.fn(),
         onItemError,
         onItemFinish,
@@ -380,7 +399,7 @@ describe("automatic replay after tool execution", () => {
       "Automatic replay stopped",
     );
     expect(onItemFinish).toHaveBeenCalledTimes(1);
-    await flushQueuedChatMessages({ onChunk: jest.fn() });
+    await flushQueuedChatMessages({ toolPolicy, onChunk: jest.fn() });
     expect(counter).toBe(1);
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
@@ -388,7 +407,9 @@ describe("automatic replay after tool execution", () => {
   it("retains a queued request when failure occurs before tools", async () => {
     await enqueueChatRequest(payload);
     mockFetch.mockRejectedValueOnce(new Error("Failed to fetch"));
-    expect(await flushQueuedChatMessages({ onChunk: jest.fn() })).toEqual({
+    expect(
+      await flushQueuedChatMessages({ toolPolicy, onChunk: jest.fn() }),
+    ).toEqual({
       processed: 0,
       failed: 1,
       remaining: 1,
@@ -428,10 +449,36 @@ describe("automatic replay after tool execution", () => {
       .mockResolvedValueOnce(response({ content: "Done" }));
     const onChunk = jest.fn();
     await sendChatMessage(messages, endpoint, onChunk, [server], true, {
+      toolPolicy,
       memorySettings,
     });
     expect(counter).toBe(1);
     expect(onChunk).toHaveBeenLastCalledWith("Done");
     expect(await getQueuedChatRequests()).toEqual([]);
+  });
+
+  it("cannot broaden a flush registry from an item-start callback", async () => {
+    await enqueueChatRequest(payload);
+    const config: ToolPolicyOptions = { registry: [] };
+    mockFetch
+      .mockResolvedValueOnce(requestTool())
+      .mockResolvedValueOnce(response({ content: "Done" }));
+    const result = await flushQueuedChatMessages({
+      toolPolicy: config,
+      onChunk: jest.fn(),
+      onItemStart: () => {
+        config.registry = toolPolicy.registry;
+        config.requestApproval = toolPolicy.requestApproval;
+      },
+    });
+    expect(result).toEqual({ processed: 1, failed: 0, remaining: 0 });
+    expect(counter).toBe(0);
+    expect(mcp.executeToolCall).not.toHaveBeenCalled();
+    const followup = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(followup.messages).toContainEqual({
+      role: "tool",
+      tool_call_id: "call-1",
+      content: "Tool execution denied by policy.",
+    });
   });
 });

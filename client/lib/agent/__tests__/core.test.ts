@@ -1,5 +1,6 @@
 import { AgentCore } from "../core";
 import type { AgentLifecycleEvent } from "../lifecycle";
+import type { ToolPolicyOptions } from "../tool-policy";
 import { EndpointConfig, MCPServer, Message } from "@/lib/store";
 import * as mcpClient from "@/lib/mcp-client";
 import * as imageUtils from "@/lib/image-utils";
@@ -33,6 +34,14 @@ describe("AgentCore", () => {
     url: "http://localhost:3000",
     enabled: true,
   };
+
+  const authorizeTools = (...names: string[]): ToolPolicyOptions => ({
+    registry: names.map((name) => ({
+      target: { kind: "mcp", name, server: mockServer },
+      risk: "mutating",
+    })),
+    requestApproval: (request) => ({ decision: "approve", request }),
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -161,6 +170,7 @@ describe("AgentCore", () => {
       onLifecycleEvent,
       mcpServers: [mockServer],
       mcpEnabled: true,
+      toolPolicy: authorizeTools("tool"),
     });
 
     expect(driver.streamChat).toHaveBeenCalledTimes(2);
@@ -254,6 +264,7 @@ describe("AgentCore", () => {
         onChunk: jest.fn(),
         mcpServers: [mockServer],
         mcpEnabled: true,
+        toolPolicy: authorizeTools("loop"),
       }),
     ).rejects.toThrow("Maximum tool call depth exceeded");
   });
@@ -364,6 +375,67 @@ describe("AgentCore", () => {
     expect(toolMessage.content).toBe('Error: Unknown tool "server1__missing"');
   });
 
+  it.each(["{broken", "null", "[]"])(
+    "denies invalid argument object %s even for an authorized tool",
+    async (argumentsText) => {
+      (mcpClient.getToolsFromServers as jest.Mock).mockResolvedValueOnce({
+        tools: [
+          {
+            name: "tool",
+            description: "Test tool",
+            inputSchema: { type: "object" },
+            serverName: mockServer.name,
+            serverId: mockServer.id,
+          },
+        ],
+        errors: [],
+      });
+      (mcpClient.mcpToolsToOpenAIFunctions as jest.Mock).mockReturnValueOnce(
+        [],
+      );
+      (mcpClient.parseToolCallName as jest.Mock).mockReturnValue({
+        serverId: mockServer.id,
+        toolName: "tool",
+      });
+      const driver = {
+        streamChat: jest
+          .fn()
+          .mockResolvedValueOnce({
+            fullContent: "",
+            toolCalls: [
+              {
+                id: "invalid-call",
+                type: "function",
+                function: { name: "server1__tool", arguments: argumentsText },
+              },
+            ],
+          })
+          .mockResolvedValueOnce({ fullContent: "Done", toolCalls: [] }),
+      };
+      const onToolExecutionAttempt = jest.fn();
+      await new AgentCore({ driver, memoryEnabled: false }).runChat({
+        messages: [],
+        endpoint: mockEndpoint,
+        onChunk: jest.fn(),
+        mcpServers: [mockServer],
+        mcpEnabled: true,
+        toolPolicy: authorizeTools("tool"),
+        onToolExecutionAttempt,
+      });
+      expect(mcpClient.executeToolCall).not.toHaveBeenCalled();
+      expect(onToolExecutionAttempt).not.toHaveBeenCalled();
+      expect(driver.streamChat.mock.calls[1][0].messages).toEqual(
+        expect.arrayContaining([
+          {
+            role: "tool",
+            tool_call_id: "invalid-call",
+            content: "Tool execution denied by policy.",
+          },
+        ]),
+      );
+    },
+  );
+
   it("formats tool results and handles execution errors", async () => {
     const toolCalls = [
       {
@@ -371,7 +443,7 @@ describe("AgentCore", () => {
         type: "function" as const,
         function: {
           name: "server1__empty",
-          arguments: "{bad json",
+          arguments: "{}",
         },
       },
       {
@@ -503,6 +575,7 @@ describe("AgentCore", () => {
       onChunk: jest.fn(),
       mcpServers: [mockServer],
       mcpEnabled: true,
+      toolPolicy: authorizeTools("empty", "image", "weird", "fail"),
     });
 
     expect(mcpClient.executeToolCall).toHaveBeenCalledWith(

@@ -1,3 +1,8 @@
+import {
+  createToolExecutionPolicy,
+  ToolPolicyDeniedError,
+  type ToolPolicyOptions,
+} from "./tool-policy";
 import type { AttemptTrace } from "@/lib/agent/execution-trace";
 import {
   Message,
@@ -69,6 +74,14 @@ function formatToolResult(result: MCPToolResult): string {
     .join("\n");
 }
 
+function parseToolArguments(raw: string): Record<string, unknown> {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new ToolPolicyDeniedError();
+  }
+}
+
 const SUMMARY_MAX_MESSAGES = 12;
 const SUMMARY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -80,6 +93,7 @@ interface AgentRunInput {
   onAttachment?: (attachment: MessageAttachment) => void;
   onToolExecutionAttempt?: () => void;
   onLifecycleEvent?: AgentLifecycleSubscriber;
+  toolPolicy?: ToolPolicyOptions;
   trace?: AttemptTrace;
   mcpServers: MCPServer[];
   mcpEnabled: boolean;
@@ -150,12 +164,15 @@ export class AgentCore {
   async runChat(input: AgentRunInput): Promise<void> {
     const lifecycle = createAgentLifecycle(this.lifecycle);
     if (input.onLifecycleEvent) lifecycle.subscribe(input.onLifecycleEvent);
+    const policy = createToolExecutionPolicy(input.toolPolicy);
     lifecycle.start();
     try {
-      await this.executeChat(input, lifecycle.enter);
+      await this.executeChat(input, lifecycle.enter, policy);
     } catch (error) {
       lifecycle.finish("failed");
       throw error;
+    } finally {
+      policy.close();
     }
     lifecycle.finish("completed");
   }
@@ -175,6 +192,7 @@ export class AgentCore {
       chatPrompt,
     }: AgentRunInput,
     enterState: ReturnType<typeof createAgentLifecycle>["enter"],
+    policy: ReturnType<typeof createToolExecutionPolicy>,
   ): Promise<void> {
     const context: AgentContext = {
       rawMessages: messages,
@@ -280,6 +298,7 @@ export class AgentCore {
             context.mcpToolsMap,
             mcpServers,
             endpoint,
+            policy,
             onAttachment,
             onToolExecutionAttempt,
             trace,
@@ -383,6 +402,7 @@ export class AgentCore {
     >,
     mcpServers: MCPServer[],
     endpoint: EndpointConfig,
+    policy: ReturnType<typeof createToolExecutionPolicy>,
     onAttachment?: (attachment: MessageAttachment) => void,
     onToolExecutionAttempt?: () => void,
     trace?: AttemptTrace,
@@ -392,22 +412,30 @@ export class AgentCore {
 
       if (toolCall.function.name === "generate_image") {
         try {
-          let args: Record<string, any> = {};
-          try {
-            args = JSON.parse(toolCall.function.arguments);
-          } catch {}
-
-          onToolExecutionAttempt?.();
-          const imageResult = await generateImage(
-            endpoint,
-            args.prompt || "image",
+          const args = parseToolArguments(toolCall.function.arguments);
+          const imageResult = await policy.execute(
+            { kind: "builtin", name: "generate_image", endpoint },
+            args,
+            async (target, approvedArgs) => {
+              if (
+                target.kind !== "builtin" ||
+                typeof approvedArgs.prompt !== "string" ||
+                !approvedArgs.prompt
+              )
+                throw new ToolPolicyDeniedError();
+              onToolExecutionAttempt?.();
+              return generateImage(target.endpoint, approvedArgs.prompt);
+            },
           );
           onAttachment?.(imageResult.attachment);
           result = imageResult.revisedPrompt
             ? `Image generated successfully. Revised prompt: ${imageResult.revisedPrompt}`
             : "Image generated successfully.";
         } catch (error: any) {
-          result = `Error generating image: ${error.message}`;
+          result =
+            error instanceof ToolPolicyDeniedError
+              ? "Tool execution denied by policy."
+              : `Error generating image: ${error.message}`;
         }
       } else {
         const { serverId, toolName } = parseToolCallName(
@@ -425,19 +453,32 @@ export class AgentCore {
           result = `Error: Server not found for tool ${toolCall.function.name}`;
         } else {
           try {
-            let args: Record<string, any> = {};
-            try {
-              args = JSON.parse(toolCall.function.arguments);
-            } catch {}
-
-            // Mark before awaiting: a lost response does not mean no side effect.
-            onToolExecutionAttempt?.();
-            const toolResult = boundary
-              ? await executeToolCall(server, toolName, args, boundary)
-              : await executeToolCall(server, toolName, args);
+            const args = parseToolArguments(toolCall.function.arguments);
+            const toolResult = await policy.execute(
+              { kind: "mcp", name: toolName, server },
+              args,
+              async (target, approvedArgs) => {
+                if (target.kind !== "mcp") throw new ToolPolicyDeniedError();
+                // Mark before awaiting: a lost response does not mean no side effect.
+                onToolExecutionAttempt?.();
+                return boundary
+                  ? executeToolCall(
+                      target.server,
+                      target.name,
+                      approvedArgs,
+                      boundary,
+                    )
+                  : executeToolCall(target.server, target.name, approvedArgs);
+              },
+            );
             result = formatToolResult(toolResult);
           } catch (error: any) {
-            result = `Error executing tool: ${error.message}`;
+            if (error instanceof ToolPolicyDeniedError) {
+              boundary?.finish("denied");
+              result = "Tool execution denied by policy.";
+            } else {
+              result = `Error executing tool: ${error.message}`;
+            }
           }
         }
       }
@@ -580,8 +621,8 @@ export class AgentCore {
               content: memory.content,
               importance: 0.9,
             });
-          } catch (error) {
-            console.warn("Failed to store explicit memory:", error);
+          } catch {
+            console.warn("Failed to store explicit memory");
           }
         }
       }
@@ -602,8 +643,8 @@ export class AgentCore {
             importance: 0.6,
             ttlMs: this.memorySummaryTtlMs,
           });
-        } catch (error) {
-          console.warn("Failed to store summary memory:", error);
+        } catch {
+          console.warn("Failed to store summary memory");
         }
       }
     }
@@ -624,6 +665,7 @@ export async function runAgentChat(
     onAttachment?: (attachment: MessageAttachment) => void;
     onToolExecutionAttempt?: () => void;
     onLifecycleEvent?: AgentLifecycleSubscriber;
+    toolPolicy?: ToolPolicyOptions;
     trace?: AttemptTrace;
   },
 ): Promise<void> {
@@ -652,6 +694,7 @@ export async function runAgentChat(
     onAttachment: options?.onAttachment,
     onToolExecutionAttempt: options?.onToolExecutionAttempt,
     onLifecycleEvent: options?.onLifecycleEvent,
+    toolPolicy: options?.toolPolicy,
     trace: options?.trace,
   });
 }

@@ -1,3 +1,4 @@
+import type { ToolPolicyOptions } from "../agent/tool-policy";
 import { LLMResponseError } from "../agent/openai-driver";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { sendChatMessage } from "../api";
@@ -28,6 +29,12 @@ const server: MCPServer = {
   url: "https://mcp.invalid",
   token: "mcp-key-secret",
   enabled: true,
+};
+const toolPolicy: ToolPolicyOptions = {
+  registry: [
+    { target: { kind: "mcp", name: "increment", server }, risk: "mutating" },
+  ],
+  requestApproval: (request) => ({ decision: "approve", request }),
 };
 const memorySettings = { enabled: false, autoSave: false, autoSummary: false };
 const transport = global.fetch as jest.Mock;
@@ -296,7 +303,7 @@ test.each(["unknown", "completed"])(
           })
         : response(503);
     });
-    await expect(send(events, {}, [server])).rejects.toThrow(
+    await expect(send(events, { toolPolicy }, [server])).rejects.toThrow(
       "Automatic replay stopped",
     );
     expect(toolCalls).toBe(1);
