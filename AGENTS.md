@@ -48,6 +48,8 @@
 
 ## Testing Guidelines
 
+- `npm test -- --runInBand client/lib/agent/__tests__/lifecycle.test.ts client/lib/agent/__tests__/core.test.ts`: verify per-run lifecycle ordering, isolation, observer errors, and metadata-only outcomes. Included in the standard test command.
+
 - `npm test -- --runInBand client/lib/__tests__/dependency-security.test.ts`: run real dependency security and compatibility regressions for shell quoting, navigation IDs, Markdown, brace globbing, and HTTP readiness; automatically included in `npm test` and `check:required`.
 
 - `npm test -- --runInBand client/lib/__tests__/auto-pr-workflow.test.ts`: check Auto PR gating for Dependabot, human reruns, and ordinary branch pushes; included in the standard test command.

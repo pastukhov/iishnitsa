@@ -1,4 +1,5 @@
 import { AgentCore } from "../core";
+import type { AgentLifecycleEvent } from "../lifecycle";
 import { EndpointConfig, MCPServer, Message } from "@/lib/store";
 import * as mcpClient from "@/lib/mcp-client";
 import * as imageUtils from "@/lib/image-utils";
@@ -103,7 +104,7 @@ describe("AgentCore", () => {
       type: "function" as const,
       function: {
         name: "server1__tool",
-        arguments: '{"input":"x"}',
+        arguments: '{"input":"tool-input-secret"}',
       },
     };
 
@@ -137,7 +138,7 @@ describe("AgentCore", () => {
     });
 
     (mcpClient.executeToolCall as jest.Mock).mockResolvedValue({
-      content: [{ type: "text", text: "ok" }],
+      content: [{ type: "text", text: "tool-output-secret" }],
     });
 
     const driver = {
@@ -148,6 +149,7 @@ describe("AgentCore", () => {
     };
 
     const onChunk = jest.fn();
+    const onLifecycleEvent = jest.fn();
     const agent = new AgentCore({ driver });
 
     await agent.runChat({
@@ -156,14 +158,39 @@ describe("AgentCore", () => {
       ],
       endpoint: mockEndpoint,
       onChunk,
+      onLifecycleEvent,
       mcpServers: [mockServer],
       mcpEnabled: true,
     });
 
     expect(driver.streamChat).toHaveBeenCalledTimes(2);
     expect(mcpClient.executeToolCall).toHaveBeenCalledWith(mockServer, "tool", {
-      input: "x",
+      input: "tool-input-secret",
     });
+    const events = onLifecycleEvent.mock.calls.map(([event]) => event);
+    expect(
+      events
+        .filter((event) => event.type === "state_entered")
+        .map((event) => event.state),
+    ).toEqual([
+      "RECEIVE_INPUT",
+      "BUILD_CONTEXT",
+      "THINK",
+      "DECIDE",
+      "ACT",
+      "OBSERVE",
+      "UPDATE_STATE",
+      "BUILD_CONTEXT",
+      "THINK",
+      "DECIDE",
+      "ACT",
+    ]);
+    expect(
+      events.filter((event) => event.type === "run_finished"),
+    ).toHaveLength(1);
+    expect(JSON.stringify(events)).not.toMatch(
+      /tool-input-secret|tool-output-secret/,
+    );
     expect(onChunk).toHaveBeenCalledWith(expect.stringContaining("Using tool"));
   });
 
@@ -746,5 +773,150 @@ describe("AgentCore", () => {
       expect.any(Error),
     );
     errorSpy.mockRestore();
+  });
+});
+
+describe("AgentCore lifecycle", () => {
+  const endpoint: EndpointConfig = {
+    id: "endpoint",
+    name: "Test",
+    providerId: "openai",
+    baseUrl: "https://endpoint.example",
+    apiKey: "credential-secret",
+    model: "gpt-4",
+  };
+  const runInput = {
+    endpoint,
+    onChunk: jest.fn(),
+    mcpServers: [],
+    mcpEnabled: false,
+  };
+
+  it("isolates overlapping runs on one instance and emits exactly one terminal event each", async () => {
+    type Response = { fullContent: string; toolCalls: [] };
+    const pending: (() => void)[] = [];
+    let notifyBothStarted!: () => void;
+    const bothStarted = new Promise<void>((resolve) => {
+      notifyBothStarted = resolve;
+    });
+    const driver = {
+      streamChat: jest.fn(
+        ({ onChunk }: { onChunk: (chunk: string) => void }) =>
+          new Promise<Response>((resolve) => {
+            const output =
+              pending.length === 0
+                ? "first-reply-secret"
+                : "second-reply-secret";
+            pending.push(() => {
+              onChunk(output);
+              resolve({ fullContent: output, toolCalls: [] });
+            });
+            if (pending.length === 2) notifyBothStarted();
+          }),
+      ),
+    };
+    const firstChunk = jest.fn();
+    const secondChunk = jest.fn();
+    const firstListener = jest.fn();
+    const secondListener = jest.fn();
+    const traceIds = ["first", "second"];
+    const agent = new AgentCore({
+      driver,
+      memoryEnabled: false,
+      lifecycle: { createTraceId: () => traceIds.shift()!, now: () => 100 },
+    });
+    const first = agent.runChat({
+      ...runInput,
+      messages: [
+        { id: "1", role: "user", timestamp: 1, content: "first-secret" },
+      ],
+      onChunk: firstChunk,
+      onLifecycleEvent: firstListener,
+    });
+    const second = agent.runChat({
+      ...runInput,
+      messages: [
+        { id: "2", role: "user", timestamp: 2, content: "second-secret" },
+      ],
+      onChunk: secondChunk,
+      onLifecycleEvent: secondListener,
+    });
+    await bothStarted;
+
+    pending[1]();
+    await second;
+    expect(secondChunk.mock.calls).toEqual([["second-reply-secret"]]);
+    expect(firstChunk).not.toHaveBeenCalled();
+    expect(firstListener.mock.calls.map(([event]) => event.type)).not.toContain(
+      "run_finished",
+    );
+
+    pending[0]();
+    await first;
+    expect(firstChunk.mock.calls).toEqual([["first-reply-secret"]]);
+
+    for (const [traceId, listener] of [
+      ["first", firstListener],
+      ["second", secondListener],
+    ] as const) {
+      const events = listener.mock.calls.map(([event]) => event);
+      expect(events.map((event) => event.type)).toEqual([
+        "run_started",
+        "state_entered",
+        "state_entered",
+        "state_entered",
+        "state_entered",
+        "state_entered",
+        "run_finished",
+      ]);
+      expect(events.slice(1, -1).map((event) => event.state)).toEqual([
+        "RECEIVE_INPUT",
+        "BUILD_CONTEXT",
+        "THINK",
+        "DECIDE",
+        "ACT",
+      ]);
+      expect(
+        events.every(
+          (event) => event.traceId === traceId && event.timestampMs === 100,
+        ),
+      ).toBe(true);
+      expect(events.at(-1).outcome).toBe("completed");
+      expect(JSON.stringify(events)).not.toMatch(/secret|endpoint\.example/);
+    }
+  });
+
+  it("preserves the original error and keeps it out of the terminal event", async () => {
+    const failure = new Error("provider-payload-secret");
+    const driver = { streamChat: jest.fn().mockRejectedValue(failure) };
+    const subscriber = jest.fn<void, [AgentLifecycleEvent]>(() => {
+      throw new Error("subscriber-secret");
+    });
+    const agent = new AgentCore({
+      driver,
+      memoryEnabled: false,
+      lifecycle: {
+        createTraceId: () => {
+          throw new Error("trace-secret");
+        },
+        now: () => {
+          throw new Error("clock-secret");
+        },
+      },
+    });
+
+    await expect(
+      agent.runChat({
+        ...runInput,
+        messages: [],
+        onLifecycleEvent: subscriber,
+      }),
+    ).rejects.toBe(failure);
+
+    const events = subscriber.mock.calls.flat();
+    expect(events.filter((event) => event.type === "run_finished")).toEqual([
+      expect.objectContaining({ outcome: "failed" }),
+    ]);
+    expect(JSON.stringify(events)).not.toContain("secret");
   });
 });
