@@ -7,6 +7,12 @@ import {
 import { getToolsFromServers } from "@/lib/mcp-client";
 import { fetchProviderModels } from "@/lib/providers";
 import { runAgentChat } from "@/lib/agent/core";
+import { LLMResponseError } from "@/lib/agent/openai-driver";
+import {
+  createExecutionTrace,
+  type ExecutionSubscriber,
+  type RunOutcome,
+} from "@/lib/agent/execution-trace";
 import { MemorySettings } from "@/lib/agent/memory";
 import {
   enqueueChatRequest,
@@ -43,6 +49,8 @@ export async function sendChatMessage(
   mcpServers: MCPServer[] = [],
   mcpEnabled: boolean = false,
   options?: {
+    fallbackEndpoint?: EndpointConfig;
+    onExecutionEvent?: ExecutionSubscriber;
     queueOnFailure?: boolean;
     chatId?: string | null;
     onQueued?: (id: string) => void;
@@ -53,24 +61,65 @@ export async function sendChatMessage(
     onAttachment?: (attachment: MessageAttachment) => void;
   },
 ): Promise<void> {
+  const trace = createExecutionTrace(options?.onExecutionEvent);
+  let outcome: RunOutcome = "failed";
   let toolExecutionAttempted = false;
+  let outputStarted = false;
+  const attemptEndpoint = async (selected: EndpointConfig) => {
+    const attempt = trace.attempt();
+    try {
+      await runAgentChat(
+        messages,
+        selected,
+        options?.fallbackEndpoint
+          ? (chunk) => {
+              outputStarted = true;
+              onChunk(chunk);
+            }
+          : onChunk,
+        mcpServers,
+        mcpEnabled,
+        {
+          systemPrompt: options?.systemPrompt,
+          chatPrompt: options?.chatPrompt,
+          memorySettings: options?.memorySettings,
+          onDecision: options?.onDecision
+            ? (decision) =>
+                options.onDecision?.({
+                  providerId: selected.providerId,
+                  model: decision.model,
+                })
+            : undefined,
+          onAttachment: options?.onAttachment,
+          onToolExecutionAttempt: () => {
+            toolExecutionAttempted = true;
+          },
+          ...(options?.onExecutionEvent ? { trace: attempt } : {}),
+        },
+      );
+      attempt.finish("completed");
+    } catch (error) {
+      attempt.finish("failed");
+      throw error;
+    }
+  };
   try {
-    await runAgentChat(messages, endpoint, onChunk, mcpServers, mcpEnabled, {
-      systemPrompt: options?.systemPrompt,
-      chatPrompt: options?.chatPrompt,
-      memorySettings: options?.memorySettings,
-      onDecision: options?.onDecision
-        ? (decision) =>
-            options.onDecision?.({
-              providerId: endpoint.providerId,
-              model: decision.model,
-            })
-        : undefined,
-      onAttachment: options?.onAttachment,
-      onToolExecutionAttempt: () => {
-        toolExecutionAttempted = true;
-      },
-    });
+    try {
+      await attemptEndpoint(endpoint);
+    } catch (error) {
+      if (
+        options?.fallbackEndpoint &&
+        !toolExecutionAttempted &&
+        !outputStarted &&
+        error instanceof LLMResponseError &&
+        [429, 502, 503, 504].includes(error.status)
+      ) {
+        await attemptEndpoint(options.fallbackEndpoint);
+      } else {
+        throw error;
+      }
+    }
+    outcome = "completed";
   } catch (error: any) {
     if (toolExecutionAttempted) throw new UnsafeChatReplayError(error);
     if (options?.queueOnFailure && isNetworkError(error)) {
@@ -88,9 +137,12 @@ export async function sendChatMessage(
       };
       const queued = await enqueueChatRequest(payload);
       options?.onQueued?.(queued.id);
+      outcome = "queued";
       return;
     }
     throw error;
+  } finally {
+    trace.finish(outcome);
   }
 }
 
