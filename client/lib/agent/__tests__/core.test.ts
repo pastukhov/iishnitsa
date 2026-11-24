@@ -306,9 +306,9 @@ describe("AgentCore", () => {
       mcpEnabled: true,
     });
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      "MCP server errors:",
-      expect.arrayContaining([expect.objectContaining({ error: "Timeout" })]),
+    expect(warnSpy).toHaveBeenCalledWith("MCP tool discovery failed");
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toMatch(
+      /Test Server|Timeout/,
     );
     warnSpy.mockRestore();
   });
@@ -768,10 +768,8 @@ describe("AgentCore", () => {
       mcpEnabled: true,
     });
 
-    expect(errorSpy).toHaveBeenCalledWith(
-      "Failed to fetch MCP tools:",
-      expect.any(Error),
-    );
+    expect(errorSpy).toHaveBeenCalledWith("Failed to fetch MCP tools");
+    expect(errorSpy.mock.calls.flat()).not.toContainEqual(expect.any(Error));
     errorSpy.mockRestore();
   });
 });

@@ -1,3 +1,4 @@
+import type { AttemptTrace } from "@/lib/agent/execution-trace";
 import {
   Message,
   EndpointConfig,
@@ -79,6 +80,7 @@ interface AgentRunInput {
   onAttachment?: (attachment: MessageAttachment) => void;
   onToolExecutionAttempt?: () => void;
   onLifecycleEvent?: AgentLifecycleSubscriber;
+  trace?: AttemptTrace;
   mcpServers: MCPServer[];
   mcpEnabled: boolean;
   systemPrompt?: string;
@@ -166,6 +168,7 @@ export class AgentCore {
       onDecision,
       onAttachment,
       onToolExecutionAttempt,
+      trace,
       mcpServers,
       mcpEnabled,
       systemPrompt,
@@ -251,6 +254,7 @@ export class AgentCore {
             tools: decisionTools,
             onChunk,
             decision: context.decision,
+            ...(trace ? { boundary: trace.boundary("llm") } : {}),
           });
 
           if (toolCalls.length === 0) {
@@ -278,6 +282,7 @@ export class AgentCore {
             endpoint,
             onAttachment,
             onToolExecutionAttempt,
+            trace,
           );
           state = "UPDATE_STATE";
           break;
@@ -302,6 +307,7 @@ export class AgentCore {
         messages: context.rawMessages,
         assistantMessage: context.lastAssistantMessage,
         endpoint,
+        trace,
       });
     }
   }
@@ -336,7 +342,7 @@ export class AgentCore {
         await getToolsFromServers(enabledServers);
 
       if (errors.length > 0) {
-        console.warn("MCP server errors:", errors);
+        console.warn("MCP tool discovery failed");
       }
 
       if (fetchedTools.length > 0) {
@@ -345,8 +351,8 @@ export class AgentCore {
           mcpToolsMap.set(`${tool.serverId}__${tool.name}`, tool);
         });
       }
-    } catch (error) {
-      console.error("Failed to fetch MCP tools:", error);
+    } catch {
+      console.error("Failed to fetch MCP tools");
     }
 
     return { tools, mcpToolsMap };
@@ -379,6 +385,7 @@ export class AgentCore {
     endpoint: EndpointConfig,
     onAttachment?: (attachment: MessageAttachment) => void,
     onToolExecutionAttempt?: () => void,
+    trace?: AttemptTrace,
   ): Promise<void> {
     for (const toolCall of toolCalls) {
       let result: string;
@@ -409,9 +416,12 @@ export class AgentCore {
         const server = mcpServers.find((s) => s.id === serverId);
         const toolInfo = mcpToolsMap.get(toolCall.function.name);
 
+        const boundary = trace?.boundary("mcp");
         if (!toolInfo) {
+          boundary?.finish("denied");
           result = `Error: Unknown tool "${toolCall.function.name}"`;
         } else if (!server) {
+          boundary?.finish("denied");
           result = `Error: Server not found for tool ${toolCall.function.name}`;
         } else {
           try {
@@ -422,7 +432,9 @@ export class AgentCore {
 
             // Mark before awaiting: a lost response does not mean no side effect.
             onToolExecutionAttempt?.();
-            const toolResult = await executeToolCall(server, toolName, args);
+            const toolResult = boundary
+              ? await executeToolCall(server, toolName, args, boundary)
+              : await executeToolCall(server, toolName, args);
             result = formatToolResult(toolResult);
           } catch (error: any) {
             result = `Error executing tool: ${error.message}`;
@@ -512,6 +524,7 @@ export class AgentCore {
     messages: Message[],
     assistantMessage: string,
     endpoint: EndpointConfig,
+    trace?: AttemptTrace,
   ): Promise<string | null> {
     if (!assistantMessage.trim()) return null;
     if (messages.length < 2) return null;
@@ -532,12 +545,13 @@ export class AgentCore {
         ],
         tools: [],
         onChunk: () => {},
+        ...(trace ? { boundary: trace.boundary("llm") } : {}),
       });
 
       const summary = fullContent?.trim();
       return summary ? this.truncateText(summary, 600) : null;
-    } catch (error) {
-      console.warn("Failed to summarize conversation for memory:", error);
+    } catch {
+      console.warn("Failed to summarize conversation for memory");
       return null;
     }
   }
@@ -546,10 +560,12 @@ export class AgentCore {
     messages,
     assistantMessage,
     endpoint,
+    trace,
   }: {
     messages: Message[];
     assistantMessage: string;
     endpoint: EndpointConfig;
+    trace?: AttemptTrace;
   }): Promise<void> {
     if (!this.memoryAutoSave && !this.memoryAutoSummary) return;
 
@@ -576,6 +592,7 @@ export class AgentCore {
         messages,
         assistantMessage,
         endpoint,
+        trace,
       );
       if (summary) {
         try {
@@ -607,6 +624,7 @@ export async function runAgentChat(
     onAttachment?: (attachment: MessageAttachment) => void;
     onToolExecutionAttempt?: () => void;
     onLifecycleEvent?: AgentLifecycleSubscriber;
+    trace?: AttemptTrace;
   },
 ): Promise<void> {
   const { systemPrompt, chatPrompt, memorySettings } = options || {};
@@ -634,5 +652,6 @@ export async function runAgentChat(
     onAttachment: options?.onAttachment,
     onToolExecutionAttempt: options?.onToolExecutionAttempt,
     onLifecycleEvent: options?.onLifecycleEvent,
+    trace: options?.trace,
   });
 }

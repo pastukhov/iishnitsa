@@ -1,3 +1,4 @@
+import type { BoundaryObserver } from "@/lib/agent/execution-trace";
 import { MCPServer } from "@/lib/store";
 import { appInfo } from "@/lib/app-info";
 
@@ -41,7 +42,6 @@ interface MCPResponse {
 
 export class MCPClient {
   private serverUrl: string;
-  private serverName: string;
   private initialized: boolean = false;
   private initData: {
     protocolVersion: string;
@@ -54,7 +54,6 @@ export class MCPClient {
 
   constructor(server: MCPServer) {
     this.serverUrl = server.url;
-    this.serverName = server.name;
     this.authToken = server.token?.trim() || null;
     this.signature = `${server.url}|${server.token?.trim() || ""}`;
   }
@@ -67,6 +66,7 @@ export class MCPClient {
   private async sendRequest(
     method: string,
     params?: Record<string, any>,
+    boundary?: BoundaryObserver,
   ): Promise<any> {
     const request: MCPRequest = {
       jsonrpc: "2.0",
@@ -88,11 +88,27 @@ export class MCPClient {
       headers["Mcp-Session-Id"] = this.sessionId;
     }
 
+    let outcome: "completed" | "failed" | "unknown" = "failed";
+    const recordResult = (result: any) => {
+      outcome = Array.isArray(result?.content)
+        ? result.isError
+          ? "failed"
+          : "completed"
+        : "unknown";
+      return result;
+    };
     try {
+      const body = JSON.stringify(request);
+      try {
+        boundary?.dispatched();
+      } catch {
+        /* Observers are passive. */
+      }
+      outcome = "unknown";
       const response = await fetch(this.serverUrl, {
         method: "POST",
         headers,
-        body: JSON.stringify(request),
+        body,
       });
 
       const newSessionId = response.headers.get("mcp-session-id");
@@ -101,11 +117,9 @@ export class MCPClient {
       }
 
       if (!response.ok) {
+        outcome = "failed";
         const errorText = await response.text();
-        console.error(
-          `MCP ${method} failed with status ${response.status}:`,
-          errorText,
-        );
+        console.error("MCP request returned an HTTP error");
         throw new Error(`MCP server returned ${response.status}: ${errorText}`);
       }
 
@@ -131,9 +145,10 @@ export class MCPClient {
             const parsed: MCPResponse = JSON.parse(jsonLine);
             if (parsed.id === request.id) {
               if (parsed.error) {
+                outcome = "failed";
                 throw new Error(`MCP error: ${parsed.error.message}`);
               }
-              return parsed.result;
+              return recordResult(parsed.result);
             }
           } catch (e) {
             if (e instanceof Error && e.message.startsWith("MCP error:")) {
@@ -146,16 +161,21 @@ export class MCPClient {
       const jsonResponse: MCPResponse = JSON.parse(responseText);
 
       if (jsonResponse.error) {
+        if (jsonResponse.id === request.id) outcome = "failed";
         throw new Error(`MCP error: ${jsonResponse.error.message}`);
       }
 
-      return jsonResponse.result;
+      if (jsonResponse.id !== request.id) return jsonResponse.result;
+      return recordResult(jsonResponse.result);
     } catch (error: any) {
-      console.error(
-        `MCP request to ${this.serverName} failed:`,
-        error.message || error,
-      );
+      console.error("MCP request failed");
       throw error;
+    } finally {
+      try {
+        boundary?.finish(outcome);
+      } catch {
+        /* Observers are passive. */
+      }
     }
   }
 
@@ -188,8 +208,8 @@ export class MCPClient {
         headers,
         body: JSON.stringify(request),
       });
-    } catch (error: any) {
-      console.warn(`MCP notification to ${this.serverName} failed:`, error);
+    } catch {
+      console.warn("MCP notification failed");
     }
   }
 
@@ -230,11 +250,16 @@ export class MCPClient {
   async callTool(
     toolName: string,
     args: Record<string, any>,
+    boundary?: BoundaryObserver,
   ): Promise<MCPToolResult> {
-    const result = await this.sendRequest("tools/call", {
-      name: toolName,
-      arguments: args,
-    });
+    const result = await this.sendRequest(
+      "tools/call",
+      {
+        name: toolName,
+        arguments: args,
+      },
+      boundary,
+    );
     return result;
   }
 
@@ -324,10 +349,20 @@ export async function executeToolCall(
   server: MCPServer,
   toolName: string,
   args: Record<string, any>,
+  boundary?: BoundaryObserver,
 ): Promise<MCPToolResult> {
   const client = getOrCreateClient(server);
-  await client.initialize();
-  return await client.callTool(toolName, args);
+  try {
+    await client.initialize();
+  } catch (error) {
+    try {
+      boundary?.finish("failed");
+    } catch {
+      /* Observers are passive. */
+    }
+    throw error;
+  }
+  return await client.callTool(toolName, args, boundary);
 }
 
 export function mcpToolsToOpenAIFunctions(

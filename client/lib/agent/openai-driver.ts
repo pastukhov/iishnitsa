@@ -1,3 +1,4 @@
+import type { BoundaryObserver } from "@/lib/agent/execution-trace";
 import { EndpointConfig } from "@/lib/store";
 import { buildProviderHeaders, resolveBaseUrl } from "@/lib/providers";
 import {
@@ -8,24 +9,66 @@ import {
   ToolCall,
 } from "@/lib/agent/types";
 
+interface StreamChatInput {
+  endpoint: EndpointConfig;
+  messages: ChatCompletionMessage[];
+  tools: OpenAIFunction[];
+  onChunk: (content: string) => void;
+  decision?: AgentDecision;
+  boundary?: BoundaryObserver;
+}
+
+export class LLMResponseError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "LLMResponseError";
+  }
+}
+
 export class OpenAICompatibleDriver {
-  async streamChat({
-    endpoint,
-    messages,
-    tools,
-    onChunk,
-    decision,
-  }: {
-    endpoint: EndpointConfig;
-    messages: ChatCompletionMessage[];
-    tools: OpenAIFunction[];
-    onChunk: (content: string) => void;
-    decision?: AgentDecision;
-  }): Promise<{
+  async streamChat(input: StreamChatInput): Promise<{
     fullContent: string;
     toolCalls: ToolCall[];
     usage?: LLMUsage;
   }> {
+    let dispatched = false;
+    let finished = false;
+    const boundary: BoundaryObserver = {
+      dispatched: () => {
+        dispatched = true;
+        try {
+          input.boundary?.dispatched();
+        } catch {
+          /* Observers are passive. */
+        }
+      },
+      finish: (outcome) => {
+        if (finished) return;
+        finished = true;
+        try {
+          input.boundary?.finish(outcome);
+        } catch {
+          /* Observers are passive. */
+        }
+      },
+    };
+    try {
+      const result = await this.executeChat(input, boundary);
+      boundary.finish("completed");
+      return result;
+    } catch (error) {
+      boundary.finish(dispatched ? "unknown" : "failed");
+      throw error;
+    }
+  }
+
+  private async executeChat(
+    { endpoint, messages, tools, onChunk, decision }: StreamChatInput,
+    boundary: BoundaryObserver,
+  ): Promise<{ fullContent: string; toolCalls: ToolCall[]; usage?: LLMUsage }> {
     const baseUrl = resolveBaseUrl(endpoint.providerId, endpoint.baseUrl);
     const url = `${baseUrl}/chat/completions`;
 
@@ -40,7 +83,7 @@ export class OpenAICompatibleDriver {
       requestBody.tool_choice = decision?.toolChoice || "auto";
     }
 
-    const response = await fetch(url, {
+    const request = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -51,9 +94,12 @@ export class OpenAICompatibleDriver {
         ),
       },
       body: JSON.stringify(requestBody),
-    });
+    };
+    boundary.dispatched();
+    const response = await fetch(url, request);
 
     if (!response.ok) {
+      boundary.finish("failed");
       const errorText = await response.text();
       let errorMessage = `API Error: ${response.status}`;
       try {
@@ -62,7 +108,7 @@ export class OpenAICompatibleDriver {
       } catch {
         errorMessage = errorText || errorMessage;
       }
-      throw new Error(errorMessage);
+      throw new LLMResponseError(errorMessage, response.status);
     }
 
     let fullContent = "";
@@ -152,7 +198,21 @@ export class OpenAICompatibleDriver {
       toolCalls = [...streamedCalls.entries()]
         .sort(([a], [b]) => a - b)
         .map(([, call]) => call);
-      if (toolCalls.length === 0) return;
+      if (toolCalls.length === 0) {
+        if (
+          !streamDone &&
+          ![
+            "stop",
+            "length",
+            "content_filter",
+            "tool_calls",
+            "function_call",
+          ].includes(finishReason ?? "")
+        ) {
+          boundary.finish("unknown");
+        }
+        return;
+      }
       if (
         (!streamDone && finishReason !== "tool_calls") ||
         (finishReason && finishReason !== "tool_calls")
@@ -190,6 +250,7 @@ export class OpenAICompatibleDriver {
         try {
           const json = JSON.parse(responseText);
           const message = json.choices?.[0]?.message;
+          if (!message) boundary.finish("unknown");
           if (message?.content) {
             fullContent = message.content;
             onChunk(fullContent);
@@ -211,7 +272,11 @@ export class OpenAICompatibleDriver {
               totalTokens: json.usage.total_tokens,
             };
           }
-        } catch {}
+        } catch {
+          boundary.finish("unknown");
+        }
+      } else {
+        boundary.finish("unknown");
       }
     }
 

@@ -48,6 +48,8 @@
 
 ## Testing Guidelines
 
+- `npm test -- --runInBand client/lib/__tests__/execution-trace.test.ts client/lib/__tests__/transport-boundaries.test.ts client/lib/agent/__tests__/execution-trace.test.ts`: verify optional endpoint fallback, logical-run correlation, truthful LLM/MCP dispatch outcomes, observer isolation, and unchanged replay gates with fake transports. Included in the standard test command.
+
 - `npm test -- --runInBand client/lib/agent/__tests__/lifecycle.test.ts client/lib/agent/__tests__/core.test.ts`: verify per-run lifecycle ordering, isolation, observer errors, and metadata-only outcomes. Included in the standard test command.
 
 - `npm test -- --runInBand client/lib/__tests__/dependency-security.test.ts`: run real dependency security and compatibility regressions for shell quoting, navigation IDs, Markdown, brace globbing, and HTTP readiness; automatically included in `npm test` and `check:required`.
