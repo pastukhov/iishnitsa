@@ -1,6 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MCPServer } from "@/lib/store";
 import { MCPClient } from "@/lib/mcp-client";
+import {
+  createToolExecutionPolicy,
+  ToolPolicyDeniedError,
+  type ToolTarget,
+} from "@/lib/agent/tool-policy";
 
 export const PROMPTS_CHAT_URL = "https://prompts.chat/api/mcp";
 export const PROMPTS_CHAT_SERVER_ID = "prompts-chat-default";
@@ -75,22 +80,42 @@ export async function loadPromptsFromMCP(
 ): Promise<SystemPrompt[]> {
   const promptsServer = findPromptsChatServer(mcpServers);
 
-  if (!promptsServer || !promptsServer.enabled) {
+  if (
+    !promptsServer ||
+    !promptsServer.enabled ||
+    promptsServer.url !== PROMPTS_CHAT_URL
+  ) {
     return [];
   }
 
-  const client = new MCPClient(promptsServer);
+  // This fixed catalogue operation is trusted application configuration, never
+  // a permission derived from a server's tool description or matching ID alone.
+  const target: ToolTarget = {
+    kind: "mcp",
+    name: "search_prompts",
+    server: promptsServer,
+  };
+  const policy = createToolExecutionPolicy({
+    registry: [{ target, risk: "read_only" }],
+  });
 
   try {
-    await client.initialize();
-
-    const result = await client.callTool("search_prompts", {
-      query: "",
-      limit: Math.min(limit, 50), // API max is 50
-    });
+    const result = await policy.execute(
+      target,
+      {
+        query: "",
+        limit: Math.min(limit, 50),
+      },
+      async (snapshot, args) => {
+        if (snapshot.kind !== "mcp") throw new ToolPolicyDeniedError();
+        const client = new MCPClient(snapshot.server);
+        await client.initialize();
+        return client.callTool(snapshot.name, args);
+      },
+    );
 
     if (result.isError) {
-      console.error("MCP search_prompts returned error:", result.content);
+      console.error("MCP search_prompts returned error");
       return [];
     }
 
@@ -105,8 +130,10 @@ export async function loadPromptsFromMCP(
 
     return mcpPrompts.map(mapMCPPromptToSystemPrompt);
   } catch (error) {
-    console.error("Failed to load prompts from MCP:", error);
+    console.error("Failed to load prompts from MCP");
     throw error;
+  } finally {
+    policy.close();
   }
 }
 

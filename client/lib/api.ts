@@ -1,4 +1,8 @@
 import {
+  snapshotToolPolicyOptions,
+  type ToolPolicyOptions,
+} from "@/lib/agent/tool-policy";
+import {
   Message,
   EndpointConfig,
   MCPServer,
@@ -49,6 +53,7 @@ export async function sendChatMessage(
   mcpServers: MCPServer[] = [],
   mcpEnabled: boolean = false,
   options?: {
+    toolPolicy?: ToolPolicyOptions;
     fallbackEndpoint?: EndpointConfig;
     onExecutionEvent?: ExecutionSubscriber;
     queueOnFailure?: boolean;
@@ -61,6 +66,7 @@ export async function sendChatMessage(
     onAttachment?: (attachment: MessageAttachment) => void;
   },
 ): Promise<void> {
+  const toolPolicy = snapshotToolPolicyOptions(options?.toolPolicy);
   const trace = createExecutionTrace(options?.onExecutionEvent);
   let outcome: RunOutcome = "failed";
   let toolExecutionAttempted = false;
@@ -80,6 +86,7 @@ export async function sendChatMessage(
         mcpServers,
         mcpEnabled,
         {
+          toolPolicy,
           systemPrompt: options?.systemPrompt,
           chatPrompt: options?.chatPrompt,
           memorySettings: options?.memorySettings,
@@ -147,6 +154,7 @@ export async function sendChatMessage(
 }
 
 export async function flushQueuedChatMessages(options: {
+  toolPolicy?: ToolPolicyOptions;
   chatId?: string | null;
   onChunk: (content: string) => void;
   onItemStart?: () => void;
@@ -154,6 +162,7 @@ export async function flushQueuedChatMessages(options: {
   onItemError?: (error: any) => void;
   memorySettings?: MemorySettings;
 }): Promise<{ processed: number; failed: number; remaining: number }> {
+  const toolPolicy = snapshotToolPolicyOptions(options.toolPolicy);
   return await flushQueuedChatRequests({
     filter: (item) => !options.chatId || item.payload.chatId === options.chatId,
     shouldRetry: (error) => !(error instanceof UnsafeChatReplayError),
@@ -168,6 +177,7 @@ export async function flushQueuedChatMessages(options: {
           payload.mcpServers,
           payload.mcpEnabled,
           {
+            toolPolicy,
             systemPrompt: payload.systemPrompt,
             chatPrompt: payload.chatPrompt,
             memorySettings: payload.memorySettings ?? options.memorySettings,

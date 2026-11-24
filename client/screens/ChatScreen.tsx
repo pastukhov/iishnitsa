@@ -52,7 +52,8 @@ import {
   pickImageFromCamera,
   deleteImage,
 } from "@/lib/image-utils";
-import { isImageGenerationModel, generateImage } from "@/lib/image-generation";
+import { isImageGenerationModel } from "@/lib/image-generation";
+import { requestImageGeneration } from "@/lib/tool-dispatch";
 import { useTranslations } from "@/lib/translations";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -535,7 +536,7 @@ export default function ChatScreen() {
     try {
       if (isImageGen && text) {
         updateLastAssistantMessage("Generating image...");
-        const result = await generateImage(requestEndpoint, text);
+        const result = await requestImageGeneration(requestEndpoint, text);
         const caption = result.revisedPrompt ? result.revisedPrompt : "";
         updateLastAssistantMessage(caption, [result.attachment]);
       } else {
@@ -674,7 +675,7 @@ export default function ChatScreen() {
       try {
         if (isImageGen && lastUserMsg.content) {
           updateLastAssistantMessage("Generating image...");
-          const result = await generateImage(
+          const result = await requestImageGeneration(
             requestEndpoint,
             lastUserMsg.content,
           );

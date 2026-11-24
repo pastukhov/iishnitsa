@@ -2,7 +2,12 @@ import {
   OpenAICompatibleDriver,
   LLMResponseError,
 } from "../agent/openai-driver";
-import { MCPClient, clearClientCache, executeToolCall } from "../mcp-client";
+import {
+  MCPClient,
+  clearClientCache,
+  executeToolCall,
+  getToolsFromServers,
+} from "../mcp-client";
 import type { EndpointConfig, MCPServer } from "../store";
 
 const endpoint: EndpointConfig = {
@@ -145,6 +150,46 @@ describe("LLM transport boundaries", () => {
 });
 
 describe("MCP transport boundaries", () => {
+  it.each([
+    "execution-transport",
+    "execution-http",
+    "discovery-transport",
+    "discovery-http",
+  ])(
+    "keeps %s diagnostics free of payloads, credentials, and server identity",
+    async (kind) => {
+      const errorLog = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const warning = jest.spyOn(console, "warn").mockImplementation(() => {});
+      const privateDetail = `${server.url} ${server.token} private-payload`;
+      if (kind.endsWith("http"))
+        mockFetch.mockResolvedValue(response(privateDetail, 503));
+      else mockFetch.mockRejectedValue(new Error(privateDetail));
+      try {
+        if (kind.startsWith("discovery")) {
+          const result = await getToolsFromServers([server]);
+          expect(result.errors).toHaveLength(1);
+        } else {
+          await expect(
+            new MCPClient(server).callTool(
+              "private-tool",
+              { body: "private-payload" },
+              observer(),
+            ),
+          ).rejects.toThrow();
+        }
+        expect(errorLog).toHaveBeenCalledWith("MCP request failed");
+        expect(
+          JSON.stringify([...errorLog.mock.calls, ...warning.mock.calls]),
+        ).not.toMatch(/private-|credential-secret|mcp\.invalid/);
+      } finally {
+        errorLog.mockRestore();
+        warning.mockRestore();
+      }
+    },
+  );
+
   it("does not log notification failure payloads or server identity", async () => {
     const warning = jest.spyOn(console, "warn").mockImplementation(() => {});
     mockFetch.mockImplementation(async (_url, request) => {

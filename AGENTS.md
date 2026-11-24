@@ -48,6 +48,8 @@
 
 ## Testing Guidelines
 
+- `npm test -- --runInBand client/lib/agent/__tests__/tool-policy.test.ts client/lib/__tests__/tool-policy-integration.test.ts client/lib/__tests__/tool-dispatch.test.ts client/lib/__tests__/mcp-prompts.test.ts client/lib/__tests__/mcp-replay.test.ts`: verify trusted tool registry, one-shot confirmation, fail-closed built-in/MCP dispatch, direct UI/catalogue paths and replay safety using fake transports. Included in `check:required`.
+
 - `npm test -- --runInBand client/lib/__tests__/execution-trace.test.ts client/lib/__tests__/transport-boundaries.test.ts client/lib/agent/__tests__/execution-trace.test.ts`: verify optional endpoint fallback, logical-run correlation, truthful LLM/MCP dispatch outcomes, observer isolation, and unchanged replay gates with fake transports. Included in the standard test command.
 
 - `npm test -- --runInBand client/lib/agent/__tests__/lifecycle.test.ts client/lib/agent/__tests__/core.test.ts`: verify per-run lifecycle ordering, isolation, observer errors, and metadata-only outcomes. Included in the standard test command.

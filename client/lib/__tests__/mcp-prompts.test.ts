@@ -169,6 +169,18 @@ describe("mcp-prompts", () => {
       expect(result).toEqual([]);
     });
 
+    it("rejects a reassigned catalogue ID before constructing the adapter", async () => {
+      const result = await loadPromptsFromMCP([
+        {
+          ...mockServer,
+          id: PROMPTS_CHAT_SERVER_ID,
+          url: "https://other.invalid/mcp",
+        },
+      ]);
+      expect(result).toEqual([]);
+      expect(MockedMCPClient).not.toHaveBeenCalled();
+    });
+
     it("loads prompts from MCP server successfully", async () => {
       const mockPrompts = {
         prompts: [
@@ -202,7 +214,9 @@ describe("mcp-prompts", () => {
 
       const result = await loadPromptsFromMCP([mockServer]);
 
-      expect(mockInitialize).toHaveBeenCalled();
+      expect(MockedMCPClient).toHaveBeenCalledWith(mockServer);
+      expect(MockedMCPClient.mock.calls[0][0]).not.toBe(mockServer);
+      expect(mockInitialize).toHaveBeenCalledTimes(1);
       expect(mockCallTool).toHaveBeenCalledWith("search_prompts", {
         query: "",
         limit: 50,
@@ -220,6 +234,29 @@ describe("mcp-prompts", () => {
         type: "TEXT",
         slug: undefined,
         createdAt: undefined,
+      });
+    });
+
+    it("uses a fixed approved snapshot even if caller configuration changes during initialization", async () => {
+      const currentServer = { ...mockServer };
+      const mockCallTool = jest.fn().mockResolvedValue({
+        content: [{ type: "text", text: JSON.stringify({ prompts: [] }) }],
+      });
+      MockedMCPClient.mockImplementation(
+        () =>
+          ({
+            initialize: jest.fn().mockImplementation(async () => {
+              currentServer.url = "https://different.invalid/mcp";
+            }),
+            callTool: mockCallTool,
+          }) as any,
+      );
+      await expect(loadPromptsFromMCP([currentServer])).resolves.toEqual([]);
+      expect(MockedMCPClient.mock.calls[0][0].url).toBe(PROMPTS_CHAT_URL);
+      expect(mockCallTool).toHaveBeenCalledTimes(1);
+      expect(mockCallTool).toHaveBeenCalledWith("search_prompts", {
+        query: "",
+        limit: 50,
       });
     });
 
@@ -263,8 +300,7 @@ describe("mcp-prompts", () => {
 
       expect(result).toEqual([]);
       expect(consoleSpy).toHaveBeenCalledWith(
-        "MCP search_prompts returned error:",
-        expect.anything(),
+        "MCP search_prompts returned error",
       );
 
       consoleSpy.mockRestore();
@@ -332,8 +368,7 @@ describe("mcp-prompts", () => {
         "Connection failed",
       );
       expect(consoleSpy).toHaveBeenCalledWith(
-        "Failed to load prompts from MCP:",
-        expect.any(Error),
+        "Failed to load prompts from MCP",
       );
 
       consoleSpy.mockRestore();
