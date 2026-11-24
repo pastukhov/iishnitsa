@@ -89,3 +89,19 @@ describe("requestImageGeneration", () => {
     expect(generate.mock.calls[0][0]).not.toBe(endpoint);
   });
 });
+
+it("rejects non-string direct image input even when the trusted handler approves", async () => {
+  generate.mockClear();
+  await expect(
+    requestImageGeneration(endpoint, 42 as unknown as string, {
+      registry: [
+        {
+          target: { kind: "builtin", name: "generate_image", endpoint },
+          risk: "mutating",
+        },
+      ],
+      requestApproval: (request) => ({ decision: "approve", request }),
+    }),
+  ).rejects.toBeInstanceOf(ToolPolicyDeniedError);
+  expect(generate).not.toHaveBeenCalled();
+});

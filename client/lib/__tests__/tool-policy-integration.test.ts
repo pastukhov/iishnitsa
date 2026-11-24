@@ -453,3 +453,73 @@ test.each(["run_started", "attempt_finished"])(
     ]);
   },
 );
+
+test.each(["", 42, null])(
+  "builtin invalid prompt %s never reaches image adapter",
+  async (prompt) => {
+    toolName = "generate_image";
+    const originalTransport = transport.getMockImplementation()!;
+    transport.mockImplementation(async (url, init) => {
+      const result = await originalTransport(url, init);
+      if (url === endpoint.baseUrl + "/v1/chat/completions") {
+        const body = JSON.parse(await result.text());
+        const call = body.choices?.[0]?.message?.tool_calls?.[0];
+        if (call) call.function.arguments = JSON.stringify({ prompt });
+        return jsonResponse(body);
+      }
+      return result;
+    });
+    await send([], {
+      registry: [
+        {
+          target: { kind: "builtin", name: "generate_image", endpoint },
+          risk: "mutating",
+        },
+      ],
+      requestApproval: approve,
+    });
+    expect(generateImage).not.toHaveBeenCalled();
+    const followup = transport.mock.calls
+      .map(([, init]) => JSON.parse(init.body))
+      .find((body) =>
+        body.messages?.some(
+          (message: { role: string }) => message.role === "tool",
+        ),
+      );
+    expect(followup.messages).toContainEqual({
+      role: "tool",
+      tool_call_id: "model-call-secret",
+      content: "Tool execution denied by policy.",
+    });
+  },
+);
+
+test("approved image result preserves the adapter's revised prompt", async () => {
+  toolName = "generate_image";
+  (generateImage as jest.Mock).mockResolvedValue({
+    attachment: { id: "image", type: "image", uri: "file://fake.png" },
+    revisedPrompt: "fixture revision",
+  });
+  await send([], {
+    registry: [
+      {
+        target: { kind: "builtin", name: "generate_image", endpoint },
+        risk: "mutating",
+      },
+    ],
+    requestApproval: approve,
+  });
+  expect(generateImage).toHaveBeenCalledTimes(1);
+  const followup = transport.mock.calls
+    .map(([, init]) => JSON.parse(init.body))
+    .find((body) =>
+      body.messages?.some(
+        (message: { role: string }) => message.role === "tool",
+      ),
+    );
+  expect(followup.messages).toContainEqual({
+    role: "tool",
+    tool_call_id: "model-call-secret",
+    content: "Image generated successfully. Revised prompt: fixture revision",
+  });
+});

@@ -1,5 +1,6 @@
 import {
   createToolExecutionPolicy,
+  snapshotToolPolicyOptions,
   ToolPolicyDeniedError,
   type ToolTarget,
   type ToolApprovalRequest,
@@ -419,4 +420,255 @@ it("rejects cycles and getters without running them", async () => {
   ).rejects.toBeInstanceOf(ToolPolicyDeniedError);
   expect(getter).not.toHaveBeenCalled();
   expect(adapter).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["symbol key", () => ({ [Symbol("hidden")]: "value" })],
+  ["sparse array", () => ({ values: new Array(1) })],
+  [
+    "array extra property",
+    () => ({ values: Object.assign([1], { extra: 2 }) }),
+  ],
+  [
+    "array extra property replacing a hole",
+    () => ({ values: Object.assign(new Array(1), { extra: 2 }) }),
+  ],
+  [
+    "non-enumerable property",
+    () => Object.defineProperty({}, "hidden", { value: 1 }),
+  ],
+] as const)(
+  "rejects hidden or lossy JSON arguments: %s",
+  async (_name, makeArgs) => {
+    const adapter = jest.fn();
+    const policy = createToolExecutionPolicy({
+      registry: [{ target, risk: "read_only" }],
+    });
+    await expect(
+      policy.execute(target, makeArgs(), adapter),
+    ).rejects.toBeInstanceOf(ToolPolicyDeniedError);
+    expect(adapter).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  null,
+  { ...target, name: " " },
+  { ...target, kind: "untrusted" },
+  { ...target, server: null },
+  ...[
+    { id: " " },
+    { name: 1 },
+    { url: " " },
+    { url: "invalid" },
+    { url: "file:///private" },
+    { token: 1 },
+  ].map((fields) => ({
+    ...target,
+    server: {
+      ...(target as Extract<ToolTarget, { kind: "mcp" }>).server,
+      ...fields,
+    },
+  })),
+  { ...builtin, name: "another_builtin" },
+  { ...builtin, endpoint: null },
+  ...[
+    { providerId: " " },
+    { baseUrl: 1 },
+    { apiKey: null },
+    { model: null },
+    { folderId: 1 },
+    { baseUrl: "invalid" },
+  ].map((fields) => ({
+    ...builtin,
+    endpoint: {
+      ...(builtin as Extract<ToolTarget, { kind: "builtin" }>).endpoint,
+      ...fields,
+    },
+  })),
+])("invalid target configuration grants no authority: %p", async (invalid) => {
+  const adapter = jest.fn();
+  const requestApproval = jest.fn(approve);
+  const policy = createToolExecutionPolicy({
+    registry: [{ target: invalid as ToolTarget, risk: "read_only" }],
+    requestApproval,
+  });
+  await expect(
+    policy.execute(invalid as ToolTarget, {}, adapter),
+  ).rejects.toBeInstanceOf(ToolPolicyDeniedError);
+  await expect(policy.execute(target, {}, adapter)).rejects.toBeInstanceOf(
+    ToolPolicyDeniedError,
+  );
+  expect(adapter).not.toHaveBeenCalled();
+  expect(requestApproval).not.toHaveBeenCalled();
+});
+
+it.each(["duplicate", "conflicting", "unknown-risk"])(
+  "fails closed for %s registry declarations",
+  async (kind) => {
+    const registry =
+      kind === "unknown-risk"
+        ? [{ target, risk: "unrecognized" as any }]
+        : [
+            { target, risk: "read_only" as const },
+            {
+              target: copy(target),
+              risk:
+                kind === "duplicate"
+                  ? ("read_only" as const)
+                  : ("mutating" as const),
+            },
+          ];
+    const requestApproval = jest.fn(approve);
+    const adapter = jest.fn();
+    await expect(
+      createToolExecutionPolicy({ registry, requestApproval }).execute(
+        target,
+        {},
+        adapter,
+      ),
+    ).rejects.toBeInstanceOf(ToolPolicyDeniedError);
+    expect(adapter).not.toHaveBeenCalled();
+    expect(requestApproval).not.toHaveBeenCalled();
+  },
+);
+
+it.each([0, -1, NaN, Infinity])(
+  "rejects invalid approval deadline %p without requesting a grant",
+  async (approvalTimeoutMs) => {
+    jest.useFakeTimers();
+    const requestApproval = jest.fn(approve);
+    const adapter = jest.fn();
+    const policy = createToolExecutionPolicy({
+      registry: [{ target, risk: "mutating" }],
+      approvalTimeoutMs,
+      requestApproval,
+    });
+    await expect(policy.execute(target, {}, adapter)).rejects.toBeInstanceOf(
+      ToolPolicyDeniedError,
+    );
+    expect(adapter).not.toHaveBeenCalled();
+    expect(requestApproval).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+  },
+);
+
+it.each(["abort", "close"])(
+  "rechecks %s after a grant settles and before adapter continuation",
+  async (action) => {
+    const controller = new AbortController();
+    const adapter = jest.fn();
+    const policy = createToolExecutionPolicy({
+      registry: [{ target, risk: "mutating" }],
+      signal: controller.signal,
+      requestApproval: approve,
+    });
+    const result = policy.execute(target, {}, adapter);
+    // The grant's Promise.then runs first; execute's await continuation remains queued.
+    await Promise.resolve();
+    if (action === "abort") controller.abort();
+    else policy.close();
+    await expect(result).rejects.toBeInstanceOf(ToolPolicyDeniedError);
+    expect(adapter).not.toHaveBeenCalled();
+  },
+);
+
+it("denies rejected asynchronous approval and releases its timer", async () => {
+  jest.useFakeTimers();
+  const adapter = jest.fn();
+  const policy = createToolExecutionPolicy({
+    registry: [{ target, risk: "mutating" }],
+    requestApproval: async () => {
+      throw new Error("private failure");
+    },
+  });
+  await expect(policy.execute(target, {}, adapter)).rejects.toThrow(
+    "Tool execution denied",
+  );
+  expect(adapter).not.toHaveBeenCalled();
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+it("preserves JSON null and null-prototype arguments and omits unset optional target fields", async () => {
+  const actual = copy(target) as Extract<ToolTarget, { kind: "mcp" }>;
+  actual.server.token = undefined;
+  const args = Object.assign(Object.create(null), {
+    nullable: null,
+    values: [false, 0, ""],
+  });
+  const adapter = jest.fn(async (_target, snapshotArgs) => snapshotArgs);
+  const policy = createToolExecutionPolicy({
+    registry: [{ target: actual, risk: "read_only" }],
+  });
+  await expect(policy.execute(actual, args, adapter)).resolves.toEqual(args);
+  expect(adapter.mock.calls[0][0].server).not.toHaveProperty("token");
+});
+
+it("supports a known provider image endpoint with its optional folder bound into identity", async () => {
+  const actual = copy(builtin) as Extract<ToolTarget, { kind: "builtin" }>;
+  actual.endpoint.providerId = "openai";
+  actual.endpoint.baseUrl = "";
+  actual.endpoint.folderId = "folder";
+  const adapter = jest.fn(async () => "image");
+  const policy = createToolExecutionPolicy({
+    registry: [{ target: actual, risk: "mutating" }],
+    requestApproval: approve,
+  });
+  await expect(policy.execute(actual, {}, adapter)).resolves.toBe("image");
+});
+
+it("snapshots options without widening missing or invalid authority", async () => {
+  expect(snapshotToolPolicyOptions()).toBeUndefined();
+  expect(snapshotToolPolicyOptions(null as any)).toBeUndefined();
+  expect(snapshotToolPolicyOptions({} as any)?.registry).toEqual([]);
+  const requestApproval = jest.fn(approve);
+  const controller = new AbortController();
+  const options = {
+    registry: [
+      { target: null as any, risk: "read_only" as const },
+      { target: copy(target), risk: "unexpected" as any },
+    ],
+    requestApproval,
+    approvalTimeoutMs: 123,
+    signal: controller.signal,
+  };
+  const captured = snapshotToolPolicyOptions(options)!;
+  expect(captured.registry).toEqual([{ target, risk: "denied" }]);
+  expect(Object.isFrozen(captured)).toBe(true);
+  expect(Object.isFrozen(captured.registry)).toBe(true);
+  expect(Object.isFrozen(captured.registry[0].target)).toBe(true);
+  expect(captured.requestApproval).toBe(requestApproval);
+  expect(captured.approvalTimeoutMs).toBe(123);
+  expect(captured.signal).toBe(controller.signal);
+  options.registry[1].risk = "read_only";
+  const adapter = jest.fn();
+  await expect(
+    createToolExecutionPolicy(captured).execute(target, {}, adapter),
+  ).rejects.toBeInstanceOf(ToolPolicyDeniedError);
+  await expect(
+    createToolExecutionPolicy().execute(target, {}, adapter),
+  ).rejects.toBeInstanceOf(ToolPolicyDeniedError);
+  await expect(
+    createToolExecutionPolicy({} as any).execute(target, {}, adapter),
+  ).rejects.toBeInstanceOf(ToolPolicyDeniedError);
+  expect(adapter).not.toHaveBeenCalled();
+  expect(requestApproval).not.toHaveBeenCalled();
+});
+
+it("captures valid registry authority before caller configuration is reassigned", async () => {
+  const registered = copy(target);
+  const options = {
+    registry: [{ target: registered, risk: "read_only" as const }],
+  };
+  const captured = snapshotToolPolicyOptions(options)!;
+  if (registered.kind === "mcp")
+    registered.server.url = "https://replacement.invalid/mcp";
+  options.registry.length = 0;
+  const adapter = jest.fn(async () => "original");
+  const policy = createToolExecutionPolicy(captured);
+  await expect(policy.execute(target, {}, adapter)).resolves.toBe("original");
+  await expect(policy.execute(registered, {}, adapter)).rejects.toBeInstanceOf(
+    ToolPolicyDeniedError,
+  );
+  expect(adapter).toHaveBeenCalledTimes(1);
 });
