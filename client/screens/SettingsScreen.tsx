@@ -27,7 +27,11 @@ import { ThemedView } from "@/components/ThemedView";
 import { Spacing, BorderRadius, Typography } from "@/constants/theme";
 import { useChatStore } from "@/lib/store";
 import { testConnection, testMCPServer } from "@/lib/api";
-import { MemoryEntry, MemoryStore } from "@/lib/agent/memory";
+import {
+  MemoryEntry,
+  MemoryStore,
+  normalizeMemoryLimit,
+} from "@/lib/agent/memory";
 import {
   ProviderId,
   formatAuthHeaderLabel,
@@ -665,7 +669,7 @@ export default function SettingsScreen() {
   const handleMemoryLimitChange = (text: string) => {
     const parsed = Math.floor(Number(text));
     if (Number.isFinite(parsed) && parsed > 0) {
-      updateSettings({ memoryLimit: parsed });
+      updateSettings({ memoryLimit: normalizeMemoryLimit(parsed) });
     }
   };
 

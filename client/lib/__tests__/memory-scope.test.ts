@@ -282,3 +282,72 @@ test("summary retains its originating scope and provenance", async () => {
   ]);
   expect(await new MemoryStore().listMemories(scopeB)).toEqual([]);
 });
+
+describe.each([false, true])(
+  "legacy memory limit (populated=%s)",
+  (populated) => {
+    test.each([101, 500])(
+      "normalizes %s before real provider request",
+      async (limit) => {
+        if (populated) await remember(scopeA, "scoped fixture");
+        const read = jest.spyOn(MemoryStore.prototype, "getRelevantMemories");
+        try {
+          await send(scopeA, { memorySettings: { ...settings, limit } });
+          expect(read).toHaveBeenCalledWith(
+            expect.objectContaining({ scope: scopeA, limit: 100 }),
+          );
+          expect(transport).toHaveBeenCalledTimes(1);
+        } finally {
+          read.mockRestore();
+        }
+      },
+    );
+  },
+);
+
+test.each([
+  [1, 1],
+  [100, 100],
+  [0, 1],
+  [-3, 1],
+  [4.9, 4],
+  [NaN, 8],
+  [Infinity, 8],
+])(
+  "normalizes configured limit %s to %s through real chat",
+  async (limit, expected) => {
+    const read = jest.spyOn(MemoryStore.prototype, "getRelevantMemories");
+    try {
+      await send(scopeA, { memorySettings: { ...settings, limit } });
+      expect(read).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: expected }),
+      );
+      expect(transport).toHaveBeenCalledTimes(1);
+    } finally {
+      read.mockRestore();
+    }
+  },
+);
+
+test("legacy queued limit is normalized on replay without changing payload or scope", async () => {
+  transport.mockRejectedValueOnce(new Error("Network request failed"));
+  await send(scopeA, { memorySettings: { ...settings, limit: 101 } });
+  const [queued] = await getQueuedChatRequests();
+  expect(queued.payload.memorySettings?.limit).toBe(101);
+  const read = jest.spyOn(MemoryStore.prototype, "getRelevantMemories");
+  try {
+    expect(
+      await flushQueuedChatMessages({
+        memoryScope: scopeA,
+        chatId: "chat",
+        onChunk: jest.fn(),
+      }),
+    ).toEqual({ processed: 1, failed: 0, remaining: 0 });
+    expect(read).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: scopeA, limit: 100 }),
+    );
+    expect(queued.payload.memorySettings?.limit).toBe(101);
+  } finally {
+    read.mockRestore();
+  }
+});

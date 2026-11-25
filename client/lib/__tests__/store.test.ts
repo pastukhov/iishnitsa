@@ -1244,3 +1244,40 @@ describe("useChatStore", () => {
     });
   });
 });
+
+describe("bounded memory settings", () => {
+  test.each([
+    [101, 100],
+    [500, 100],
+    [1, 1],
+    [100, 100],
+    [0, 1],
+    [-1, 1],
+    [3.9, 3],
+    ["100", 8],
+    [null, 8],
+    [undefined, 8],
+    [100.9, 100],
+  ])("normalizes persisted %s to %s", async (memoryLimit, expected) => {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(
+      async (key: string) =>
+        key === "@ai_agent_settings" ? JSON.stringify({ memoryLimit }) : null,
+    );
+    await useChatStore.getState().loadFromStorage();
+    expect(useChatStore.getState().settings.memoryLimit).toBe(expected);
+  });
+  test.each([
+    [101, 100],
+    [1, 1],
+    [100, 100],
+    [NaN, 8],
+    [Infinity, 8],
+  ])("normalizes input %s before persistence", (memoryLimit, expected) => {
+    useChatStore.getState().updateSettings({ memoryLimit });
+    expect(useChatStore.getState().settings.memoryLimit).toBe(expected);
+    expect(AsyncStorage.setItem).toHaveBeenLastCalledWith(
+      "@ai_agent_settings",
+      expect.stringContaining('"memoryLimit":' + expected),
+    );
+  });
+});

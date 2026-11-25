@@ -1,5 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+export const MAX_MEMORY_RESULTS = 100;
+export const DEFAULT_MEMORY_LIMIT = 8;
+
+// User preferences may predate the store cap; low-level queries remain strict.
+export function normalizeMemoryLimit(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value))
+    return DEFAULT_MEMORY_LIMIT;
+  return Math.min(MAX_MEMORY_RESULTS, Math.max(1, Math.floor(value)));
+}
+
 export type MemoryType = "user" | "task" | "fact" | "system";
 export interface MemorySettings {
   enabled: boolean;
@@ -270,14 +280,14 @@ export class MemoryStore {
   async getRelevantMemories(options: SearchOptions): Promise<MemoryEntry[]> {
     const scope = validateMemoryScope(options?.scope);
     const query = options.query ?? "";
-    const limit = options.limit ?? 8;
+    const limit = options.limit ?? DEFAULT_MEMORY_LIMIT;
     const min = options.minImportance ?? 0;
     if (
       typeof query !== "string" ||
       query.length > 256 ||
       !Number.isInteger(limit) ||
       limit < 1 ||
-      limit > 100 ||
+      limit > MAX_MEMORY_RESULTS ||
       !Number.isFinite(min) ||
       min < 0 ||
       min > 1 ||

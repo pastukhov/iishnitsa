@@ -29,6 +29,7 @@ import {
   MemoryType,
   type MemoryScope,
   validateMemoryScope,
+  normalizeMemoryLimit,
 } from "@/lib/agent/memory";
 import {
   AgentState,
@@ -166,7 +167,7 @@ export class AgentCore {
     this.maxDepth = maxDepth;
     this.driver = driver;
     this.memoryStore = memoryStore;
-    this.memoryLimit = memoryLimit;
+    this.memoryLimit = normalizeMemoryLimit(memoryLimit);
     this.memoryMinImportance = memoryMinImportance;
     this.memoryEnabled = memoryEnabled;
     this.memoryAutoSave = memoryAutoSave;

@@ -27,3 +27,5 @@ All operations share a serial executor and reload storage, including independent
 ## Verification
 
 Run `npm test -- --runInBand client/lib/agent/__tests__/memory.test.ts client/lib/__tests__/memory-scope.test.ts` for fake-storage migration, failures/retries, concurrent loads/read/write/delete, scope/expiry/backup isolation and the real chat entry point. `npm run check:required` includes these and the existing lifecycle, fallback, tool-policy and SKILL.md regressions. Tests use fictitious records and mocked transports, without live MCP calls or device data.
+
+User-configured memory limits are normalized to whole numbers in 1–100 during settings load/update and at the agent boundary (including old queued requests). Finite values are floored and clamped; malformed/non-finite values use the default 8. Settings caps accepted positive input at 100. The low-level MemoryStore query API still rejects out-of-range limits. No stored memory records are modified by preference normalization.
