@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import YAML from "yaml";
-import { normalizeMemoryLimit } from "@/lib/agent/memory";
+import {
+  normalizeMemoryLimit,
+  normalizeMemoryAccountId,
+} from "@/lib/agent/memory";
 import { getTranslations } from "@/lib/translations";
 
 export interface MessageAttachment {
@@ -278,7 +281,7 @@ const migrateSettings = (
     settings;
 
   rest.memoryLimit = normalizeMemoryLimit(rest.memoryLimit);
-  if (typeof rest.memoryAccountId !== "string") rest.memoryAccountId = "";
+  rest.memoryAccountId = normalizeMemoryAccountId(rest.memoryAccountId);
 
   // Add prompts.chat MCP server if not present
   const hasPromptsChat = rest.mcpServers?.some(
@@ -537,6 +540,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set((state) => {
       const settings = { ...state.settings, ...newSettings };
       settings.memoryLimit = normalizeMemoryLimit(settings.memoryLimit);
+      settings.memoryAccountId = normalizeMemoryAccountId(
+        settings.memoryAccountId,
+      );
       AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
       return { settings };
     });

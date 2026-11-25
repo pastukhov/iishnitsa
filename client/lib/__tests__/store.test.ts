@@ -1281,3 +1281,28 @@ describe("bounded memory settings", () => {
     );
   });
 });
+
+describe("invalid legacy memory namespaces", () => {
+  test.each(["x".repeat(129), "bad\nnamespace", "bad\u007fnamespace"])(
+    "deactivates invalid persisted namespace",
+    async (memoryAccountId) => {
+      (AsyncStorage.getItem as jest.Mock).mockImplementation(
+        async (key: string) =>
+          key === "@ai_agent_settings"
+            ? JSON.stringify({ memoryAccountId })
+            : null,
+      );
+      await useChatStore.getState().loadFromStorage();
+      expect(useChatStore.getState().settings.memoryAccountId).toBe("");
+    },
+  );
+  test.each([
+    ["x".repeat(128), "x".repeat(128)],
+    [" account ", "account"],
+    ["", ""],
+    ["x".repeat(129), ""],
+  ])("normalizes account setting safely", (memoryAccountId, expected) => {
+    useChatStore.getState().updateSettings({ memoryAccountId });
+    expect(useChatStore.getState().settings.memoryAccountId).toBe(expected);
+  });
+});

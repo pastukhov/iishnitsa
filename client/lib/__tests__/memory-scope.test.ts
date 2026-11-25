@@ -3,7 +3,7 @@ import { sendChatMessage, flushQueuedChatMessages } from "../api";
 import { getQueuedChatRequests } from "../offline-queue";
 import { MemoryStore, type MemoryScope } from "../agent/memory";
 import { createSkillRegistry, createSkillSession } from "../skill-registry";
-import type { EndpointConfig, Message } from "../store";
+import { useChatStore, type EndpointConfig, type Message } from "../store";
 import type { ExecutionEvent } from "../agent/execution-trace";
 
 const scopeA: MemoryScope = { accountId: "account-a", chatId: "chat" };
@@ -351,3 +351,34 @@ test("legacy queued limit is normalized on replay without changing payload or sc
     read.mockRestore();
   }
 });
+
+test.each([true, false])(
+  "invalid persisted namespace allows normal chat (memory enabled=%s)",
+  async (enabled) => {
+    data.set(
+      "@ai_agent_settings",
+      JSON.stringify({
+        memoryAccountId: "x".repeat(129),
+        memoryEnabled: enabled,
+      }),
+    );
+    await useChatStore.getState().loadFromStorage();
+    const selected = useChatStore.getState().settings;
+    expect(selected.memoryAccountId).toBe("");
+    const read = jest.spyOn(MemoryStore.prototype, "getRelevantMemories");
+    try {
+      await send(
+        selected.memoryAccountId
+          ? { accountId: selected.memoryAccountId, chatId: "chat" }
+          : undefined,
+        { memorySettings: { ...settings, enabled } },
+        [{ ...messages[0], content: "remember fixture" }],
+      );
+      expect(transport).toHaveBeenCalledTimes(1);
+      expect(read).not.toHaveBeenCalled();
+      expect(data.has("@ai_agent_memory")).toBe(false);
+    } finally {
+      read.mockRestore();
+    }
+  },
+);

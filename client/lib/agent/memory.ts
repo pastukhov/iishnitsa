@@ -81,6 +81,13 @@ function text(value: unknown, max: number): value is string {
     !/[\u0000-\u001f\u007f]/.test(value)
   );
 }
+// Invalid legacy preferences deactivate memory; never truncate an identity.
+export function normalizeMemoryAccountId(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const normalized = value.trim();
+  return text(normalized, 128) ? normalized : "";
+}
+
 export function validateMemoryScope(scope: MemoryScope): Readonly<MemoryScope> {
   if (!object(scope) || !text(scope.accountId, 128) || !text(scope.chatId, 128))
     fail();

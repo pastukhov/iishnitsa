@@ -31,6 +31,7 @@ import {
   MemoryEntry,
   MemoryStore,
   normalizeMemoryLimit,
+  normalizeMemoryAccountId,
 } from "@/lib/agent/memory";
 import {
   ProviderId,
@@ -312,6 +313,23 @@ export default function SettingsScreen() {
   const memoryStore = useMemo(() => new MemoryStore(), []);
   const [memoryQuery, setMemoryQuery] = useState("");
   const memoryOperation = useRef(0);
+  const [memoryAccountInput, setMemoryAccountInput] = useState(
+    settings.memoryAccountId,
+  );
+  const [memoryAccountError, setMemoryAccountError] = useState(false);
+  useEffect(() => {
+    setMemoryAccountInput(settings.memoryAccountId);
+    setMemoryAccountError(false);
+  }, [settings.memoryAccountId]);
+  const handleMemoryAccountChange = (value: string) => {
+    setMemoryAccountInput(value);
+    const normalized = normalizeMemoryAccountId(value);
+    const invalid =
+      /[\u0000-\u001f\u007f]/.test(value) ||
+      (value.trim().length > 0 && !normalized);
+    setMemoryAccountError(invalid);
+    if (!invalid) updateSettings({ memoryAccountId: normalized });
+  };
   const memoryAccountId = settings.memoryAccountId.trim();
   const memoryChatId = chats.some((chat) => chat.id === currentChatId)
     ? currentChatId
@@ -1426,12 +1444,20 @@ export default function SettingsScreen() {
           >
             <InputField
               label="Memory account ID"
-              value={settings.memoryAccountId}
-              onChangeText={(memoryAccountId) =>
-                updateSettings({ memoryAccountId })
-              }
+              value={memoryAccountInput}
+              onChangeText={handleMemoryAccountChange}
               placeholder="Choose a local account namespace"
             />
+            {memoryAccountError && (
+              <ThemedText
+                style={[styles.helperText, { color: theme.error }]}
+                accessibilityLiveRegion="polite"
+              >
+                Use at most 128 characters and remove control characters. The
+                previous memory account remains selected. Clear the field to
+                disable memory for an account.
+              </ThemedText>
+            )}
             <ThemedText
               style={[styles.helperText, { color: theme.textSecondary }]}
             >
