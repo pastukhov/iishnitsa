@@ -64,16 +64,25 @@ interface Loaded {
   legacyRaw?: string;
 }
 let sequence = 0;
-let tail: Promise<unknown> = Promise.resolve();
+// Hosts sharing one backend must share the same adapter object. The native
+// default is a singleton; independent adapters must not block one another.
+const storageTails = new WeakMap<RuntimeStorage, Promise<unknown>>();
 function fail(): never {
   throw new MemoryStoreError();
 }
-function transaction<T>(operation: () => Promise<T>): Promise<T> {
+function transaction<T>(
+  storage: RuntimeStorage,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const tail = storageTails.get(storage) ?? Promise.resolve();
   const result = tail.then(operation).catch((error) => {
     if (error instanceof RunCancelledError) throw error;
     throw new MemoryStoreError();
   });
-  tail = result.catch(() => {});
+  storageTails.set(
+    storage,
+    result.catch(() => {}),
+  );
   return result;
 }
 function object(value: unknown): value is Record<string, any> {
@@ -282,7 +291,7 @@ export class MemoryStore {
       lastAccessedAt: now,
       ttlMs: input.ttlMs ?? 30 * DAY,
     });
-    return transaction(async () => {
+    return transaction(this.storage, async () => {
       throwIfCancelled(signal);
       const loaded = await load(this.storage);
       throwIfCancelled(signal);
@@ -334,7 +343,7 @@ export class MemoryStore {
     )
       fail();
     const types = options.types?.slice();
-    return transaction(async () => {
+    return transaction(this.storage, async () => {
       const { envelope } = await load(this.storage);
       return envelope.entries
         .filter(
@@ -356,7 +365,7 @@ export class MemoryStore {
   }
   async listMemories(scope: MemoryScope): Promise<MemoryEntry[]> {
     const captured = validateMemoryScope(scope);
-    return transaction(async () =>
+    return transaction(this.storage, async () =>
       (await load(this.storage)).envelope.entries
         .filter((e) => sameScope(e.scope, captured) && !expired(e))
         .sort((a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id)),
@@ -371,7 +380,7 @@ export class MemoryStore {
   }
   async exportMemories(scope: MemoryScope): Promise<string> {
     const captured = validateMemoryScope(scope);
-    return transaction(async () =>
+    return transaction(this.storage, async () =>
       JSON.stringify({
         version: 2,
         scope: captured,
@@ -386,7 +395,7 @@ export class MemoryStore {
     predicate: (entry: MemoryEntry) => boolean,
   ): Promise<void> {
     const captured = validateMemoryScope(scope);
-    return transaction(async () => {
+    return transaction(this.storage, async () => {
       const loaded = await load(this.storage);
       const state = loaded.envelope;
       const retained = state.entries.filter(
@@ -425,7 +434,7 @@ export class MemoryStore {
   }
   async exportBackup(scope: MemoryScope): Promise<string | null> {
     const captured = validateMemoryScope(scope);
-    return transaction(async () => {
+    return transaction(this.storage, async () => {
       const raw = await this.storage.getItem(backupKey(captured));
       if (raw !== null) this.validateBackup(raw, captured);
       return raw;
@@ -465,7 +474,7 @@ export class MemoryStore {
   }
   async restoreBackup(scope: MemoryScope): Promise<void> {
     const captured = validateMemoryScope(scope);
-    return transaction(async () => {
+    return transaction(this.storage, async () => {
       const raw = await this.storage.getItem(backupKey(captured));
       if (raw === null) fail();
       const backup = this.validateBackup(raw, captured);
@@ -489,7 +498,7 @@ export class MemoryStore {
     });
   }
   async migrateLegacy(): Promise<void> {
-    return transaction(async () => {
+    return transaction(this.storage, async () => {
       const loaded = await load(this.storage);
       await prepareMutation(loaded, this.storage);
       if (loaded.legacyRaw !== undefined)
@@ -497,7 +506,7 @@ export class MemoryStore {
     });
   }
   async exportLegacy(): Promise<string | null> {
-    return transaction(async () => {
+    return transaction(this.storage, async () => {
       const loaded = await load(this.storage);
       if (loaded.legacyRaw !== undefined) return loaded.legacyRaw;
       if (loaded.envelope.legacy === null) return null;
@@ -512,7 +521,7 @@ export class MemoryStore {
     });
   }
   async rollbackMigration(): Promise<void> {
-    return transaction(async () => {
+    return transaction(this.storage, async () => {
       const loaded = await load(this.storage);
       const state = loaded.envelope;
       if (

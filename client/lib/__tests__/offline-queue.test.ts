@@ -204,7 +204,8 @@ describe("offline-queue", () => {
   });
 
   it("flushes items and retains failures", async () => {
-    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(
+    await AsyncStorage.setItem(
+      "@ai_agent_offline_queue",
       JSON.stringify([
         {
           id: "q1",
@@ -243,5 +244,8 @@ describe("offline-queue", () => {
     expect(handler).toHaveBeenCalledTimes(2);
     expect(result.processed).toBe(1);
     expect(result.failed).toBe(1);
+    expect(await getQueuedChatRequests()).toMatchObject([
+      { id: "q2", attempts: 1 },
+    ]);
   });
 });

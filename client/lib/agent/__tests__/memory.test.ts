@@ -656,3 +656,116 @@ it("assigns a fresh deletion marker on retry and restores only the committed att
   await store.restoreBackup(a);
   expect(await store.listMemories(a)).toHaveLength(1);
 });
+
+function isolatedStorage() {
+  const values = new Map<string, string>();
+  return {
+    getItem: jest.fn(async (name: string) => values.get(name) ?? null),
+    setItem: jest.fn(async (name: string, value: string) => {
+      values.set(name, value);
+    }),
+  };
+}
+
+it.each(["getItem", "setItem"] as const)(
+  "a stalled %s on one backend does not block an independent backend",
+  async (method) => {
+    const stalled = isolatedStorage();
+    const healthy = isolatedStorage();
+    let release!: () => void;
+    let entered!: () => void;
+    const enteredPromise = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    if (method === "getItem")
+      stalled.getItem.mockImplementationOnce(async () => {
+        entered();
+        await gate;
+        return null;
+      });
+    else
+      stalled.setItem.mockImplementationOnce(async () => {
+        entered();
+        await gate;
+      });
+    const blocked = new MemoryStore(stalled).addMemory(input());
+    await enteredPromise;
+    let completed = false;
+    const independent = new MemoryStore(healthy)
+      .addMemory(input(b))
+      .then(() => {
+        completed = true;
+      });
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(completed).toBe(true);
+      expect((await new MemoryStore(healthy).listMemories(b)).length).toBe(1);
+    } finally {
+      release();
+      await Promise.all([blocked, independent]);
+    }
+  },
+);
+
+it("an aborted write waiting on stalled storage cannot block an independent backend", async () => {
+  const stalled = isolatedStorage();
+  const healthy = isolatedStorage();
+  let release!: () => void;
+  let entered!: () => void;
+  const enteredPromise = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  stalled.getItem.mockImplementationOnce(async () => {
+    entered();
+    await gate;
+    return null;
+  });
+  const controller = new AbortController();
+  const blocked = new MemoryStore(stalled).addMemory(
+    input(),
+    controller.signal,
+  );
+  const rejected = expect(blocked).rejects.toMatchObject({
+    name: "RunCancelledError",
+  });
+  await enteredPromise;
+  controller.abort();
+  let completed = false;
+  const independent = new MemoryStore(healthy).addMemory(input(b)).then(() => {
+    completed = true;
+  });
+  try {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(completed).toBe(true);
+  } finally {
+    release();
+    await Promise.all([rejected, independent]);
+  }
+  expect(stalled.setItem).not.toHaveBeenCalled();
+});
+
+it("independent MemoryStore instances sharing an adapter serialize read-modify-write operations", async () => {
+  const backend = isolatedStorage();
+  const first = new MemoryStore(backend);
+  const second = new MemoryStore(backend);
+  await Promise.all([
+    first.addMemory(input()),
+    second.addMemory(input(a, "second")),
+  ]);
+  expect((await first.listMemories(a)).map((entry) => entry.id).sort()).toEqual(
+    ["one", "second"],
+  );
+  await Promise.all([
+    first.deleteMemory(a, "one"),
+    second.addMemory(input(a, "third")),
+  ]);
+  expect(
+    (await second.listMemories(a)).map((entry) => entry.id).sort(),
+  ).toEqual(["second", "third"]);
+});

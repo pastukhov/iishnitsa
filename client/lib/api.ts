@@ -30,6 +30,7 @@ import {
 } from "@/lib/agent/memory";
 import {
   enqueueChatRequest,
+  cancelQueuedChatRequest,
   flushQueuedChatRequests,
 } from "@/lib/offline-queue";
 
@@ -177,8 +178,21 @@ export async function sendChatMessage(
           ? { chatPrompt: options.chatPrompt }
           : {}),
       };
-      const queued = await enqueueChatRequest(payload);
-      options?.onQueued?.(queued.id);
+      const queued = options?.signal
+        ? await enqueueChatRequest(payload, options.signal)
+        : await enqueueChatRequest(payload);
+      const checkQueuedCancellation = async () => {
+        if (options?.signal?.aborted) {
+          await cancelQueuedChatRequest(queued.id);
+          throwIfCancelled(options.signal);
+        }
+      };
+      if (options?.signal?.aborted) await checkQueuedCancellation();
+      try {
+        options?.onQueued?.(queued.id);
+      } finally {
+        if (options?.signal?.aborted) await checkQueuedCancellation();
+      }
       outcome = "queued";
       return;
     }

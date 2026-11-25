@@ -160,6 +160,7 @@ export function createRuntime({
   authenticate,
   configure,
   maxRunMs = 60000,
+  randomUUID = () => globalThis.crypto.randomUUID(),
 }: {
   execute: ChatExecutor;
   authenticate: (
@@ -172,13 +173,25 @@ export function createRuntime({
     surface: RuntimeSurface,
   ) => Promise<SessionConfig>;
   maxRunMs?: number;
+  /** Host-supplied cryptographic UUID source when Web Crypto is unavailable. */
+  randomUUID?: () => string;
 }): { forSurface(surface: RuntimeSurface): RuntimeClient } {
   if (!Number.isFinite(maxRunMs) || maxRunMs < 1 || maxRunMs > 300000)
     throw new RuntimeInputError();
   const sessions = new Map<string, Session>();
-  let sequence = 0;
-  const id = () =>
-    `runtime_${Date.now().toString(36)}_${++sequence}_${Math.random().toString(36).slice(2)}`;
+  const activeId = (value: string) =>
+    sessions.has(value) ||
+    [...sessions.values()].some((session) => session.runs.has(value));
+  const id = () => {
+    let value: string;
+    try {
+      value = randomUUID();
+    } catch {
+      throw new RuntimeInputError();
+    }
+    if (!validId(value) || activeId(value)) throw new RuntimeInputError();
+    return value;
+  };
   const identity = async (auth: unknown, surface: RuntimeSurface) => {
     try {
       const principal = await authenticate(auth, surface);
@@ -235,7 +248,8 @@ export function createRuntime({
           }
           // Re-authenticate after an asynchronous host lookup before allocating state.
           if ((await identity(auth, surface)) !== owner) return deny();
-          if (sessions.size >= 32) throw new RuntimeInputError();
+          if (sessions.size >= 32 || activeId(sessionId))
+            throw new RuntimeInputError();
           sessions.set(sessionId, {
             owner,
             surface,

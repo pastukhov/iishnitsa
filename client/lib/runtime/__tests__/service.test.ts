@@ -328,3 +328,74 @@ it("captures host configuration and redacts multiple credential kinds", async ()
   expect(execute.mock.calls[0][1].apiKey).toBe("secret-token");
   await client.disconnect("a", session);
 });
+
+it("does not generate session identifiers with Math.random", async () => {
+  const weak = jest.spyOn(Math, "random");
+  weak.mockClear();
+  try {
+    const { client } = setup();
+    const session = await client.createSession("a");
+    expect(weak).not.toHaveBeenCalled();
+    await client.disconnect("a", session);
+  } finally {
+    weak.mockRestore();
+  }
+});
+
+it("fails closed when secure ID generation is unavailable or collides", async () => {
+  const options = {
+    execute: jest.fn(async () => {}),
+    authenticate: async () => ({ ownerId: "owner" }),
+    configure: async () => config,
+  };
+  const unavailable = createRuntime({
+    ...options,
+    randomUUID: () => {
+      throw Error("private generator failure");
+    },
+  }).forSurface("web");
+  await expect(unavailable.createSession("auth")).rejects.toThrow(
+    "Invalid runtime request",
+  );
+  const duplicate = createRuntime({
+    ...options,
+    randomUUID: () => "fixture-unique-id",
+  }).forSurface("web");
+  const session = await duplicate.createSession("auth");
+  await expect(duplicate.createSession("auth")).rejects.toThrow(
+    "Invalid runtime request",
+  );
+  await expect(duplicate.start("auth", session, "hello")).rejects.toThrow(
+    "Invalid runtime request",
+  );
+  await duplicate.disconnect("auth", session);
+});
+
+it("rechecks ID collision after asynchronous session configuration", async () => {
+  const pending = gate();
+  const entered = gate();
+  let configured = 0;
+  const runtime = createRuntime({
+    execute: async () => {},
+    authenticate: async () => ({ ownerId: "owner" }),
+    randomUUID: jest
+      .fn()
+      .mockReturnValueOnce("session-one")
+      .mockReturnValue("later-id"),
+    configure: async () => {
+      if (++configured === 2) {
+        entered.resolve();
+        await pending.promise;
+      }
+      return config;
+    },
+  });
+  const client = runtime.forSurface("cli");
+  const first = await client.createSession("a");
+  const second = client.createSession("a");
+  await entered.promise;
+  await client.start("a", first, "hello");
+  pending.resolve();
+  await expect(second).rejects.toThrow("Invalid runtime request");
+  await client.disconnect("a", first);
+});
