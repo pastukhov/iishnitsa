@@ -13,6 +13,7 @@ module.exports = {
   setupFilesAfterEnv: ["<rootDir>/jest.setup.js"],
   collectCoverageFrom: [
     "client/lib/**/*.{ts,tsx}",
+    "client/components/LocalSuggestionsPanel.tsx",
     "!client/lib/**/*.d.ts",
     "!client/lib/prompts-data.ts",
     "!**/node_modules/**",
