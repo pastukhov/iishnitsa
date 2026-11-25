@@ -1,4 +1,8 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  RunCancelledError,
+  throwIfCancelled,
+} from "@/lib/runtime/cancellation";
+import { nativeStorage, type RuntimeStorage } from "@/lib/runtime/storage";
 
 export const MAX_MEMORY_RESULTS = 100;
 export const DEFAULT_MEMORY_LIMIT = 8;
@@ -60,15 +64,25 @@ interface Loaded {
   legacyRaw?: string;
 }
 let sequence = 0;
-let tail: Promise<unknown> = Promise.resolve();
+// Hosts sharing one backend must share the same adapter object. The native
+// default is a singleton; independent adapters must not block one another.
+const storageTails = new WeakMap<RuntimeStorage, Promise<unknown>>();
 function fail(): never {
   throw new MemoryStoreError();
 }
-function transaction<T>(operation: () => Promise<T>): Promise<T> {
-  const result = tail.then(operation).catch(() => {
+function transaction<T>(
+  storage: RuntimeStorage,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const tail = storageTails.get(storage) ?? Promise.resolve();
+  const result = tail.then(operation).catch((error) => {
+    if (error instanceof RunCancelledError) throw error;
     throw new MemoryStoreError();
   });
-  tail = result.catch(() => {});
+  storageTails.set(
+    storage,
+    result.catch(() => {}),
+  );
   return result;
 }
 function object(value: unknown): value is Record<string, any> {
@@ -197,8 +211,8 @@ function validateEnvelope(value: unknown): Envelope {
     legacy: value.legacy === null ? null : validateLegacy(value.legacy),
   };
 }
-async function load(): Promise<Loaded> {
-  const raw = await AsyncStorage.getItem(MEMORY_KEY);
+async function load(storage: RuntimeStorage): Promise<Loaded> {
+  const raw = await storage.getItem(MEMORY_KEY);
   if (raw === null)
     return { envelope: { version: 2, revision: 0, entries: [], legacy: null } };
   const parsed = JSON.parse(raw);
@@ -214,15 +228,24 @@ async function load(): Promise<Loaded> {
     };
   return { envelope: validateEnvelope(parsed) };
 }
-async function prepareMutation(loaded: Loaded): Promise<void> {
+async function prepareMutation(
+  loaded: Loaded,
+  storage: RuntimeStorage,
+  signal?: AbortSignal,
+): Promise<void> {
+  throwIfCancelled(signal);
   if (loaded.legacyRaw === undefined) return;
-  const backup = await AsyncStorage.getItem(LEGACY_KEY);
+  const backup = await storage.getItem(LEGACY_KEY);
+  throwIfCancelled(signal);
   if (backup !== null && backup !== loaded.legacyRaw) fail();
-  if (backup === null) await AsyncStorage.setItem(LEGACY_KEY, loaded.legacyRaw);
+  if (backup === null) await storage.setItem(LEGACY_KEY, loaded.legacyRaw);
 }
-async function persist(envelope: Envelope): Promise<void> {
+async function persist(
+  envelope: Envelope,
+  storage: RuntimeStorage,
+): Promise<void> {
   if (!Number.isSafeInteger(envelope.revision)) fail();
-  await AsyncStorage.setItem(MEMORY_KEY, JSON.stringify(envelope));
+  await storage.setItem(MEMORY_KEY, JSON.stringify(envelope));
 }
 function expired(entry: MemoryEntry): boolean {
   return Date.now() - entry.createdAt >= entry.ttlMs;
@@ -251,7 +274,12 @@ interface NewMemory {
 }
 
 export class MemoryStore {
-  async addMemory(input: NewMemory): Promise<MemoryEntry> {
+  constructor(private readonly storage: RuntimeStorage = nativeStorage) {}
+  async addMemory(
+    input: NewMemory,
+    signal?: AbortSignal,
+  ): Promise<MemoryEntry> {
+    throwIfCancelled(signal);
     if (!object(input)) fail();
     const now = Date.now();
     const entry = validateEntry({
@@ -263,8 +291,10 @@ export class MemoryStore {
       lastAccessedAt: now,
       ttlMs: input.ttlMs ?? 30 * DAY,
     });
-    return transaction(async () => {
-      const loaded = await load();
+    return transaction(this.storage, async () => {
+      throwIfCancelled(signal);
+      const loaded = await load(this.storage);
+      throwIfCancelled(signal);
       const state = loaded.envelope;
       const existing = state.entries.find(
         (x) => sameScope(x.scope, entry.scope) && x.id === entry.id,
@@ -283,10 +313,13 @@ export class MemoryStore {
         return copy(existing);
       }
       if (state.entries.length >= 1000) fail();
-      await prepareMutation(loaded);
+      await prepareMutation(loaded, this.storage, signal);
+      throwIfCancelled(signal);
       state.entries.push(entry);
       state.revision++;
-      await persist(state);
+      // Commit point: an invoked storage write cannot be physically cancelled.
+      // Cancellation while queued/loading/preparing must never reach this call.
+      await persist(state, this.storage);
       return copy(entry);
     });
   }
@@ -310,8 +343,8 @@ export class MemoryStore {
     )
       fail();
     const types = options.types?.slice();
-    return transaction(async () => {
-      const { envelope } = await load();
+    return transaction(this.storage, async () => {
+      const { envelope } = await load(this.storage);
       return envelope.entries
         .filter(
           (e) =>
@@ -332,8 +365,8 @@ export class MemoryStore {
   }
   async listMemories(scope: MemoryScope): Promise<MemoryEntry[]> {
     const captured = validateMemoryScope(scope);
-    return transaction(async () =>
-      (await load()).envelope.entries
+    return transaction(this.storage, async () =>
+      (await load(this.storage)).envelope.entries
         .filter((e) => sameScope(e.scope, captured) && !expired(e))
         .sort((a, b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id)),
     );
@@ -347,11 +380,11 @@ export class MemoryStore {
   }
   async exportMemories(scope: MemoryScope): Promise<string> {
     const captured = validateMemoryScope(scope);
-    return transaction(async () =>
+    return transaction(this.storage, async () =>
       JSON.stringify({
         version: 2,
         scope: captured,
-        entries: (await load()).envelope.entries.filter((e) =>
+        entries: (await load(this.storage)).envelope.entries.filter((e) =>
           sameScope(e.scope, captured),
         ),
       }),
@@ -362,17 +395,17 @@ export class MemoryStore {
     predicate: (entry: MemoryEntry) => boolean,
   ): Promise<void> {
     const captured = validateMemoryScope(scope);
-    return transaction(async () => {
-      const loaded = await load();
+    return transaction(this.storage, async () => {
+      const loaded = await load(this.storage);
       const state = loaded.envelope;
       const retained = state.entries.filter(
         (entry) => !sameScope(entry.scope, captured) || !predicate(entry),
       );
       if (retained.length === state.entries.length) return;
-      await prepareMutation(loaded);
+      await prepareMutation(loaded, this.storage);
       const entries = state.entries.filter((e) => sameScope(e.scope, captured));
       const deletionOperationId = `delete_${Date.now()}_${++sequence}_${Math.random().toString(16).slice(2)}`;
-      await AsyncStorage.setItem(
+      await this.storage.setItem(
         backupKey(captured),
         JSON.stringify({
           version: 2,
@@ -385,7 +418,7 @@ export class MemoryStore {
       state.entries = retained;
       state.deletionOperationId = deletionOperationId;
       state.revision++;
-      await persist(state);
+      await persist(state, this.storage);
     });
   }
   async deleteMemory(scope: MemoryScope, id: string): Promise<void> {
@@ -401,8 +434,8 @@ export class MemoryStore {
   }
   async exportBackup(scope: MemoryScope): Promise<string | null> {
     const captured = validateMemoryScope(scope);
-    return transaction(async () => {
-      const raw = await AsyncStorage.getItem(backupKey(captured));
+    return transaction(this.storage, async () => {
+      const raw = await this.storage.getItem(backupKey(captured));
       if (raw !== null) this.validateBackup(raw, captured);
       return raw;
     });
@@ -441,11 +474,11 @@ export class MemoryStore {
   }
   async restoreBackup(scope: MemoryScope): Promise<void> {
     const captured = validateMemoryScope(scope);
-    return transaction(async () => {
-      const raw = await AsyncStorage.getItem(backupKey(captured));
+    return transaction(this.storage, async () => {
+      const raw = await this.storage.getItem(backupKey(captured));
       if (raw === null) fail();
       const backup = this.validateBackup(raw, captured);
-      const loaded = await load();
+      const loaded = await load(this.storage);
       const state = loaded.envelope;
       if (
         loaded.legacyRaw !== undefined ||
@@ -461,22 +494,23 @@ export class MemoryStore {
       if (entries.length > 1000) fail();
       state.entries = entries;
       state.revision++;
-      await persist(state);
+      await persist(state, this.storage);
     });
   }
   async migrateLegacy(): Promise<void> {
-    return transaction(async () => {
-      const loaded = await load();
-      await prepareMutation(loaded);
-      if (loaded.legacyRaw !== undefined) await persist(loaded.envelope);
+    return transaction(this.storage, async () => {
+      const loaded = await load(this.storage);
+      await prepareMutation(loaded, this.storage);
+      if (loaded.legacyRaw !== undefined)
+        await persist(loaded.envelope, this.storage);
     });
   }
   async exportLegacy(): Promise<string | null> {
-    return transaction(async () => {
-      const loaded = await load();
+    return transaction(this.storage, async () => {
+      const loaded = await load(this.storage);
       if (loaded.legacyRaw !== undefined) return loaded.legacyRaw;
       if (loaded.envelope.legacy === null) return null;
-      const backup = await AsyncStorage.getItem(LEGACY_KEY);
+      const backup = await this.storage.getItem(LEGACY_KEY);
       if (
         backup === null ||
         JSON.stringify(validateLegacy(JSON.parse(backup))) !==
@@ -487,8 +521,8 @@ export class MemoryStore {
     });
   }
   async rollbackMigration(): Promise<void> {
-    return transaction(async () => {
-      const loaded = await load();
+    return transaction(this.storage, async () => {
+      const loaded = await load(this.storage);
       const state = loaded.envelope;
       if (
         loaded.legacyRaw !== undefined ||
@@ -497,14 +531,14 @@ export class MemoryStore {
         state.legacy === null
       )
         fail();
-      const backup = await AsyncStorage.getItem(LEGACY_KEY);
+      const backup = await this.storage.getItem(LEGACY_KEY);
       if (
         backup === null ||
         JSON.stringify(validateLegacy(JSON.parse(backup))) !==
           JSON.stringify(state.legacy)
       )
         fail();
-      await AsyncStorage.setItem(MEMORY_KEY, backup);
+      await this.storage.setItem(MEMORY_KEY, backup);
     });
   }
 }

@@ -1,4 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { throwIfCancelled } from "@/lib/runtime/cancellation";
+import { nativeStorage } from "@/lib/runtime/storage";
 import { EndpointConfig, MCPServer, Message } from "@/lib/store";
 import { MemorySettings, type MemoryScope } from "@/lib/agent/memory";
 
@@ -23,6 +24,9 @@ export interface QueuedChatRequest {
 }
 
 const QUEUE_KEY = "@ai_agent_offline_queue";
+// Suppress replay in this runtime even if storage fails during cancellation cleanup.
+// A failed durable cleanup cannot guarantee suppression after a process restart.
+const cancelledQueueIds = new Set<string>();
 
 // These gates protect one JS runtime; AsyncStorage has no cross-process lock.
 function createSerialExecutor() {
@@ -43,25 +47,37 @@ function generateId(): string {
 }
 
 async function loadQueue(): Promise<QueuedChatRequest[]> {
-  const raw = await AsyncStorage.getItem(QUEUE_KEY);
+  const raw = await nativeStorage.getItem(QUEUE_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((entry) => !cancelledQueueIds.has(entry.id))
+      : [];
   } catch {
     return [];
   }
 }
 
 async function persistQueue(queue: QueuedChatRequest[]): Promise<void> {
-  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  const suppressed = new Set(cancelledQueueIds);
+  await nativeStorage.setItem(
+    QUEUE_KEY,
+    JSON.stringify(queue.filter((entry) => !suppressed.has(entry.id))),
+  );
+  // Successful durable cleanup supersedes these process-local tombstones.
+  for (const id of suppressed) cancelledQueueIds.delete(id);
 }
 
 export async function enqueueChatRequest(
   payload: QueuedChatPayload,
+  signal?: AbortSignal,
 ): Promise<QueuedChatRequest> {
+  throwIfCancelled(signal);
   return withQueueStorage(async () => {
+    throwIfCancelled(signal);
     const queue = await loadQueue();
+    throwIfCancelled(signal);
     const entry: QueuedChatRequest = {
       id: generateId(),
       createdAt: Date.now(),
@@ -69,8 +85,40 @@ export async function enqueueChatRequest(
       payload,
     };
     queue.push(entry);
-    await persistQueue(queue);
+    // setItem has no physical cancellation; keep the lock through rollback so
+    // a concurrent flusher cannot see a newly cancelled request.
+    try {
+      throwIfCancelled(signal);
+      await persistQueue(queue);
+    } finally {
+      if (signal?.aborted) {
+        cancelledQueueIds.add(entry.id);
+        try {
+          await persistQueue(queue.filter((item) => item.id !== entry.id));
+          cancelledQueueIds.delete(entry.id);
+        } catch {
+          console.warn(
+            "Cancelled queue cleanup failed; restart may require manual queue cleanup",
+          );
+        }
+        throwIfCancelled(signal);
+      }
+    }
     return entry;
+  });
+}
+
+/** Cancel an accepted enqueue before replay; the caller owns this exact entry. */
+export async function cancelQueuedChatRequest(id: string): Promise<void> {
+  cancelledQueueIds.add(id);
+  await withQueueStorage(async () => {
+    try {
+      await persistQueue(await loadQueue());
+    } catch {
+      console.warn(
+        "Cancelled queue cleanup failed; restart may require manual queue cleanup",
+      );
+    }
   });
 }
 
@@ -95,8 +143,24 @@ export async function flushQueuedChatRequests(options: {
 
       let retry: QueuedChatRequest | undefined;
       try {
-        // Do not hold the storage gate while waiting for network or MCP work.
-        await options.handler(item.payload);
+        // Revalidate snapshots and begin dispatch under the storage gate. Release
+        // it immediately after invocation, never while awaiting network/MCP work.
+        const dispatched = await withQueueStorage(async () => {
+          const current = await loadQueue();
+          if (
+            cancelledQueueIds.has(item.id) ||
+            !current.some((entry) => entry.id === item.id)
+          )
+            return undefined;
+          try {
+            return { result: options.handler(item.payload) };
+          } catch (error) {
+            return { result: Promise.reject(error) };
+          }
+        });
+        if (!dispatched) continue;
+        // An already-invoked handler cannot be undone by later cancellation.
+        await dispatched.result;
         processed += 1;
       } catch (error: any) {
         failed += 1;

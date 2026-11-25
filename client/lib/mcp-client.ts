@@ -1,6 +1,7 @@
+import appConfig from "../../app.json";
+import { cancellable, throwIfCancelled } from "@/lib/runtime/cancellation";
 import type { BoundaryObserver } from "@/lib/agent/execution-trace";
 import { MCPServer } from "@/lib/store";
-import { appInfo } from "@/lib/app-info";
 
 export interface MCPTool {
   name: string;
@@ -68,6 +69,7 @@ export class MCPClient {
     params?: Record<string, any>,
     boundary?: BoundaryObserver,
     beforeDispatch?: () => void,
+    signal?: AbortSignal,
   ): Promise<any> {
     const request: MCPRequest = {
       jsonrpc: "2.0",
@@ -100,18 +102,24 @@ export class MCPClient {
     };
     try {
       const body = JSON.stringify(request);
+      throwIfCancelled(signal);
       beforeDispatch?.();
+      throwIfCancelled(signal);
       try {
         boundary?.dispatched();
       } catch {
         /* Observers are passive. */
       }
       outcome = "unknown";
-      const response = await fetch(this.serverUrl, {
-        method: "POST",
-        headers,
-        body,
-      });
+      const response = await cancellable(
+        fetch(this.serverUrl, {
+          method: "POST",
+          headers,
+          body,
+          ...(signal ? { signal } : {}),
+        }),
+        signal,
+      );
 
       const newSessionId = response.headers.get("mcp-session-id");
       if (newSessionId) {
@@ -120,12 +128,12 @@ export class MCPClient {
 
       if (!response.ok) {
         outcome = "failed";
-        const errorText = await response.text();
+        const errorText = await cancellable(response.text(), signal);
         console.error("MCP request returned an HTTP error");
         throw new Error(`MCP server returned ${response.status}: ${errorText}`);
       }
 
-      const responseText = await response.text();
+      const responseText = await cancellable(response.text(), signal);
       if (!responseText) {
         return null;
       }
@@ -171,6 +179,7 @@ export class MCPClient {
       return recordResult(jsonResponse.result);
     } catch (error: any) {
       console.error("MCP request failed");
+      throwIfCancelled(signal);
       throw error;
     } finally {
       try {
@@ -184,6 +193,7 @@ export class MCPClient {
   private async sendNotification(
     method: string,
     params?: Record<string, any>,
+    signal?: AbortSignal,
   ): Promise<void> {
     try {
       const request: MCPRequest = {
@@ -205,35 +215,49 @@ export class MCPClient {
         headers["Mcp-Session-Id"] = this.sessionId;
       }
 
-      await fetch(this.serverUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(request),
-      });
+      throwIfCancelled(signal);
+      await cancellable(
+        fetch(this.serverUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(request),
+          ...(signal ? { signal } : {}),
+        }),
+        signal,
+      );
     } catch {
+      throwIfCancelled(signal);
       console.warn("MCP notification failed");
     }
   }
 
-  async initialize(): Promise<{
+  async initialize(signal?: AbortSignal): Promise<{
     protocolVersion: string;
     serverInfo: any;
     capabilities: any;
   }> {
+    throwIfCancelled(signal);
     if (this.initialized && this.initData) {
       return this.initData;
     }
 
-    const result = await this.sendRequest("initialize", {
-      protocolVersion: "2024-11-05",
-      capabilities: {},
-      clientInfo: {
-        name: "Iishnitsa Mobile",
-        version: appInfo.version,
+    const result = await this.sendRequest(
+      "initialize",
+      {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: {
+          name: appConfig.expo.name,
+          version: appConfig.expo.version,
+        },
       },
-    });
+      undefined,
+      undefined,
+      signal,
+    );
 
-    await this.sendNotification("notifications/initialized");
+    await this.sendNotification("notifications/initialized", undefined, signal);
+    throwIfCancelled(signal);
 
     this.initialized = true;
     this.initData = result;
@@ -244,8 +268,14 @@ export class MCPClient {
     return this.initialized;
   }
 
-  async listTools(): Promise<MCPTool[]> {
-    const result = await this.sendRequest("tools/list");
+  async listTools(signal?: AbortSignal): Promise<MCPTool[]> {
+    const result = await this.sendRequest(
+      "tools/list",
+      undefined,
+      undefined,
+      undefined,
+      signal,
+    );
     return result?.tools || [];
   }
 
@@ -254,6 +284,7 @@ export class MCPClient {
     args: Record<string, any>,
     boundary?: BoundaryObserver,
     beforeDispatch?: () => void,
+    signal?: AbortSignal,
   ): Promise<MCPToolResult> {
     const result = await this.sendRequest(
       "tools/call",
@@ -263,6 +294,7 @@ export class MCPClient {
       },
       boundary,
       beforeDispatch,
+      signal,
     );
     return result;
   }
@@ -314,7 +346,10 @@ export function clearClientCache(serverId?: string): void {
   }
 }
 
-export async function getToolsFromServers(servers: MCPServer[]): Promise<{
+export async function getToolsFromServers(
+  servers: MCPServer[],
+  signal?: AbortSignal,
+): Promise<{
   tools: (MCPTool & { serverName: string; serverId: string })[];
   errors: { serverName: string; error: string }[];
 }> {
@@ -326,8 +361,9 @@ export async function getToolsFromServers(servers: MCPServer[]): Promise<{
     enabledServers.map(async (server) => {
       try {
         const client = getOrCreateClient(server);
-        await client.initialize();
-        const serverTools = await client.listTools();
+        await client.initialize(signal);
+        throwIfCancelled(signal);
+        const serverTools = await client.listTools(signal);
 
         serverTools.forEach((tool) => {
           tools.push({
@@ -337,6 +373,7 @@ export async function getToolsFromServers(servers: MCPServer[]): Promise<{
           });
         });
       } catch (error: any) {
+        throwIfCancelled(signal);
         clientCache.delete(server.id);
         errors.push({
           serverName: server.name,
@@ -355,10 +392,11 @@ export async function executeToolCall(
   args: Record<string, any>,
   boundary?: BoundaryObserver,
   beforeDispatch?: () => void,
+  signal?: AbortSignal,
 ): Promise<MCPToolResult> {
   const client = getOrCreateClient(server);
   try {
-    await client.initialize();
+    await client.initialize(signal);
   } catch (error) {
     try {
       boundary?.finish("failed");
@@ -367,7 +405,13 @@ export async function executeToolCall(
     }
     throw error;
   }
-  return await client.callTool(toolName, args, boundary, beforeDispatch);
+  return await client.callTool(
+    toolName,
+    args,
+    boundary,
+    beforeDispatch,
+    signal,
+  );
 }
 
 export function mcpToolsToOpenAIFunctions(

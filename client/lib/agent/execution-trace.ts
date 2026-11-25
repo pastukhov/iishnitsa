@@ -68,6 +68,7 @@ export function createExecutionTrace(subscriber?: ExecutionSubscriber) {
       const attemptId = createTraceId();
       const attemptStart = Date.now();
       let attemptFinished = false;
+      const pending = new Set<() => void>();
       emit({ type: "attempt_started", attemptId });
       return {
         boundary(operation): BoundaryObserver {
@@ -75,6 +76,22 @@ export function createExecutionTrace(subscriber?: ExecutionSubscriber) {
           const operationStart = Date.now();
           let operationFinished = false;
           let dispatched = false;
+          const complete = (outcome: BoundaryOutcome) => {
+            if (operationFinished) return;
+            operationFinished = true;
+            pending.delete(finalize);
+            emit({
+              type: "operation_finished",
+              attemptId,
+              operationId,
+              operation,
+              dispatch: dispatched ? "attempted" : "not_dispatched",
+              outcome,
+              durationMs: elapsed(operationStart),
+            });
+          };
+          const finalize = () => complete(dispatched ? "unknown" : "failed");
+          if (!attemptFinished) pending.add(finalize);
           if (!attemptFinished)
             emit({
               type: "operation_started",
@@ -95,22 +112,14 @@ export function createExecutionTrace(subscriber?: ExecutionSubscriber) {
             },
             finish(outcome) {
               if (operationFinished || attemptFinished) return;
-              operationFinished = true;
-              emit({
-                type: "operation_finished",
-                attemptId,
-                operationId,
-                operation,
-                dispatch: dispatched ? "attempted" : "not_dispatched",
-                outcome,
-                durationMs: elapsed(operationStart),
-              });
+              complete(outcome);
             },
           };
         },
         finish(outcome) {
           if (attemptFinished) return;
           attemptFinished = true;
+          for (const finalize of [...pending]) finalize();
           emit({
             type: "attempt_finished",
             attemptId,
