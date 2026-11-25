@@ -16,6 +16,7 @@ interface StreamChatInput {
   onChunk: (content: string) => void;
   decision?: AgentDecision;
   boundary?: BoundaryObserver;
+  beforeDispatch?: () => void;
 }
 
 export class LLMResponseError extends Error {
@@ -66,7 +67,14 @@ export class OpenAICompatibleDriver {
   }
 
   private async executeChat(
-    { endpoint, messages, tools, onChunk, decision }: StreamChatInput,
+    {
+      endpoint,
+      messages,
+      tools,
+      onChunk,
+      decision,
+      beforeDispatch,
+    }: StreamChatInput,
     boundary: BoundaryObserver,
   ): Promise<{ fullContent: string; toolCalls: ToolCall[]; usage?: LLMUsage }> {
     const baseUrl = resolveBaseUrl(endpoint.providerId, endpoint.baseUrl);
@@ -95,6 +103,7 @@ export class OpenAICompatibleDriver {
       },
       body: JSON.stringify(requestBody),
     };
+    beforeDispatch?.();
     boundary.dispatched();
     const response = await fetch(url, request);
 

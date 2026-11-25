@@ -1,4 +1,8 @@
 import {
+  resolveSkillContext,
+  type SkillContextOptions,
+} from "@/lib/skill-registry";
+import {
   snapshotToolPolicyOptions,
   type ToolPolicyOptions,
 } from "@/lib/agent/tool-policy";
@@ -53,6 +57,7 @@ export async function sendChatMessage(
   mcpServers: MCPServer[] = [],
   mcpEnabled: boolean = false,
   options?: {
+    skillContext?: SkillContextOptions;
     toolPolicy?: ToolPolicyOptions;
     fallbackEndpoint?: EndpointConfig;
     onExecutionEvent?: ExecutionSubscriber;
@@ -66,6 +71,11 @@ export async function sendChatMessage(
     onAttachment?: (attachment: MessageAttachment) => void;
   },
 ): Promise<void> {
+  const skillContext =
+    options?.skillContext === undefined
+      ? undefined
+      : Object.freeze({ ...options.skillContext });
+  resolveSkillContext(skillContext);
   const toolPolicy = snapshotToolPolicyOptions(options?.toolPolicy);
   const trace = createExecutionTrace(options?.onExecutionEvent);
   let outcome: RunOutcome = "failed";
@@ -86,6 +96,7 @@ export async function sendChatMessage(
         mcpServers,
         mcpEnabled,
         {
+          skillContext,
           toolPolicy,
           systemPrompt: options?.systemPrompt,
           chatPrompt: options?.chatPrompt,
@@ -129,7 +140,7 @@ export async function sendChatMessage(
     outcome = "completed";
   } catch (error: any) {
     if (toolExecutionAttempted) throw new UnsafeChatReplayError(error);
-    if (options?.queueOnFailure && isNetworkError(error)) {
+    if (!skillContext && options?.queueOnFailure && isNetworkError(error)) {
       const payload = {
         chatId: options.chatId,
         messages,

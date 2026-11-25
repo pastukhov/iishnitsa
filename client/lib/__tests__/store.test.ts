@@ -743,7 +743,7 @@ describe("useChatStore", () => {
       expect(result).not.toContain("Should not appear");
     });
 
-    it("appends enabled skills content in order", () => {
+    it("excludes enabled legacy skills from the trusted system prompt", () => {
       const settings = {
         ...useChatStore.getState().settings,
         systemPrompt: "Base prompt",
@@ -766,15 +766,12 @@ describe("useChatStore", () => {
       };
 
       const result = getEffectiveSystemPrompt(settings);
-      expect(result).toContain("Base prompt");
-      expect(result).toContain("## Skill: First\nFirst content");
-      expect(result).toContain("## Skill: Second\nSecond content");
-      expect(result.indexOf("First content")).toBeLessThan(
-        result.indexOf("Second content"),
-      );
+      expect(result).toBe("Base prompt");
+      expect(result).not.toContain("First content");
+      expect(result).not.toContain("Second content");
     });
 
-    it("produces valid output with an empty system prompt and enabled skills", () => {
+    it("keeps an empty system prompt empty despite enabled legacy skills", () => {
       const settings = {
         ...useChatStore.getState().settings,
         systemPrompt: "",
@@ -790,7 +787,7 @@ describe("useChatStore", () => {
       };
 
       const result = getEffectiveSystemPrompt(settings);
-      expect(result).toBe("## Skill: Only\nOnly content");
+      expect(result).toBe("");
       expect(result.startsWith("\n")).toBe(false);
     });
   });

@@ -150,6 +150,66 @@ describe("LLM transport boundaries", () => {
 });
 
 describe("MCP transport boundaries", () => {
+  it.each(["revoked", "active", "absent"])(
+    "checks the %s dispatch guard after asynchronous initialization",
+    async (kind) => {
+      const boundary = observer();
+      let active = true;
+      const guardError = new Error(
+        "session-unavailable private-secret https://mcp.invalid/private-url",
+      );
+      const guard = jest.fn(() => {
+        if (!active) throw guardError;
+      });
+      const methods: string[] = [];
+      mockFetch.mockImplementation(async (_url, request) => {
+        const rpc = JSON.parse(request.body);
+        methods.push(rpc.method);
+        if (rpc.method === "initialize") {
+          await Promise.resolve();
+          active = kind !== "revoked";
+        }
+        return response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: rpc.id,
+            result: rpc.method === "tools/call" ? { content: [] } : {},
+          }),
+        );
+      });
+      const errorLog = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const call = executeToolCall(
+        server,
+        "tool",
+        {},
+        boundary,
+        kind === "absent" ? undefined : guard,
+      );
+      if (kind === "revoked") {
+        await expect(call).rejects.toBe(guardError);
+        expect(methods).toEqual(["initialize", "notifications/initialized"]);
+        expect(boundary.dispatched).not.toHaveBeenCalled();
+        expect(boundary.finish.mock.calls).toEqual([["failed"]]);
+      } else {
+        await expect(call).resolves.toEqual({ content: [] });
+        expect(methods).toEqual([
+          "initialize",
+          "notifications/initialized",
+          "tools/call",
+        ]);
+        expect(boundary.dispatched).toHaveBeenCalledTimes(1);
+        expect(boundary.finish.mock.calls).toEqual([["completed"]]);
+      }
+      expect(guard).toHaveBeenCalledTimes(kind === "absent" ? 0 : 1);
+      expect(JSON.stringify(errorLog.mock.calls)).not.toMatch(
+        /private-|mcp\.invalid/,
+      );
+      errorLog.mockRestore();
+    },
+  );
+
   it.each([
     "execution-transport",
     "execution-http",

@@ -264,7 +264,6 @@ export default function SettingsScreen() {
     addSkill,
     updateSkill,
     removeSkill,
-    toggleSkill,
     restoreSkill,
   } = useChatStore();
   const t = useTranslations();
@@ -504,7 +503,7 @@ export default function SettingsScreen() {
         name: skillName.trim(),
         description: skillDescription.trim(),
         content: skillContent.trim(),
-        enabled: true,
+        enabled: false,
       });
     }
 
@@ -1228,6 +1227,12 @@ export default function SettingsScreen() {
           </View>
 
           <SectionHeader title="Skills" />
+          <ThemedText
+            style={[styles.helperText, { color: theme.textSecondary }]}
+          >
+            Saved references only. Applying skills to a session is not available
+            here.
+          </ThemedText>
           <View
             style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
           >
@@ -1235,29 +1240,19 @@ export default function SettingsScreen() {
               <ThemedText
                 style={[styles.helperText, { color: theme.textSecondary }]}
               >
-                No skills yet. Add reusable instructions that get appended to
-                the system prompt when enabled.
+                No saved skill references yet. Saved references are not
+                automatically applied to conversations.
               </ThemedText>
             )}
 
             {settings.skills.map((skill) => (
               <View key={skill.id}>
                 <View style={styles.mcpServerRow}>
-                  <Pressable
-                    onPress={() => toggleSkill(skill.id)}
-                    style={styles.mcpServerInfo}
-                    accessibilityRole="checkbox"
-                    accessibilityLabel={skill.name}
-                    accessibilityState={{ checked: skill.enabled }}
-                  >
+                  <View style={styles.mcpServerInfo}>
                     <MaterialIcons
-                      name={
-                        skill.enabled ? "check-box" : "check-box-outline-blank"
-                      }
+                      name="description"
                       size={24}
-                      color={
-                        skill.enabled ? theme.primary : theme.textSecondary
-                      }
+                      color={theme.textSecondary}
                     />
                     <View style={styles.mcpServerText}>
                       <ThemedText style={styles.mcpServerName}>
@@ -1275,7 +1270,7 @@ export default function SettingsScreen() {
                         </ThemedText>
                       )}
                     </View>
-                  </Pressable>
+                  </View>
                   <Pressable
                     onPress={() => openEditSkillModal(skill)}
                     accessibilityRole="button"
@@ -1580,7 +1575,7 @@ export default function SettingsScreen() {
               ]}
               value={skillContent}
               onChangeText={setSkillContent}
-              placeholder="Instructions appended to the system prompt when this skill is enabled."
+              placeholder="Saved reference content. Not automatically applied to conversations."
               placeholderTextColor={theme.textSecondary}
               multiline
               autoCapitalize="none"
