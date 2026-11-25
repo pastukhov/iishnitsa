@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { EndpointConfig, MCPServer, Message } from "@/lib/store";
-import { MemorySettings } from "@/lib/agent/memory";
+import { MemorySettings, type MemoryScope } from "@/lib/agent/memory";
 
 export interface QueuedChatPayload {
   chatId?: string | null;
@@ -11,6 +11,7 @@ export interface QueuedChatPayload {
   systemPrompt?: string;
   chatPrompt?: string;
   memorySettings?: MemorySettings;
+  memoryScope?: MemoryScope;
 }
 
 export interface QueuedChatRequest {

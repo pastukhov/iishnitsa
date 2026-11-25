@@ -687,6 +687,7 @@ describe("AgentCore", () => {
     });
 
     await agent.runChat({
+      memoryScope: { accountId: "fixture-account", chatId: "fixture-chat" },
       messages: [
         {
           id: "1",
@@ -706,6 +707,8 @@ describe("AgentCore", () => {
         type: "user",
         content: "my name is Alex",
         importance: 0.9,
+        scope: { accountId: "fixture-account", chatId: "fixture-chat" },
+        provenance: expect.objectContaining({ source: "explicit" }),
       }),
     );
   });
@@ -730,6 +733,7 @@ describe("AgentCore", () => {
     });
 
     await agent.runChat({
+      memoryScope: { accountId: "fixture-account", chatId: "fixture-chat" },
       messages: [
         {
           id: "1",
@@ -778,6 +782,7 @@ describe("AgentCore", () => {
     });
 
     await agent.runChat({
+      memoryScope: { accountId: "fixture-account", chatId: "fixture-chat" },
       messages: [
         {
           id: "1",
@@ -812,8 +817,139 @@ describe("AgentCore", () => {
         content: "User prefers tea.",
         importance: 0.6,
         ttlMs: 12345,
+        scope: { accountId: "fixture-account", chatId: "fixture-chat" },
+        provenance: expect.objectContaining({ source: "summary" }),
       }),
     );
+  });
+
+  it("does not read, save or summarize memory without explicit scope", async () => {
+    const memoryStore = {
+      getRelevantMemories: jest.fn().mockResolvedValue([]),
+      addMemory: jest.fn().mockResolvedValue({ id: "unexpected" }),
+    };
+    const driver = {
+      streamChat: jest
+        .fn()
+        .mockResolvedValue({ fullContent: "Noted", toolCalls: [] }),
+    };
+    const agent = new AgentCore({
+      driver,
+      memoryStore: memoryStore as any,
+      memoryEnabled: true,
+      memoryAutoSave: true,
+      memoryAutoSummary: true,
+    });
+    await agent.runChat({
+      messages: [
+        {
+          id: "unscoped",
+          role: "user",
+          content: "Remember that I like tea",
+          timestamp: 1,
+        },
+      ],
+      endpoint: mockEndpoint,
+      onChunk: jest.fn(),
+      mcpServers: [],
+      mcpEnabled: false,
+    });
+    expect(memoryStore.getRelevantMemories).not.toHaveBeenCalled();
+    expect(memoryStore.addMemory).not.toHaveBeenCalled();
+    expect(driver.streamChat).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps overlapping runs on one AgentCore bound to their own memory scopes", async () => {
+    const scopeA = { accountId: "account-a", chatId: "chat-a" };
+    const scopeB = { accountId: "account-b", chatId: "chat-b" };
+    let releaseA!: (entries: any[]) => void;
+    let enteredA!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      enteredA = resolve;
+    });
+    const memoryStore = {
+      getRelevantMemories: jest.fn(({ scope }) => {
+        if (scope.accountId === scopeA.accountId) {
+          enteredA();
+          return new Promise<any[]>((resolve) => {
+            releaseA = resolve;
+          });
+        }
+        return Promise.resolve([
+          {
+            type: "fact",
+            content: "reference-b",
+            provenance: { source: "import", sourceId: "b" },
+          },
+        ]);
+      }),
+      addMemory: jest.fn().mockResolvedValue({ id: "saved" }),
+    };
+    const driver = {
+      streamChat: jest
+        .fn()
+        .mockResolvedValue({ fullContent: "Noted", toolCalls: [] }),
+    };
+    const agent = new AgentCore({
+      driver,
+      memoryStore: memoryStore as any,
+      memoryEnabled: true,
+      memoryAutoSave: true,
+      memoryAutoSummary: false,
+    });
+    const run = (scope: typeof scopeA, id: string) =>
+      agent.runChat({
+        memoryScope: scope,
+        messages: [
+          {
+            id,
+            role: "user",
+            content: `Remember that preference-${id}`,
+            timestamp: 1,
+          },
+        ],
+        endpoint: mockEndpoint,
+        onChunk: jest.fn(),
+        mcpServers: [],
+        mcpEnabled: false,
+      });
+    const first = run(scopeA, "a");
+    await entered;
+    await run(scopeB, "b");
+    releaseA([
+      {
+        type: "fact",
+        content: "reference-a",
+        provenance: { source: "import", sourceId: "a" },
+      },
+    ]);
+    await first;
+    expect(
+      memoryStore.getRelevantMemories.mock.calls.map(
+        ([options]) => options.scope,
+      ),
+    ).toEqual([scopeA, scopeB]);
+    expect(memoryStore.addMemory).toHaveBeenCalledTimes(2);
+    expect(memoryStore.addMemory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: scopeA,
+        content: "preference-a",
+        provenance: expect.objectContaining({ source: "explicit" }),
+      }),
+    );
+    expect(memoryStore.addMemory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: scopeB,
+        content: "preference-b",
+        provenance: expect.objectContaining({ source: "explicit" }),
+      }),
+    );
+    for (const [input] of driver.streamChat.mock.calls as any[]) {
+      const serialized = JSON.stringify(input.messages);
+      const own = serialized.includes("preference-a") ? "a" : "b";
+      expect(serialized).toContain(`reference-${own}`);
+      expect(serialized).not.toContain(`reference-${own === "a" ? "b" : "a"}`);
+    }
   });
 
   it("handles tool loading failure", async () => {

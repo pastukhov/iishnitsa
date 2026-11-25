@@ -24,6 +24,7 @@ const resetStore = () => {
       mcpEnabled: false,
       skills: [],
       theme: "system",
+      memoryAccountId: "",
       memoryEnabled: true,
       memoryAutoSave: true,
       memoryAutoSummary: false,
@@ -140,6 +141,35 @@ describe("useChatStore", () => {
         chatId,
       );
     });
+  });
+
+  it("captures persisted user IDs and original scope before async request preparation", async () => {
+    const store = useChatStore.getState();
+    store.updateSettings({ memoryAccountId: "original-account" });
+    store.createNewChat();
+    store.addMessage({ role: "user", content: "remember first" });
+    const snapshot = useChatStore.getState();
+    const chat = snapshot.getCurrentChat()!;
+    const allMessages = [...chat.messages];
+    store.addMessage({ role: "assistant", content: "" });
+    store.addMessage({ role: "user", content: "remember second" });
+    const second = useChatStore.getState().getCurrentChat()!.messages.at(-1)!;
+    await Promise.resolve();
+    store.updateSettings({ memoryAccountId: "different-account" });
+    store.createNewChat();
+    expect(allMessages).toHaveLength(1);
+    expect(allMessages[0]).toMatchObject({
+      role: "user",
+      content: "remember first",
+    });
+    expect(allMessages[0].id).not.toBe("temp");
+    expect(allMessages[0].id).not.toBe(second.id);
+    expect(snapshot.settings.memoryAccountId).toBe("original-account");
+    expect(chat.id).not.toBe(useChatStore.getState().currentChatId);
+    expect(
+      useChatStore.getState().chats.find((item) => item.id === chat.id)
+        ?.messages[0].id,
+    ).toBe(allMessages[0].id);
   });
 
   describe("deleteChat", () => {
@@ -987,6 +1017,7 @@ describe("useChatStore", () => {
       await useChatStore.getState().loadFromStorage();
 
       expect(useChatStore.getState().chats).toHaveLength(1);
+      expect(useChatStore.getState().settings.memoryAccountId).toBe("");
     });
 
     it("loads settings from AsyncStorage", async () => {
@@ -1010,6 +1041,44 @@ describe("useChatStore", () => {
       expect(useChatStore.getState().settings.mcpEnabled).toBe(true);
       expect(useChatStore.getState().settings.endpoint.model).toBe("gpt-4");
     });
+
+    it.each([undefined, "chosen-local-account"])(
+      "loads explicit memory account %s without inferring credentials",
+      async (memoryAccountId) => {
+        (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+          Promise.resolve(
+            key === "@ai_agent_settings"
+              ? JSON.stringify({
+                  memoryAccountId,
+                  endpoint: {
+                    apiKey: "credential-not-identity",
+                    baseUrl: "https://fake.invalid",
+                  },
+                })
+              : null,
+          ),
+        );
+        await useChatStore.getState().loadFromStorage();
+        expect(useChatStore.getState().settings.memoryAccountId).toBe(
+          memoryAccountId ?? "",
+        );
+      },
+    );
+
+    it.each([null, 7, { accountId: "not-an-explicit-string" }])(
+      "leaves invalid persisted memory account %j unconfigured",
+      async (memoryAccountId) => {
+        (AsyncStorage.getItem as jest.Mock).mockImplementation((key: string) =>
+          Promise.resolve(
+            key === "@ai_agent_settings"
+              ? JSON.stringify({ memoryAccountId })
+              : null,
+          ),
+        );
+        await useChatStore.getState().loadFromStorage();
+        expect(useChatStore.getState().settings.memoryAccountId).toBe("");
+      },
+    );
 
     it("handles storage errors gracefully", async () => {
       (AsyncStorage.getItem as jest.Mock).mockRejectedValue(
@@ -1173,5 +1242,67 @@ describe("useChatStore", () => {
       expect(settings.recentPromptIds).toHaveLength(10);
       expect(settings.recentPromptIds[0]).toBe("prompt14");
     });
+  });
+});
+
+describe("bounded memory settings", () => {
+  test.each([
+    [101, 100],
+    [500, 100],
+    [1, 1],
+    [100, 100],
+    [0, 1],
+    [-1, 1],
+    [3.9, 3],
+    ["100", 8],
+    [null, 8],
+    [undefined, 8],
+    [100.9, 100],
+  ])("normalizes persisted %s to %s", async (memoryLimit, expected) => {
+    (AsyncStorage.getItem as jest.Mock).mockImplementation(
+      async (key: string) =>
+        key === "@ai_agent_settings" ? JSON.stringify({ memoryLimit }) : null,
+    );
+    await useChatStore.getState().loadFromStorage();
+    expect(useChatStore.getState().settings.memoryLimit).toBe(expected);
+  });
+  test.each([
+    [101, 100],
+    [1, 1],
+    [100, 100],
+    [NaN, 8],
+    [Infinity, 8],
+  ])("normalizes input %s before persistence", (memoryLimit, expected) => {
+    useChatStore.getState().updateSettings({ memoryLimit });
+    expect(useChatStore.getState().settings.memoryLimit).toBe(expected);
+    expect(AsyncStorage.setItem).toHaveBeenLastCalledWith(
+      "@ai_agent_settings",
+      expect.stringContaining('"memoryLimit":' + expected),
+    );
+  });
+});
+
+describe("invalid legacy memory namespaces", () => {
+  test.each(["x".repeat(129), "bad\nnamespace", "bad\u007fnamespace"])(
+    "deactivates invalid persisted namespace",
+    async (memoryAccountId) => {
+      (AsyncStorage.getItem as jest.Mock).mockImplementation(
+        async (key: string) =>
+          key === "@ai_agent_settings"
+            ? JSON.stringify({ memoryAccountId })
+            : null,
+      );
+      await useChatStore.getState().loadFromStorage();
+      expect(useChatStore.getState().settings.memoryAccountId).toBe("");
+    },
+  );
+  test.each([
+    ["x".repeat(128), "x".repeat(128)],
+    [" account ", "account"],
+    ["", ""],
+    ["x".repeat(129), ""],
+  ])("normalizes account setting safely", (memoryAccountId, expected) => {
+    useChatStore.getState().updateSettings({ memoryAccountId });
+    expect(useChatStore.getState().settings.memoryAccountId).toBe(expected);
   });
 });

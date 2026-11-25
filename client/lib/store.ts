@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import YAML from "yaml";
+import {
+  normalizeMemoryLimit,
+  normalizeMemoryAccountId,
+} from "@/lib/agent/memory";
 import { getTranslations } from "@/lib/translations";
 
 export interface MessageAttachment {
@@ -80,6 +84,7 @@ export interface Settings {
   mcpEnabled: boolean;
   skills: Skill[];
   theme: "light" | "dark" | "system";
+  memoryAccountId: string;
   memoryEnabled: boolean;
   memoryAutoSave: boolean;
   memoryAutoSummary: boolean;
@@ -247,6 +252,7 @@ const defaultSettings: Settings = {
   mcpEnabled: true,
   skills: [],
   theme: "system",
+  memoryAccountId: "",
   memoryEnabled: true,
   memoryAutoSave: true,
   memoryAutoSummary: false,
@@ -273,6 +279,9 @@ const migrateSettings = (
 ): Settings => {
   const { mcpCollections, activeMcpCollectionId, chatOptionsVisible, ...rest } =
     settings;
+
+  rest.memoryLimit = normalizeMemoryLimit(rest.memoryLimit);
+  rest.memoryAccountId = normalizeMemoryAccountId(rest.memoryAccountId);
 
   // Add prompts.chat MCP server if not present
   const hasPromptsChat = rest.mcpServers?.some(
@@ -530,6 +539,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   updateSettings: (newSettings) => {
     set((state) => {
       const settings = { ...state.settings, ...newSettings };
+      settings.memoryLimit = normalizeMemoryLimit(settings.memoryLimit);
+      settings.memoryAccountId = normalizeMemoryAccountId(
+        settings.memoryAccountId,
+      );
       AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
       return { settings };
     });

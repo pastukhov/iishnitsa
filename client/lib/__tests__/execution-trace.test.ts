@@ -373,6 +373,7 @@ test("includes the optional memory-summary LLM call in the same attempt", async 
     [],
     false,
     {
+      memoryScope: { accountId: "fixture-account", chatId: "fixture-chat" },
       memorySettings: { enabled: true, autoSave: false, autoSummary: true },
       onExecutionEvent: (e) => events.push(e),
     },
@@ -442,6 +443,10 @@ test.each(["discovery", "summary"])(
           [],
           false,
           {
+            memoryScope: {
+              accountId: "fixture-account",
+              chatId: "fixture-chat",
+            },
             memorySettings: {
               enabled: true,
               autoSave: false,
