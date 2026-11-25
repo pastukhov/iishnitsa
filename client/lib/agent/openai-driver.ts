@@ -11,6 +11,8 @@ import {
 } from "@/lib/agent/types";
 
 interface StreamChatInput {
+  /** Internal bounded text subtasks only; no tools or unbounded body fallback. */
+  textOnly?: boolean;
   signal?: AbortSignal;
   endpoint: EndpointConfig;
   messages: ChatCompletionMessage[];
@@ -79,9 +81,11 @@ export class OpenAICompatibleDriver {
       decision,
       beforeDispatch,
       signal,
+      textOnly,
     }: StreamChatInput,
     boundary: BoundaryObserver,
   ): Promise<{ fullContent: string; toolCalls: ToolCall[]; usage?: LLMUsage }> {
+    if (textOnly && tools.length) throw new Error("Text-only tools denied");
     const baseUrl = resolveBaseUrl(endpoint.providerId, endpoint.baseUrl);
     const url = `${baseUrl}/chat/completions`;
 
@@ -89,6 +93,7 @@ export class OpenAICompatibleDriver {
       model: decision?.model || endpoint.model,
       messages: messages,
       stream: true,
+      ...(textOnly ? { max_tokens: 1024 } : {}),
     };
 
     if (tools.length > 0) {
@@ -117,6 +122,19 @@ export class OpenAICompatibleDriver {
 
     if (!response.ok) {
       boundary.finish("failed");
+      if (textOnly) {
+        try {
+          const reader = response.body?.getReader();
+          void Promise.resolve(reader?.cancel()).catch(() => {});
+          reader?.releaseLock?.();
+        } catch {
+          /* Best-effort transport cleanup. */
+        }
+        throw new LLMResponseError(
+          "Text model request failed",
+          response.status,
+        );
+      }
       const errorText = await cancellable(response.text(), signal);
       let errorMessage = `API Error: ${response.status}`;
       try {
@@ -149,6 +167,13 @@ export class OpenAICompatibleDriver {
       const json = JSON.parse(data);
       const choice = json.choices?.[0];
       const delta = choice?.delta;
+      if (
+        textOnly &&
+        (delta?.tool_calls ||
+          delta?.function_call ||
+          ["tool_calls", "function_call"].includes(choice?.finish_reason))
+      )
+        throw new Error("Text-only tools denied");
       if (choice?.finish_reason) finishReason = choice.finish_reason;
       if (json.usage) {
         usage = {
@@ -158,6 +183,13 @@ export class OpenAICompatibleDriver {
         };
       }
       if (delta?.content) {
+        if (
+          textOnly &&
+          (typeof delta.content !== "string" ||
+            new TextEncoder().encode(fullContent + delta.content).byteLength >
+              4096)
+        )
+          throw new Error("Text output budget exceeded");
         fullContent += delta.content;
         onChunk(fullContent);
         throwIfCancelled(signal);
@@ -210,6 +242,13 @@ export class OpenAICompatibleDriver {
     };
 
     const finishStream = () => {
+      if (
+        textOnly &&
+        (!fullContent ||
+          (!streamDone &&
+            !["stop", "length", "content_filter"].includes(finishReason ?? "")))
+      )
+        throw new Error("Incomplete text response");
       // DONE already ended the event stream; trailing SSE fields are inert.
       if (!streamDone && (line.length > 0 || dataLines.length > 0)) {
         throw new Error("Incomplete SSE event");
@@ -264,15 +303,22 @@ export class OpenAICompatibleDriver {
       signal?.addEventListener("abort", abortReader, { once: true });
       try {
         throwIfCancelled(signal);
+        let wireBytes = 0;
         const decoder = new TextDecoder("utf-8", { fatal: true });
         while (true) {
           const { done, value } = await cancellable(reader.read(), signal);
           throwIfCancelled(signal);
           if (done) break;
+          wireBytes += value.byteLength;
+          if (textOnly && wireBytes > 65536)
+            throw new Error("Text wire budget exceeded");
           parseChunk(decoder.decode(value, { stream: true }));
         }
         parseChunk(decoder.decode());
         finishStream();
+      } catch (error) {
+        if (textOnly) abortReader();
+        throw error;
       } finally {
         signal?.removeEventListener("abort", abortReader);
         if (signal?.aborted) abortReader();
@@ -283,6 +329,7 @@ export class OpenAICompatibleDriver {
         }
       }
     } else {
+      if (textOnly) throw new Error("Text streaming unavailable");
       const responseText = await cancellable(response.text(), signal);
       if (/^data(?::|$)/m.test(responseText)) {
         parseChunk(responseText);

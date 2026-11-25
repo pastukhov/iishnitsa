@@ -1,3 +1,8 @@
+import {
+  runTextDelegation,
+  type TextDelegation,
+  type UntrustedChildResult,
+} from "@/lib/agent/text-delegation";
 import { throwIfCancelled } from "@/lib/runtime/cancellation";
 import {
   resolveSkillContext,
@@ -64,6 +69,7 @@ export async function sendChatMessage(
   mcpServers: MCPServer[] = [],
   mcpEnabled: boolean = false,
   options?: {
+    textDelegation?: TextDelegation;
     signal?: AbortSignal;
     memoryStore?: MemoryStore;
     skillContext?: SkillContextOptions;
@@ -81,7 +87,7 @@ export async function sendChatMessage(
     onDecision?: (decision: { providerId: string; model: string }) => void;
     onAttachment?: (attachment: MessageAttachment) => void;
   },
-): Promise<void> {
+): Promise<void | readonly UntrustedChildResult[]> {
   throwIfCancelled(options?.signal);
   const memoryScope =
     options?.memoryScope === undefined
@@ -92,9 +98,11 @@ export async function sendChatMessage(
       ? undefined
       : Object.freeze({ ...options.skillContext });
   resolveSkillContext(skillContext);
+  const textDelegation = options?.textDelegation;
   const toolPolicy = snapshotToolPolicyOptions(options?.toolPolicy);
   const trace = createExecutionTrace(options?.onExecutionEvent);
   let outcome: RunOutcome = "failed";
+  let childResults: readonly UntrustedChildResult[] | undefined;
   let toolExecutionAttempted = false;
   let outputStarted = false;
   const attemptEndpoint = async (selected: EndpointConfig) => {
@@ -144,6 +152,12 @@ export async function sendChatMessage(
     }
   };
   try {
+    if (textDelegation !== undefined)
+      childResults = await runTextDelegation(
+        textDelegation,
+        trace,
+        options?.signal,
+      );
     try {
       await attemptEndpoint(endpoint);
     } catch (error) {
@@ -161,10 +175,16 @@ export async function sendChatMessage(
       }
     }
     outcome = "completed";
+    return childResults;
   } catch (error: any) {
     throwIfCancelled(options?.signal);
     if (toolExecutionAttempted) throw new UnsafeChatReplayError(error);
-    if (!skillContext && options?.queueOnFailure && isNetworkError(error)) {
+    if (
+      !skillContext &&
+      textDelegation === undefined &&
+      options?.queueOnFailure &&
+      isNetworkError(error)
+    ) {
       const payload = {
         chatId: options.chatId,
         messages,

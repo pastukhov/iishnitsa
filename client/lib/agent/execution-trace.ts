@@ -9,6 +9,16 @@ export interface BoundaryObserver {
 type Operation = "llm" | "mcp";
 type AttemptOutcome = "completed" | "failed";
 type Details =
+  | { type: "child_started" | "child_dispatched"; childId: string; depth: 1 }
+  | {
+      type: "child_finished";
+      childId: string;
+      depth: 1;
+      outcome: "completed" | "failed" | "cancelled";
+      dispatch: "not_dispatched" | "attempted";
+      modelOutcome: BoundaryOutcome;
+      durationMs: number;
+    }
   | { type: "run_started" }
   | { type: "run_finished"; outcome: RunOutcome; durationMs: number }
   | { type: "attempt_started"; attemptId: string }
@@ -64,6 +74,40 @@ export function createExecutionTrace(subscriber?: ExecutionSubscriber) {
   };
   emit({ type: "run_started" });
   return {
+    child() {
+      const childId = createTraceId();
+      const childStart = Date.now();
+      let done = false;
+      let dispatched = false;
+      let modelOutcome: BoundaryOutcome = "failed";
+      emit({ type: "child_started", childId, depth: 1 });
+      return {
+        boundary: {
+          dispatched() {
+            if (done || dispatched) return;
+            dispatched = true;
+            modelOutcome = "unknown";
+            emit({ type: "child_dispatched", childId, depth: 1 });
+          },
+          finish(outcome: BoundaryOutcome) {
+            if (!done) modelOutcome = outcome;
+          },
+        },
+        finish(outcome: "completed" | "failed" | "cancelled") {
+          if (done) return;
+          done = true;
+          emit({
+            type: "child_finished",
+            childId,
+            depth: 1,
+            outcome,
+            dispatch: dispatched ? "attempted" : "not_dispatched",
+            modelOutcome,
+            durationMs: elapsed(childStart),
+          });
+        },
+      };
+    },
     attempt(): AttemptTrace {
       const attemptId = createTraceId();
       const attemptStart = Date.now();

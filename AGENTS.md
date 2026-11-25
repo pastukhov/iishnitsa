@@ -48,6 +48,8 @@
 
 ## Testing Guidelines
 
+- `npm test -- --runInBand client/lib/agent/__tests__/text-delegation.test.ts client/lib/agent/__tests__/text-transport.test.ts client/lib/runtime/__tests__/delegation.test.ts client/lib/__tests__/node-portability.test.ts`: verify bounded depth-one text delegation, authority/data isolation, audit, cancellation and real Node portability with fake model streams. Included in `check:required`; see `docs/text-delegation.md` for the trusted host entry and limits.
+
 - `npm test -- --runInBand client/lib/runtime/__tests__ client/lib/__tests__/node-portability.test.ts`: verify the shared runtime, actual Node CLI/mobile parity, cancellation, authenticated session isolation, and injected web/Telegram contracts with fake transports/storage. Included in `check:required`; see `docs/runtime-surfaces.md` for host composition and limits.
 
 - `npm test -- --runInBand client/lib/agent/__tests__/memory.test.ts client/lib/__tests__/memory-scope.test.ts`: verify scoped memory, provenance, concurrent storage, migration/backup/rollback and real chat/queue boundaries using fictitious data; included in `check:required`. See `docs/memory-storage.md` for recovery limits.
