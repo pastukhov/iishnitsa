@@ -75,3 +75,34 @@ it("initializes MCP in real Node using only a fake transport and bundled app met
     ),
   ).toBe("mcp portable");
 }, 25000);
+
+it("executes bounded text delegation in real Node without native modules or live fetch", () => {
+  const source = `
+    import {sendChatMessage} from './client/lib/api.ts';
+    import {createTextDelegation} from './client/lib/agent/text-delegation.ts';
+    import assert from 'node:assert/strict';
+    const endpoint={providerId:'custom',baseUrl:'https://fixture.invalid',apiKey:'fixture-key',model:'fixture'};
+    const requests=[];
+    globalThis.fetch=async(url,options)=>{
+      requests.push(JSON.parse(options.body));
+      const delta={content:requests.length===1?'child reference':'parent answer'};
+      return new Response('data: '+JSON.stringify({choices:[{delta,finish_reason:'stop'}]})+'\\n\\n');
+    };
+    async function main(){
+      const result=await sendChatMessage([{id:'p',role:'user',content:'parent',timestamp:1}],endpoint,()=>{},[],false,{textDelegation:createTextDelegation({endpoint,tasks:['fixture task']})});
+      assert.deepEqual(result,[{trust:'untrusted',text:'child reference'}]);
+      assert.deepEqual(requests[0].messages,[{role:'user',content:'fixture task'}]);
+      assert.equal(requests[0].tools,undefined);
+      assert.equal(JSON.stringify(requests[1]).includes('child reference'),false);
+      process.stdout.write('delegation portable');
+    }
+    main().catch(error=>{process.stderr.write(String(error));process.exitCode=1;});
+  `;
+  expect(
+    execFileSync(
+      process.execPath,
+      [path.join(process.cwd(), "node_modules/tsx/dist/cli.mjs"), "-e", source],
+      { cwd: process.cwd(), encoding: "utf8", timeout: 20000 },
+    ),
+  ).toBe("delegation portable");
+}, 25000);
