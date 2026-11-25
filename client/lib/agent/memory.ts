@@ -51,6 +51,7 @@ const TYPES: readonly string[] = ["user", "task", "fact", "system"];
 interface Envelope {
   version: 2;
   revision: number;
+  deletionOperationId?: string;
   entries: MemoryEntry[];
   legacy: unknown[] | null;
 }
@@ -170,7 +171,9 @@ function validateEnvelope(value: unknown): Envelope {
     !Number.isSafeInteger(value.revision) ||
     value.revision < 0 ||
     !Array.isArray(value.entries) ||
-    value.entries.length > 1000
+    value.entries.length > 1000 ||
+    (value.deletionOperationId !== undefined &&
+      !text(value.deletionOperationId, 128))
   )
     fail();
   const entries = value.entries.map(validateEntry);
@@ -187,6 +190,9 @@ function validateEnvelope(value: unknown): Envelope {
   return {
     version: 2,
     revision: value.revision,
+    ...(value.deletionOperationId !== undefined
+      ? { deletionOperationId: value.deletionOperationId }
+      : {}),
     entries,
     legacy: value.legacy === null ? null : validateLegacy(value.legacy),
   };
@@ -365,16 +371,19 @@ export class MemoryStore {
       if (retained.length === state.entries.length) return;
       await prepareMutation(loaded);
       const entries = state.entries.filter((e) => sameScope(e.scope, captured));
+      const deletionOperationId = `delete_${Date.now()}_${++sequence}_${Math.random().toString(16).slice(2)}`;
       await AsyncStorage.setItem(
         backupKey(captured),
         JSON.stringify({
           version: 2,
           scope: captured,
           expectedRevision: state.revision + 1,
+          deletionOperationId,
           entries,
         }),
       );
       state.entries = retained;
+      state.deletionOperationId = deletionOperationId;
       state.revision++;
       await persist(state);
     });
@@ -401,14 +410,20 @@ export class MemoryStore {
   private validateBackup(
     raw: string,
     scope: MemoryScope,
-  ): { expectedRevision: number; entries: MemoryEntry[] } {
+  ): {
+    expectedRevision: number;
+    deletionOperationId?: string;
+    entries: MemoryEntry[];
+  } {
     const value = JSON.parse(raw);
     if (
       !object(value) ||
       value.version !== 2 ||
       !sameScope(validateMemoryScope(value.scope), scope) ||
       !Number.isSafeInteger(value.expectedRevision) ||
-      value.expectedRevision < 1
+      value.expectedRevision < 1 ||
+      (value.deletionOperationId !== undefined &&
+        !text(value.deletionOperationId, 128))
     )
       fail();
     const validated = validateEnvelope({
@@ -420,6 +435,7 @@ export class MemoryStore {
     if (validated.entries.some((e) => !sameScope(e.scope, scope))) fail();
     return {
       expectedRevision: value.expectedRevision,
+      deletionOperationId: value.deletionOperationId,
       entries: validated.entries,
     };
   }
@@ -433,7 +449,9 @@ export class MemoryStore {
       const state = loaded.envelope;
       if (
         loaded.legacyRaw !== undefined ||
-        state.revision !== backup.expectedRevision
+        state.revision !== backup.expectedRevision ||
+        backup.deletionOperationId === undefined ||
+        state.deletionOperationId !== backup.deletionOperationId
       )
         fail();
       const entries = [

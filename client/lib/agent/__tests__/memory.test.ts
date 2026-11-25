@@ -406,13 +406,20 @@ it.each([
   expect(AsyncStorage.setItem).not.toHaveBeenCalled();
 });
 it("rejects restore capacity overflow before writing", async () => {
-  storage.set(key, envelope([record(b)], 1));
+  storage.set(
+    key,
+    JSON.stringify({
+      ...JSON.parse(envelope([record(b)], 1)),
+      deletionOperationId: "capacity-operation",
+    }),
+  );
   storage.set(
     backupKey(),
     JSON.stringify({
       version: 2,
       scope: a,
       expectedRevision: 1,
+      deletionOperationId: "capacity-operation",
       entries: Array.from({ length: 1000 }, (_, i) => record(a, `id-${i}`)),
     }),
   );
@@ -545,3 +552,107 @@ it.each(["clear", "delete", "purge"])(
     expect(AsyncStorage.setItem).not.toHaveBeenCalled();
   },
 );
+
+it.each([
+  [a, false],
+  [b, false],
+  [a, true],
+] as const)(
+  "rejects failed deletion revision alias with later scope %p and previous deletion %p",
+  async (laterScope, previousDeletion) => {
+    const store = new MemoryStore();
+    const original = await store.addMemory(input());
+    if (previousDeletion) {
+      await store.clear(a);
+      await store.restoreBackup(a);
+    }
+    const write = (AsyncStorage.setItem as jest.Mock).getMockImplementation()!;
+    let failPrimary = true;
+    (AsyncStorage.setItem as jest.Mock).mockImplementation(
+      async (storageKey: string, raw: string) => {
+        if (storageKey === key && failPrimary) {
+          failPrimary = false;
+          throw new Error("primary deletion failed");
+        }
+        return write(storageKey, raw);
+      },
+    );
+    await expect(store.clear(a)).rejects.toBeInstanceOf(MemoryStoreError);
+    const backup = await store.exportBackup(a);
+    expect(JSON.parse(backup!).entries).toEqual([original]);
+    const added = await store.addMemory(
+      input(laterScope, "later", "new record"),
+    );
+    const persisted = storage.get(key);
+    await expect(store.restoreBackup(a)).rejects.toBeInstanceOf(
+      MemoryStoreError,
+    );
+    expect(storage.get(key)).toBe(persisted);
+    expect(JSON.parse(storage.get(key)!).entries).toEqual(
+      expect.arrayContaining([original, added]),
+    );
+    expect(await store.exportBackup(a)).toBe(backup);
+  },
+);
+
+it("exports older unmarked backups but refuses automatic restoration", async () => {
+  storage.set(key, envelope([], 1));
+  const raw = JSON.stringify({
+    version: 2,
+    scope: a,
+    expectedRevision: 1,
+    entries: [record()],
+  });
+  storage.set(backupKey(), raw);
+  const store = new MemoryStore();
+  expect(await store.exportBackup(a)).toBe(raw);
+  await expect(store.restoreBackup(a)).rejects.toBeInstanceOf(MemoryStoreError);
+  expect(storage.get(key)).toBe(envelope([], 1));
+});
+
+it("validates optional deletion markers in primary state and backups", async () => {
+  const store = new MemoryStore();
+  storage.set(
+    key,
+    JSON.stringify({ ...JSON.parse(envelope()), deletionOperationId: 42 }),
+  );
+  await expect(store.listMemories(a)).rejects.toBeInstanceOf(MemoryStoreError);
+  storage.set(
+    backupKey(),
+    JSON.stringify({
+      version: 2,
+      scope: a,
+      expectedRevision: 1,
+      entries: [],
+      deletionOperationId: "",
+    }),
+  );
+  await expect(store.exportBackup(a)).rejects.toBeInstanceOf(MemoryStoreError);
+});
+
+it("assigns a fresh deletion marker on retry and restores only the committed attempt", async () => {
+  const store = new MemoryStore();
+  await store.addMemory(input());
+  const write = (AsyncStorage.setItem as jest.Mock).getMockImplementation()!;
+  let failPrimary = true;
+  (AsyncStorage.setItem as jest.Mock).mockImplementation(
+    async (k: string, raw: string) => {
+      if (k === key && failPrimary) {
+        failPrimary = false;
+        throw Error("failed");
+      }
+      return write(k, raw);
+    },
+  );
+  await expect(store.clear(a)).rejects.toBeInstanceOf(MemoryStoreError);
+  const failed = JSON.parse((await store.exportBackup(a))!);
+  await store.clear(a);
+  const committed = JSON.parse((await store.exportBackup(a))!);
+  expect(typeof committed.deletionOperationId).toBe("string");
+  expect(committed.deletionOperationId).not.toBe(failed.deletionOperationId);
+  expect(JSON.parse(storage.get(key)!).deletionOperationId).toBe(
+    committed.deletionOperationId,
+  );
+  await store.restoreBackup(a);
+  expect(await store.listMemories(a)).toHaveLength(1);
+});
