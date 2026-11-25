@@ -21,7 +21,11 @@ import {
   type ExecutionSubscriber,
   type RunOutcome,
 } from "@/lib/agent/execution-trace";
-import { MemorySettings } from "@/lib/agent/memory";
+import {
+  MemorySettings,
+  type MemoryScope,
+  validateMemoryScope,
+} from "@/lib/agent/memory";
 import {
   enqueueChatRequest,
   flushQueuedChatRequests,
@@ -67,10 +71,16 @@ export async function sendChatMessage(
     systemPrompt?: string;
     chatPrompt?: string;
     memorySettings?: MemorySettings;
+    memoryScope?: MemoryScope;
+    onMemoryError?: (code: "memory_write_failed") => void;
     onDecision?: (decision: { providerId: string; model: string }) => void;
     onAttachment?: (attachment: MessageAttachment) => void;
   },
 ): Promise<void> {
+  const memoryScope =
+    options?.memoryScope === undefined
+      ? undefined
+      : validateMemoryScope(options.memoryScope);
   const skillContext =
     options?.skillContext === undefined
       ? undefined
@@ -101,6 +111,8 @@ export async function sendChatMessage(
           systemPrompt: options?.systemPrompt,
           chatPrompt: options?.chatPrompt,
           memorySettings: options?.memorySettings,
+          memoryScope,
+          onMemoryError: options?.onMemoryError,
           onDecision: options?.onDecision
             ? (decision) =>
                 options.onDecision?.({
@@ -149,6 +161,7 @@ export async function sendChatMessage(
         mcpEnabled,
         systemPrompt: options.systemPrompt,
         memorySettings: options.memorySettings,
+        ...(memoryScope ? { memoryScope } : {}),
         ...(options.chatPrompt !== undefined
           ? { chatPrompt: options.chatPrompt }
           : {}),
@@ -172,10 +185,29 @@ export async function flushQueuedChatMessages(options: {
   onItemFinish?: () => void;
   onItemError?: (error: any) => void;
   memorySettings?: MemorySettings;
+  memoryScope?: MemoryScope;
+  onMemoryError?: (code: "memory_write_failed") => void;
 }): Promise<{ processed: number; failed: number; remaining: number }> {
+  const memoryScope =
+    options.memoryScope === undefined
+      ? undefined
+      : validateMemoryScope(options.memoryScope);
   const toolPolicy = snapshotToolPolicyOptions(options.toolPolicy);
   return await flushQueuedChatRequests({
-    filter: (item) => !options.chatId || item.payload.chatId === options.chatId,
+    filter: (item) => {
+      if (options.chatId && item.payload.chatId !== options.chatId)
+        return false;
+      if (!memoryScope) return item.payload.memoryScope === undefined;
+      try {
+        const queuedScope = validateMemoryScope(item.payload.memoryScope!);
+        return (
+          queuedScope.accountId === memoryScope.accountId &&
+          queuedScope.chatId === memoryScope.chatId
+        );
+      } catch {
+        return false;
+      }
+    },
     shouldRetry: (error) => !(error instanceof UnsafeChatReplayError),
     handler: async (payload) => {
       let toolExecutionAttempted = false;
@@ -192,6 +224,8 @@ export async function flushQueuedChatMessages(options: {
             systemPrompt: payload.systemPrompt,
             chatPrompt: payload.chatPrompt,
             memorySettings: payload.memorySettings ?? options.memorySettings,
+            memoryScope,
+            onMemoryError: options.onMemoryError,
             onToolExecutionAttempt: () => {
               toolExecutionAttempted = true;
             },

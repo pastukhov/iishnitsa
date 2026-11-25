@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -14,6 +14,7 @@ import {
   StyleProp,
   TextStyle,
   Modal,
+  Share,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialIcons } from "@expo/vector-icons";
@@ -252,6 +253,8 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const {
     settings,
+    currentChatId,
+    chats,
     updateEndpoint,
     updateSettings,
     addMCPServer,
@@ -303,6 +306,35 @@ export default function SettingsScreen() {
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [showSystemPrompt, setShowSystemPrompt] = useState(false);
   const memoryStore = useMemo(() => new MemoryStore(), []);
+  const [memoryQuery, setMemoryQuery] = useState("");
+  const memoryOperation = useRef(0);
+  const memoryAccountId = settings.memoryAccountId.trim();
+  const memoryChatId = chats.some((chat) => chat.id === currentChatId)
+    ? currentChatId
+    : null;
+  const memoryScope =
+    memoryAccountId && memoryChatId
+      ? { accountId: memoryAccountId, chatId: memoryChatId }
+      : undefined;
+  useEffect(() => {
+    memoryOperation.current += 1;
+    setMemoryEntries([]);
+    setMemoryQuery("");
+    setShowMemoryModal(false);
+    setMemoryLoading(false);
+  }, [memoryAccountId, memoryChatId]);
+  const isCurrentMemoryScope = (
+    scope: { accountId: string; chatId: string },
+    operation: number,
+  ) => {
+    const state = useChatStore.getState();
+    return (
+      memoryOperation.current === operation &&
+      state.settings.memoryAccountId.trim() === scope.accountId &&
+      state.currentChatId === scope.chatId &&
+      state.chats.some((chat) => chat.id === scope.chatId)
+    );
+  };
   const systemPromptHeight = useMemo(
     () => Math.max(120, Math.floor(Dimensions.get("window").height / 3)),
     [],
@@ -652,34 +684,75 @@ export default function SettingsScreen() {
   };
 
   const handleViewMemories = async () => {
+    if (!memoryScope) return;
+    const scope = { ...memoryScope };
+    const operation = ++memoryOperation.current;
     setMemoryLoading(true);
     try {
-      const entries = await memoryStore.listMemories();
+      const entries = memoryQuery.trim()
+        ? await memoryStore.searchMemories(scope, memoryQuery.trim())
+        : await memoryStore.listMemories(scope);
+      if (!isCurrentMemoryScope(scope, operation)) return;
       setMemoryEntries(entries);
       setShowMemoryModal(true);
+    } catch {
+      if (isCurrentMemoryScope(scope, operation))
+        Alert.alert("Memory unavailable", "Could not load memories.");
     } finally {
-      setMemoryLoading(false);
+      if (isCurrentMemoryScope(scope, operation)) setMemoryLoading(false);
     }
   };
 
   const handleClearMemories = async () => {
-    const savedEntries = [...memoryEntries];
-    await memoryStore.clear();
-    setMemoryEntries([]);
-    setShowMemoryModal(false);
-    Toast.show({
-      type: "info",
-      text1: t.memoriesCleared,
-      text2: t.tapToUndo,
-      visibilityTime: 5000,
-      onPress: async () => {
-        for (const entry of savedEntries) {
-          await memoryStore.addMemory(entry);
-        }
-        setMemoryEntries(savedEntries);
-        Toast.hide();
-      },
-    });
+    if (!memoryScope) return;
+    const scope = { ...memoryScope };
+    const operation = ++memoryOperation.current;
+    setMemoryLoading(true);
+    try {
+      await memoryStore.clear(scope);
+      if (!isCurrentMemoryScope(scope, operation)) return;
+      setMemoryEntries([]);
+      setShowMemoryModal(false);
+      Toast.show({
+        type: "info",
+        text1: t.memoriesCleared,
+        text2: "A backup was created for this account and chat.",
+      });
+    } catch {
+      if (isCurrentMemoryScope(scope, operation))
+        Alert.alert(
+          "Memory unavailable",
+          "Could not clear memories. Please try again.",
+        );
+    } finally {
+      if (isCurrentMemoryScope(scope, operation)) setMemoryLoading(false);
+    }
+  };
+
+  const handleExportMemories = async (backup = false) => {
+    if (!memoryScope) return;
+    const scope = { ...memoryScope };
+    const operation = ++memoryOperation.current;
+    setMemoryLoading(true);
+    try {
+      const content = backup
+        ? await memoryStore.exportBackup(scope)
+        : await memoryStore.exportMemories(scope);
+      if (!isCurrentMemoryScope(scope, operation)) return;
+      if (!content) {
+        Alert.alert("No backup", "No backup exists for this account and chat.");
+        return;
+      }
+      await Share.share({
+        message: content,
+        title: backup ? "Memory backup" : "Memory export",
+      });
+    } catch {
+      if (isCurrentMemoryScope(scope, operation))
+        Alert.alert("Memory unavailable", "Could not export memories.");
+    } finally {
+      if (isCurrentMemoryScope(scope, operation)) setMemoryLoading(false);
+    }
   };
 
   const formatMemoryTimestamp = (entry: MemoryEntry) => {
@@ -1347,9 +1420,26 @@ export default function SettingsScreen() {
           <View
             style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
           >
+            <InputField
+              label="Memory account ID"
+              value={settings.memoryAccountId}
+              onChangeText={(memoryAccountId) =>
+                updateSettings({ memoryAccountId })
+              }
+              placeholder="Choose a local account namespace"
+            />
+            <ThemedText
+              style={[styles.helperText, { color: theme.textSecondary }]}
+            >
+              This ID is a local memory namespace, not authentication. Memory
+              belongs to this account and the selected chat.
+              {!memoryScope
+                ? " Enter an account ID and select a chat to use memory."
+                : ""}
+            </ThemedText>
             <ToggleRow
               label="Enable memory"
-              description="Store key facts and summaries for future chats"
+              description="Store key facts and summaries for this account and chat"
               value={settings.memoryEnabled}
               onValueChange={(value) =>
                 updateSettings({ memoryEnabled: value })
@@ -1403,10 +1493,16 @@ export default function SettingsScreen() {
                   placeholder="0.5"
                   keyboardType="decimal-pad"
                 />
+                <InputField
+                  label="Search current chat memories"
+                  value={memoryQuery}
+                  onChangeText={setMemoryQuery}
+                  placeholder="Search text"
+                />
                 <View style={styles.memoryActions}>
                   <Pressable
                     onPress={handleViewMemories}
-                    disabled={memoryLoading}
+                    disabled={memoryLoading || !memoryScope}
                     style={({ pressed }) => [
                       styles.memoryActionButton,
                       {
@@ -1430,6 +1526,7 @@ export default function SettingsScreen() {
                   </Pressable>
                   <Pressable
                     onPress={handleClearMemories}
+                    disabled={memoryLoading || !memoryScope}
                     style={({ pressed }) => [
                       styles.memoryClearButton,
                       {
@@ -1446,6 +1543,24 @@ export default function SettingsScreen() {
                     <ThemedText style={{ color: theme.error }}>
                       Clear memory
                     </ThemedText>
+                  </Pressable>
+                </View>
+                <View style={styles.memoryActions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={memoryLoading || !memoryScope}
+                    onPress={() => handleExportMemories()}
+                    style={styles.memoryActionButton}
+                  >
+                    <ThemedText>Export current memories</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={memoryLoading || !memoryScope}
+                    onPress={() => handleExportMemories(true)}
+                    style={styles.memoryActionButton}
+                  >
+                    <ThemedText>Export clear backup</ThemedText>
                   </Pressable>
                 </View>
               </>

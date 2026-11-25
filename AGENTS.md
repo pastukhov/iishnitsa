@@ -48,6 +48,8 @@
 
 ## Testing Guidelines
 
+- `npm test -- --runInBand client/lib/agent/__tests__/memory.test.ts client/lib/__tests__/memory-scope.test.ts`: verify scoped memory, provenance, concurrent storage, migration/backup/rollback and real chat/queue boundaries using fictitious data; included in `check:required`. See `docs/memory-storage.md` for recovery limits.
+
 - `npm test -- --runInBand client/lib/__tests__/skill-registry.test.ts client/lib/__tests__/skill-activation.test.ts client/lib/__tests__/store.test.ts`: verify local SKILL.md validation/budgets, session-bound activation through real chat, revocation and no implicit system/queue/memory promotion. Uses fictitious text and transports; included in `check:required`.
 
 - `npm test -- --runInBand client/lib/agent/__tests__/tool-policy.test.ts client/lib/__tests__/tool-policy-integration.test.ts client/lib/__tests__/tool-dispatch.test.ts client/lib/__tests__/mcp-prompts.test.ts client/lib/__tests__/mcp-replay.test.ts`: verify trusted tool registry, one-shot confirmation, fail-closed built-in/MCP dispatch, direct UI/catalogue paths and replay safety using fake transports. Included in `check:required`.

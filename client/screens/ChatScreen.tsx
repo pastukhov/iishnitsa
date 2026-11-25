@@ -23,6 +23,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, DrawerActions } from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
+import Toast from "react-native-toast-message";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
@@ -38,6 +39,7 @@ import {
   useChatStore,
   Message,
   MessageAttachment,
+  EndpointConfig,
   getEffectiveSystemPrompt,
 } from "@/lib/store";
 import {
@@ -270,6 +272,14 @@ function EmptyState() {
   );
 }
 
+function notifyMemoryWriteFailure() {
+  Toast.show({
+    type: "info",
+    text1: "Memory could not be saved.",
+    text2: "Your reply is unaffected.",
+  });
+}
+
 export default function ChatScreen() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -353,66 +363,69 @@ export default function ChatScreen() {
     settings.endpoint.model,
     settings.endpoint.providerId,
   ]);
-  const resolveEndpointForRequest = useCallback(async () => {
-    if (!resolvedBaseUrl) {
-      return {
-        error:
-          settings.endpoint.providerId === "custom"
-            ? "Please configure the Base URL in Settings first."
-            : "Please configure your API endpoint in Settings first.",
-      };
-    }
-
-    if (requiresApiKey && !settings.endpoint.apiKey) {
-      return {
-        error: "Please configure your API key in Settings first.",
-      };
-    }
-
-    if (settings.endpoint.model) {
-      return { endpoint: settings.endpoint };
-    }
-
-    if (settings.endpoint.providerId !== "custom") {
-      return { endpoint: settings.endpoint };
-    }
-
-    setModelsLoading(true);
-    try {
-      const result = await testConnection(settings.endpoint);
-      if (!result.success) {
-        return {
-          error: result.message || "Unable to detect models from the server.",
-        };
-      }
-
-      if (!result.models || result.models.length === 0) {
+  const resolveEndpointForRequest = useCallback(
+    async (endpoint: EndpointConfig) => {
+      const requestBaseUrl =
+        endpoint.providerId === "custom"
+          ? endpoint.baseUrl.trim()
+          : getProviderConfig(endpoint.providerId).baseUrl;
+      const requestRequiresApiKey = providerRequiresApiKey(endpoint.providerId);
+      if (!requestBaseUrl) {
         return {
           error:
-            "No models were returned by the server. Enter a model manually in Settings.",
+            endpoint.providerId === "custom"
+              ? "Please configure the Base URL in Settings first."
+              : "Please configure your API endpoint in Settings first.",
         };
       }
 
-      const detectedModel = result.models[0];
-      setModelOptions(result.models);
-      updateEndpoint({ model: detectedModel });
-      return {
-        endpoint: {
-          ...settings.endpoint,
-          model: detectedModel,
-        },
-      };
-    } finally {
-      setModelsLoading(false);
-    }
-  }, [requiresApiKey, resolvedBaseUrl, settings.endpoint, updateEndpoint]);
-  const selectedPrompt = useMemo(() => {
-    if (!currentChat) return null;
-    if (currentChat.promptSelection !== "preset" || !currentChat.promptId) {
-      return null;
-    }
-    return getPromptById(currentChat.promptId) || null;
-  }, [currentChat]);
+      if (requestRequiresApiKey && !endpoint.apiKey) {
+        return {
+          error: "Please configure your API key in Settings first.",
+        };
+      }
+
+      if (endpoint.model) {
+        return { endpoint: endpoint };
+      }
+
+      if (endpoint.providerId !== "custom") {
+        return { endpoint: endpoint };
+      }
+
+      setModelsLoading(true);
+      try {
+        const result = await testConnection(endpoint);
+        if (!result.success) {
+          return {
+            error: result.message || "Unable to detect models from the server.",
+          };
+        }
+
+        if (!result.models || result.models.length === 0) {
+          return {
+            error:
+              "No models were returned by the server. Enter a model manually in Settings.",
+          };
+        }
+
+        const detectedModel = result.models[0];
+        if (useChatStore.getState().settings.endpoint === endpoint) {
+          setModelOptions(result.models);
+          updateEndpoint({ model: detectedModel });
+        }
+        return {
+          endpoint: {
+            ...endpoint,
+            model: detectedModel,
+          },
+        };
+      } finally {
+        setModelsLoading(false);
+      }
+    },
+    [updateEndpoint],
+  );
   const memorySummaryEnabled = currentChat?.memorySummaryEnabled ?? true;
 
   useEffect(() => {
@@ -433,12 +446,29 @@ export default function ChatScreen() {
   useEffect(() => {
     const flushQueued = async () => {
       if (!currentChat?.id || isStreaming || !isOnline) return;
+      const requestChatId = currentChat.id;
+      const requestAccountId = settings.memoryAccountId.trim();
+      const isCurrentRequest = () => {
+        const state = useChatStore.getState();
+        return (
+          state.currentChatId === requestChatId &&
+          state.settings.memoryAccountId.trim() === requestAccountId
+        );
+      };
       await flushQueuedChatMessages({
         chatId: currentChat.id,
+        onMemoryError: notifyMemoryWriteFailure,
+        memoryScope: settings.memoryAccountId.trim()
+          ? {
+              accountId: settings.memoryAccountId.trim(),
+              chatId: currentChat.id,
+            }
+          : undefined,
         onChunk: (chunk) => {
-          updateLastAssistantMessage(chunk);
+          if (isCurrentRequest()) updateLastAssistantMessage(chunk);
         },
         onItemStart: () => {
+          if (!isCurrentRequest()) return;
           addMessage({ role: "assistant", content: "" });
           setIsStreaming(true);
         },
@@ -446,6 +476,7 @@ export default function ChatScreen() {
           setIsStreaming(false);
         },
         onItemError: (error: any) => {
+          if (!isCurrentRequest()) return;
           updateLastAssistantMessage(
             `Error: ${error?.message || "Failed to get response from AI"}`,
           );
@@ -470,6 +501,7 @@ export default function ChatScreen() {
     addMessage,
     updateLastAssistantMessage,
     setIsStreaming,
+    settings.memoryAccountId,
     settings.memoryEnabled,
     settings.memoryAutoSave,
     settings.memoryAutoSummary,
@@ -506,6 +538,9 @@ export default function ChatScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
+    const initialState = useChatStore.getState();
+    const requestSettings = initialState.settings;
+    if (!initialState.getCurrentChat()) initialState.createNewChat();
     const attachmentsToSend = [...pendingAttachments];
     setInputText("");
     setPendingAttachments([]);
@@ -515,7 +550,32 @@ export default function ChatScreen() {
       attachments: hasAttachments ? attachmentsToSend : undefined,
     });
 
-    const resolution = await resolveEndpointForRequest();
+    const requestChat = useChatStore.getState().getCurrentChat();
+    if (!requestChat) return;
+    // Capture persisted message IDs before appending the assistant placeholder.
+    const allMessages = [...requestChat.messages];
+    const requestChatPrompt =
+      requestChat.promptSelection === "preset" && requestChat.promptId
+        ? getPromptById(requestChat.promptId)?.prompt
+        : undefined;
+    const isCurrentRequest = () => {
+      const state = useChatStore.getState();
+      return (
+        state.currentChatId === requestChat.id &&
+        state.settings.memoryAccountId.trim() ===
+          requestSettings.memoryAccountId.trim()
+      );
+    };
+    const updateRequestMessage = (
+      content: string,
+      attachments?: MessageAttachment[],
+    ) => {
+      if (isCurrentRequest()) updateLastAssistantMessage(content, attachments);
+    };
+    const resolution = await resolveEndpointForRequest(
+      requestSettings.endpoint,
+    );
+    if (!isCurrentRequest()) return;
     if (!resolution.endpoint) {
       addMessage({
         role: "assistant",
@@ -535,65 +595,65 @@ export default function ChatScreen() {
 
     try {
       if (isImageGen && text) {
-        updateLastAssistantMessage("Generating image...");
+        updateRequestMessage("Generating image...");
         const result = await requestImageGeneration(requestEndpoint, text);
         const caption = result.revisedPrompt ? result.revisedPrompt : "";
-        updateLastAssistantMessage(caption, [result.attachment]);
+        updateRequestMessage(caption, [result.attachment]);
       } else {
-        const allMessages = [
-          ...messages,
-          {
-            id: "temp",
-            role: "user" as const,
-            content: text,
-            timestamp: new Date().toISOString(),
-            attachments: hasAttachments ? attachmentsToSend : undefined,
-          },
-        ];
-
         let currentContent = "";
         await sendChatMessage(
           allMessages,
           requestEndpoint,
           (chunk) => {
             currentContent = chunk;
-            updateLastAssistantMessage(chunk);
+            updateRequestMessage(chunk);
           },
-          settings.mcpServers,
-          settings.mcpEnabled,
+          requestSettings.mcpServers,
+          requestSettings.mcpEnabled,
           {
             queueOnFailure: true,
-            chatId: currentChat?.id,
+            chatId: requestChat.id,
+            onMemoryError: notifyMemoryWriteFailure,
+            memoryScope:
+              requestSettings.memoryAccountId.trim() && requestChat.id
+                ? {
+                    accountId: requestSettings.memoryAccountId.trim(),
+                    chatId: requestChat.id,
+                  }
+                : undefined,
             onQueued: () => {
-              updateLastAssistantMessage(
+              updateRequestMessage(
                 "Queued. Will retry when you're back online.",
               );
             },
             onDecision: (decision) => {
+              if (!isCurrentRequest()) return;
               setLastDecision({
                 providerId: decision.providerId,
                 model: decision.model,
               });
             },
             onAttachment: (attachment) => {
-              updateLastAssistantMessage(currentContent, [attachment]);
+              updateRequestMessage(currentContent, [attachment]);
             },
-            systemPrompt: getEffectiveSystemPrompt(settings),
+            systemPrompt: getEffectiveSystemPrompt(requestSettings),
             memorySettings: {
-              enabled: settings.memoryEnabled,
-              autoSave: settings.memoryAutoSave,
+              enabled: requestSettings.memoryEnabled,
+              autoSave: requestSettings.memoryAutoSave,
               autoSummary:
-                settings.memoryAutoSummary && Boolean(memorySummaryEnabled),
-              limit: settings.memoryLimit,
-              minImportance: settings.memoryMinImportance,
-              summaryTtlMs: settings.memorySummaryTtlDays * 24 * 60 * 60 * 1000,
+                requestSettings.memoryAutoSummary &&
+                Boolean(requestChat.memorySummaryEnabled ?? true),
+              limit: requestSettings.memoryLimit,
+              minImportance: requestSettings.memoryMinImportance,
+              summaryTtlMs:
+                requestSettings.memorySummaryTtlDays * 24 * 60 * 60 * 1000,
             },
-            chatPrompt: selectedPrompt?.prompt,
+            chatPrompt: requestChatPrompt,
           },
         );
       }
     } catch (error: any) {
-      updateLastAssistantMessage(
+      updateRequestMessage(
         `Error: ${error.message || "Failed to get response from AI"}`,
       );
     } finally {
@@ -603,14 +663,9 @@ export default function ChatScreen() {
     inputText,
     pendingAttachments,
     isStreaming,
-    messages,
-    currentChat?.id,
-    settings,
     addMessage,
     updateLastAssistantMessage,
     setIsStreaming,
-    selectedPrompt?.prompt,
-    memorySummaryEnabled,
     autoResolvedModel,
     resolveEndpointForRequest,
   ]);
@@ -644,8 +699,31 @@ export default function ChatScreen() {
     async (messageIndex: number) => {
       if (isStreaming) return;
 
-      // Find the last user message before this AI message
-      const lastUserMsg = messages
+      const state = useChatStore.getState();
+      const requestSettings = state.settings;
+      const requestChat = state.getCurrentChat();
+      if (!requestChat) return;
+      const requestChatPrompt =
+        requestChat.promptSelection === "preset" && requestChat.promptId
+          ? getPromptById(requestChat.promptId)?.prompt
+          : undefined;
+      const isCurrentRequest = () => {
+        const latest = useChatStore.getState();
+        return (
+          latest.currentChatId === requestChat.id &&
+          latest.settings.memoryAccountId.trim() ===
+            requestSettings.memoryAccountId.trim()
+        );
+      };
+      const updateRequestMessage = (
+        content: string,
+        attachments?: MessageAttachment[],
+      ) => {
+        if (isCurrentRequest())
+          updateLastAssistantMessage(content, attachments);
+      };
+      // Reuse the original persisted user ID for regeneration.
+      const lastUserMsg = requestChat.messages
         .slice(0, messageIndex)
         .reverse()
         .find((m) => m.role === "user");
@@ -654,7 +732,10 @@ export default function ChatScreen() {
       // Delete the AI message and everything after it
       deleteMessagesFromIndex(messageIndex);
 
-      const resolution = await resolveEndpointForRequest();
+      const resolution = await resolveEndpointForRequest(
+        requestSettings.endpoint,
+      );
+      if (!isCurrentRequest()) return;
       if (!resolution.endpoint) {
         addMessage({
           role: "assistant",
@@ -674,59 +755,69 @@ export default function ChatScreen() {
 
       try {
         if (isImageGen && lastUserMsg.content) {
-          updateLastAssistantMessage("Generating image...");
+          updateRequestMessage("Generating image...");
           const result = await requestImageGeneration(
             requestEndpoint,
             lastUserMsg.content,
           );
           const caption = result.revisedPrompt ? result.revisedPrompt : "";
-          updateLastAssistantMessage(caption, [result.attachment]);
+          updateRequestMessage(caption, [result.attachment]);
         } else {
-          const allMessages = messages.slice(0, messageIndex);
+          const allMessages = requestChat.messages.slice(0, messageIndex);
           let currentContent = "";
           await sendChatMessage(
             allMessages,
             requestEndpoint,
             (chunk) => {
               currentContent = chunk;
-              updateLastAssistantMessage(chunk);
+              updateRequestMessage(chunk);
             },
-            settings.mcpServers,
-            settings.mcpEnabled,
+            requestSettings.mcpServers,
+            requestSettings.mcpEnabled,
             {
               queueOnFailure: true,
-              chatId: currentChat?.id,
+              chatId: requestChat.id,
+              onMemoryError: notifyMemoryWriteFailure,
+              memoryScope:
+                requestSettings.memoryAccountId.trim() && requestChat.id
+                  ? {
+                      accountId: requestSettings.memoryAccountId.trim(),
+                      chatId: requestChat.id,
+                    }
+                  : undefined,
               onQueued: () => {
-                updateLastAssistantMessage(
+                updateRequestMessage(
                   "Queued. Will retry when you're back online.",
                 );
               },
               onDecision: (decision) => {
+                if (!isCurrentRequest()) return;
                 setLastDecision({
                   providerId: decision.providerId,
                   model: decision.model,
                 });
               },
               onAttachment: (attachment) => {
-                updateLastAssistantMessage(currentContent, [attachment]);
+                updateRequestMessage(currentContent, [attachment]);
               },
-              systemPrompt: getEffectiveSystemPrompt(settings),
+              systemPrompt: getEffectiveSystemPrompt(requestSettings),
               memorySettings: {
-                enabled: settings.memoryEnabled,
-                autoSave: settings.memoryAutoSave,
+                enabled: requestSettings.memoryEnabled,
+                autoSave: requestSettings.memoryAutoSave,
                 autoSummary:
-                  settings.memoryAutoSummary && Boolean(memorySummaryEnabled),
-                limit: settings.memoryLimit,
-                minImportance: settings.memoryMinImportance,
+                  requestSettings.memoryAutoSummary &&
+                  Boolean(requestChat.memorySummaryEnabled ?? true),
+                limit: requestSettings.memoryLimit,
+                minImportance: requestSettings.memoryMinImportance,
                 summaryTtlMs:
-                  settings.memorySummaryTtlDays * 24 * 60 * 60 * 1000,
+                  requestSettings.memorySummaryTtlDays * 24 * 60 * 60 * 1000,
               },
-              chatPrompt: selectedPrompt?.prompt,
+              chatPrompt: requestChatPrompt,
             },
           );
         }
       } catch (error: any) {
-        updateLastAssistantMessage(
+        updateRequestMessage(
           `Error: ${error.message || "Failed to get response from AI"}`,
         );
       } finally {
@@ -735,15 +826,10 @@ export default function ChatScreen() {
     },
     [
       isStreaming,
-      messages,
       deleteMessagesFromIndex,
-      settings,
       addMessage,
       updateLastAssistantMessage,
       setIsStreaming,
-      currentChat?.id,
-      selectedPrompt?.prompt,
-      memorySummaryEnabled,
       autoResolvedModel,
       resolveEndpointForRequest,
     ],

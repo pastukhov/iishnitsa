@@ -1,7 +1,7 @@
 import { EndpointConfig, Message, MessageAttachment } from "@/lib/store";
 import { getImageDataUrl } from "@/lib/image-utils";
 import { ChatCompletionMessage, ContentPart } from "@/lib/agent/types";
-import { MemoryEntry, MemoryStore } from "@/lib/agent/memory";
+import { MemoryEntry, MemoryStore, type MemoryScope } from "@/lib/agent/memory";
 
 interface ContextBuildInput {
   messages: Message[];
@@ -10,6 +10,7 @@ interface ContextBuildInput {
   systemPrompt?: string;
   chatPrompt?: string;
   memoryStore?: MemoryStore;
+  memoryScope?: MemoryScope;
   memoryLimit?: number;
   memoryMinImportance?: number;
 }
@@ -42,8 +43,14 @@ async function buildMultimodalContent(
 }
 
 function formatMemory(entries: MemoryEntry[]): string {
-  const lines = entries.map((entry) => `- (${entry.type}) ${entry.content}`);
-  return `Relevant memory:\n${lines.join("\n")}`;
+  return JSON.stringify({
+    type: "untrusted_memory_reference",
+    memories: entries.map(({ type, content, provenance }) => ({
+      type,
+      content,
+      provenance,
+    })),
+  });
 }
 
 async function buildConversationMessages(
@@ -79,6 +86,7 @@ export async function buildAgentContext({
   chatPrompt,
   untrustedSkillContext,
   memoryStore,
+  memoryScope,
   memoryLimit,
   memoryMinImportance,
 }: ContextBuildInput): Promise<ChatCompletionMessage[]> {
@@ -98,14 +106,15 @@ export async function buildAgentContext({
     });
   }
 
-  if (memoryStore) {
+  if (memoryStore && memoryScope) {
     const memories = await memoryStore.getRelevantMemories({
+      scope: memoryScope,
       limit: memoryLimit ?? 8,
       minImportance: memoryMinImportance ?? 0.5,
     });
     if (memories.length > 0) {
       chatMessages.push({
-        role: "system",
+        role: "user",
         content: formatMemory(memories),
       });
     }

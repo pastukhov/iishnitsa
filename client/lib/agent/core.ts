@@ -23,7 +23,13 @@ import {
   MCPToolResult,
 } from "@/lib/mcp-client";
 import { buildAgentContext } from "@/lib/agent/context-manager";
-import { MemorySettings, MemoryStore, MemoryType } from "@/lib/agent/memory";
+import {
+  MemorySettings,
+  MemoryStore,
+  MemoryType,
+  type MemoryScope,
+  validateMemoryScope,
+} from "@/lib/agent/memory";
 import {
   AgentState,
   AgentDecision,
@@ -97,6 +103,8 @@ interface AgentRunInput {
   onAttachment?: (attachment: MessageAttachment) => void;
   onToolExecutionAttempt?: () => void;
   onLifecycleEvent?: AgentLifecycleSubscriber;
+  memoryScope?: MemoryScope;
+  onMemoryError?: (code: "memory_write_failed") => void;
   skillContext?: SkillContextOptions;
   toolPolicy?: ToolPolicyOptions;
   trace?: AttemptTrace;
@@ -167,6 +175,10 @@ export class AgentCore {
   }
 
   async runChat(input: AgentRunInput): Promise<void> {
+    const memoryScope =
+      input.memoryScope === undefined
+        ? undefined
+        : validateMemoryScope(input.memoryScope);
     const skillContext =
       input.skillContext === undefined
         ? undefined
@@ -178,7 +190,7 @@ export class AgentCore {
     lifecycle.start();
     try {
       await this.executeChat(
-        { ...input, skillContext },
+        { ...input, skillContext, memoryScope },
         lifecycle.enter,
         policy,
       );
@@ -205,6 +217,8 @@ export class AgentCore {
       systemPrompt,
       chatPrompt,
       skillContext,
+      memoryScope,
+      onMemoryError,
     }: AgentRunInput,
     enterState: ReturnType<typeof createAgentLifecycle>["enter"],
     policy: ReturnType<typeof createToolExecutionPolicy>,
@@ -239,8 +253,9 @@ export class AgentCore {
               systemPrompt,
               chatPrompt,
               untrustedSkillContext: resolveSkillContext(skillContext),
+              memoryScope,
               memoryStore:
-                this.memoryEnabled && !skillContext
+                this.memoryEnabled && !skillContext && memoryScope
                   ? this.memoryStore
                   : undefined,
               memoryLimit: this.memoryEnabled ? this.memoryLimit : undefined,
@@ -349,10 +364,17 @@ export class AgentCore {
       }
     }
 
-    if (!skillContext && this.memoryEnabled && context.lastAssistantMessage) {
+    if (
+      !skillContext &&
+      memoryScope &&
+      this.memoryEnabled &&
+      context.lastAssistantMessage
+    ) {
       await this.persistMemories({
         messages: context.rawMessages,
         assistantMessage: context.lastAssistantMessage,
+        memoryScope,
+        onMemoryError,
         endpoint,
         trace,
       });
@@ -646,13 +668,26 @@ export class AgentCore {
     assistantMessage,
     endpoint,
     trace,
+    memoryScope,
+    onMemoryError,
   }: {
     messages: Message[];
     assistantMessage: string;
+    memoryScope: MemoryScope;
+    onMemoryError?: (code: "memory_write_failed") => void;
     endpoint: EndpointConfig;
     trace?: AttemptTrace;
   }): Promise<void> {
     if (!this.memoryAutoSave && !this.memoryAutoSummary) return;
+    const sourceId = this.getLatestUserMessage(messages)?.id;
+    if (!sourceId) return;
+    const reportWriteFailure = () => {
+      try {
+        onMemoryError?.("memory_write_failed");
+      } catch {
+        /* Observers cannot trigger chat replay. */
+      }
+    };
 
     if (this.memoryAutoSave) {
       const lastUserMessage = this.getLatestUserMessage(messages);
@@ -661,12 +696,15 @@ export class AgentCore {
         if (memory) {
           try {
             await this.memoryStore.addMemory({
+              scope: memoryScope,
+              provenance: { source: "explicit", sourceId },
+              id: `explicit:${sourceId}`,
               type: memory.type,
               content: memory.content,
               importance: 0.9,
             });
           } catch {
-            console.warn("Failed to store explicit memory");
+            reportWriteFailure();
           }
         }
       }
@@ -682,13 +720,16 @@ export class AgentCore {
       if (summary) {
         try {
           await this.memoryStore.addMemory({
+            scope: memoryScope,
+            provenance: { source: "summary", sourceId },
+            id: `summary:${sourceId}`,
             type: "task",
             content: summary,
             importance: 0.6,
             ttlMs: this.memorySummaryTtlMs,
           });
         } catch {
-          console.warn("Failed to store summary memory");
+          reportWriteFailure();
         }
       }
     }
@@ -709,6 +750,8 @@ export async function runAgentChat(
     onAttachment?: (attachment: MessageAttachment) => void;
     onToolExecutionAttempt?: () => void;
     onLifecycleEvent?: AgentLifecycleSubscriber;
+    memoryScope?: MemoryScope;
+    onMemoryError?: (code: "memory_write_failed") => void;
     skillContext?: SkillContextOptions;
     toolPolicy?: ToolPolicyOptions;
     trace?: AttemptTrace;
@@ -739,6 +782,8 @@ export async function runAgentChat(
     onAttachment: options?.onAttachment,
     onToolExecutionAttempt: options?.onToolExecutionAttempt,
     onLifecycleEvent: options?.onLifecycleEvent,
+    memoryScope: options?.memoryScope,
+    onMemoryError: options?.onMemoryError,
     skillContext: options?.skillContext,
     toolPolicy: options?.toolPolicy,
     trace: options?.trace,

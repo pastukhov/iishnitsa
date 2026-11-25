@@ -80,6 +80,7 @@ export interface Settings {
   mcpEnabled: boolean;
   skills: Skill[];
   theme: "light" | "dark" | "system";
+  memoryAccountId: string;
   memoryEnabled: boolean;
   memoryAutoSave: boolean;
   memoryAutoSummary: boolean;
@@ -247,6 +248,7 @@ const defaultSettings: Settings = {
   mcpEnabled: true,
   skills: [],
   theme: "system",
+  memoryAccountId: "",
   memoryEnabled: true,
   memoryAutoSave: true,
   memoryAutoSummary: false,
@@ -273,6 +275,8 @@ const migrateSettings = (
 ): Settings => {
   const { mcpCollections, activeMcpCollectionId, chatOptionsVisible, ...rest } =
     settings;
+
+  if (typeof rest.memoryAccountId !== "string") rest.memoryAccountId = "";
 
   // Add prompts.chat MCP server if not present
   const hasPromptsChat = rest.mcpServers?.some(
