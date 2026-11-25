@@ -1,3 +1,4 @@
+import { jsonResponse } from "./fixtures/http-response";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { sendChatMessage } from "../api";
 import { MemoryStore } from "../agent/memory";
@@ -56,13 +57,6 @@ function send(events: ExecutionEvent[], toolPolicy?: ToolPolicyOptions) {
     onExecutionEvent: (event) => events.push(event),
   });
 }
-const jsonResponse = (body: unknown, status = 200) => ({
-  ok: status < 400,
-  status,
-  headers: new Map(),
-  body: null,
-  text: async () => JSON.stringify(body),
-});
 beforeEach(() => {
   server = {
     id: "fake-mcp",
