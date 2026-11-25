@@ -1,4 +1,9 @@
 import {
+  cancellable,
+  combineRunSignals,
+  throwIfCancelled,
+} from "@/lib/runtime/cancellation";
+import {
   resolveSkillContext,
   type SkillContextOptions,
 } from "@/lib/skill-registry";
@@ -45,7 +50,6 @@ import {
 } from "@/lib/agent/lifecycle";
 import { OpenAICompatibleDriver } from "@/lib/agent/openai-driver";
 import { decideAgentAction } from "@/lib/agent/decision-engine";
-import { generateImage } from "@/lib/image-generation";
 
 const BUILTIN_IMAGE_TOOL: OpenAIFunction = {
   type: "function",
@@ -97,6 +101,7 @@ const SUMMARY_MAX_MESSAGES = 12;
 const SUMMARY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 interface AgentRunInput {
+  signal?: AbortSignal;
   messages: Message[];
   endpoint: EndpointConfig;
   onChunk: (content: string) => void;
@@ -176,6 +181,7 @@ export class AgentCore {
   }
 
   async runChat(input: AgentRunInput): Promise<void> {
+    throwIfCancelled(input.signal);
     const memoryScope =
       input.memoryScope === undefined
         ? undefined
@@ -187,19 +193,39 @@ export class AgentCore {
     resolveSkillContext(skillContext);
     const lifecycle = createAgentLifecycle(this.lifecycle);
     if (input.onLifecycleEvent) lifecycle.subscribe(input.onLifecycleEvent);
-    const policy = createToolExecutionPolicy(input.toolPolicy);
+    const combined = combineRunSignals(input.signal, input.toolPolicy?.signal);
+    const policy = createToolExecutionPolicy(
+      input.toolPolicy
+        ? { ...input.toolPolicy, signal: combined.signal }
+        : undefined,
+    );
     lifecycle.start();
     try {
-      await this.executeChat(
-        { ...input, skillContext, memoryScope },
-        lifecycle.enter,
-        policy,
+      await cancellable(
+        this.executeChat(
+          {
+            ...input,
+            skillContext,
+            memoryScope,
+            onChunk: (chunk) => {
+              throwIfCancelled(input.signal);
+              input.onChunk(chunk);
+              throwIfCancelled(input.signal);
+            },
+          },
+          lifecycle.enter,
+          policy,
+        ),
+        input.signal,
       );
+      throwIfCancelled(input.signal);
     } catch (error) {
       lifecycle.finish("failed");
+      throwIfCancelled(input.signal);
       throw error;
     } finally {
       policy.close();
+      combined.close();
     }
     lifecycle.finish("completed");
   }
@@ -208,6 +234,7 @@ export class AgentCore {
     {
       messages,
       endpoint,
+      signal,
       onChunk,
       onDecision,
       onAttachment,
@@ -240,7 +267,9 @@ export class AgentCore {
     let decisionEmitted = false;
 
     while (state !== "IDLE") {
+      throwIfCancelled(signal);
       enterState(state);
+      throwIfCancelled(signal);
       switch (state) {
         case "RECEIVE_INPUT": {
           state = "BUILD_CONTEXT";
@@ -264,6 +293,7 @@ export class AgentCore {
                 ? this.memoryMinImportance
                 : undefined,
             });
+            throwIfCancelled(signal);
             context.contextBuilt = true;
           }
 
@@ -271,7 +301,9 @@ export class AgentCore {
             const { tools, mcpToolsMap } = await this.loadTools(
               mcpServers,
               mcpEnabled,
+              signal,
             );
+            throwIfCancelled(signal);
             context.tools = tools;
             context.mcpToolsMap = mcpToolsMap;
             context.toolsLoaded = true;
@@ -303,6 +335,7 @@ export class AgentCore {
           const decisionTools =
             context.decision?.toolChoice === "auto" ? context.tools : [];
           const { fullContent, toolCalls } = await this.driver.streamChat({
+            signal,
             endpoint,
             messages: context.chatMessages,
             tools: decisionTools,
@@ -318,6 +351,7 @@ export class AgentCore {
               : {}),
           });
 
+          throwIfCancelled(signal);
           if (toolCalls.length === 0) {
             context.lastAssistantMessage = fullContent || "";
             state = "IDLE";
@@ -346,7 +380,9 @@ export class AgentCore {
             onAttachment,
             onToolExecutionAttempt,
             trace,
+            signal,
           );
+          throwIfCancelled(signal);
           state = "UPDATE_STATE";
           break;
         }
@@ -365,6 +401,7 @@ export class AgentCore {
       }
     }
 
+    throwIfCancelled(signal);
     if (
       !skillContext &&
       memoryScope &&
@@ -376,6 +413,7 @@ export class AgentCore {
         assistantMessage: context.lastAssistantMessage,
         memoryScope,
         onMemoryError,
+        signal,
         endpoint,
         trace,
       });
@@ -385,6 +423,7 @@ export class AgentCore {
   private async loadTools(
     servers: MCPServer[],
     enabled: boolean,
+    signal?: AbortSignal,
   ): Promise<{
     tools: OpenAIFunction[];
     mcpToolsMap: Map<
@@ -408,8 +447,10 @@ export class AgentCore {
     }
 
     try {
-      const { tools: fetchedTools, errors } =
-        await getToolsFromServers(enabledServers);
+      const { tools: fetchedTools, errors } = await getToolsFromServers(
+        enabledServers,
+        signal,
+      );
 
       if (errors.length > 0) {
         console.warn("MCP tool discovery failed");
@@ -422,6 +463,7 @@ export class AgentCore {
         });
       }
     } catch {
+      throwIfCancelled(signal);
       console.error("Failed to fetch MCP tools");
     }
 
@@ -458,8 +500,10 @@ export class AgentCore {
     onAttachment?: (attachment: MessageAttachment) => void,
     onToolExecutionAttempt?: () => void,
     trace?: AttemptTrace,
+    signal?: AbortSignal,
   ): Promise<void> {
     for (const toolCall of toolCalls) {
+      throwIfCancelled(signal);
       resolveSkillContext(skillContext);
       let result: string;
 
@@ -479,14 +523,26 @@ export class AgentCore {
               resolveSkillContext(skillContext);
               onToolExecutionAttempt?.();
               resolveSkillContext(skillContext);
-              return generateImage(target.endpoint, approvedArgs.prompt);
+              throwIfCancelled(signal);
+              const { generateImage } =
+                // Lazy native boundary keeps text runtimes portable in Node and Metro.
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                require("@/lib/image-generation") as typeof import("@/lib/image-generation");
+              throwIfCancelled(signal);
+              return cancellable(
+                generateImage(target.endpoint, approvedArgs.prompt),
+                signal,
+              );
             },
           );
+          throwIfCancelled(signal);
           onAttachment?.(imageResult.attachment);
+          throwIfCancelled(signal);
           result = imageResult.revisedPrompt
             ? `Image generated successfully. Revised prompt: ${imageResult.revisedPrompt}`
             : "Image generated successfully.";
         } catch (error: any) {
+          throwIfCancelled(signal);
           result =
             error instanceof ToolPolicyDeniedError
               ? "Tool execution denied by policy."
@@ -517,15 +573,18 @@ export class AgentCore {
                 // Mark before awaiting: a lost response does not mean no side effect.
                 resolveSkillContext(skillContext);
                 onToolExecutionAttempt?.();
-                if (skillContext) {
+                throwIfCancelled(signal);
+                if (skillContext || signal) {
                   return executeToolCall(
                     target.server,
                     target.name,
                     approvedArgs,
                     boundary,
                     () => {
+                      throwIfCancelled(signal);
                       resolveSkillContext(skillContext);
                     },
+                    signal,
                   );
                 }
                 return boundary
@@ -538,8 +597,10 @@ export class AgentCore {
                   : executeToolCall(target.server, target.name, approvedArgs);
               },
             );
+            throwIfCancelled(signal);
             result = formatToolResult(toolResult);
           } catch (error: any) {
+            throwIfCancelled(signal);
             if (error instanceof ToolPolicyDeniedError) {
               boundary?.finish("denied");
               result = "Tool execution denied by policy.";
@@ -633,7 +694,9 @@ export class AgentCore {
     assistantMessage: string,
     endpoint: EndpointConfig,
     trace?: AttemptTrace,
+    signal?: AbortSignal,
   ): Promise<string | null> {
+    throwIfCancelled(signal);
     if (!assistantMessage.trim()) return null;
     if (messages.length < 2) return null;
 
@@ -642,6 +705,7 @@ export class AgentCore {
 
     try {
       const { fullContent } = await this.driver.streamChat({
+        signal,
         endpoint,
         messages: [
           {
@@ -656,9 +720,11 @@ export class AgentCore {
         ...(trace ? { boundary: trace.boundary("llm") } : {}),
       });
 
+      throwIfCancelled(signal);
       const summary = fullContent?.trim();
       return summary ? this.truncateText(summary, 600) : null;
     } catch {
+      throwIfCancelled(signal);
       console.warn("Failed to summarize conversation for memory");
       return null;
     }
@@ -671,7 +737,9 @@ export class AgentCore {
     trace,
     memoryScope,
     onMemoryError,
+    signal,
   }: {
+    signal?: AbortSignal;
     messages: Message[];
     assistantMessage: string;
     memoryScope: MemoryScope;
@@ -679,9 +747,14 @@ export class AgentCore {
     endpoint: EndpointConfig;
     trace?: AttemptTrace;
   }): Promise<void> {
+    throwIfCancelled(signal);
     if (!this.memoryAutoSave && !this.memoryAutoSummary) return;
     const sourceId = this.getLatestUserMessage(messages)?.id;
     if (!sourceId) return;
+    const writeMemory = (entry: Parameters<MemoryStore["addMemory"]>[0]) =>
+      signal
+        ? this.memoryStore.addMemory(entry, signal)
+        : this.memoryStore.addMemory(entry);
     const reportWriteFailure = () => {
       try {
         onMemoryError?.("memory_write_failed");
@@ -696,7 +769,8 @@ export class AgentCore {
         const memory = this.extractExplicitMemory(lastUserMessage.content);
         if (memory) {
           try {
-            await this.memoryStore.addMemory({
+            throwIfCancelled(signal);
+            await writeMemory({
               scope: memoryScope,
               provenance: { source: "explicit", sourceId },
               id: `explicit:${sourceId}`,
@@ -705,22 +779,26 @@ export class AgentCore {
               importance: 0.9,
             });
           } catch {
+            throwIfCancelled(signal);
             reportWriteFailure();
           }
         }
       }
     }
 
+    throwIfCancelled(signal);
     if (this.memoryAutoSummary) {
       const summary = await this.createConversationSummary(
         messages,
         assistantMessage,
         endpoint,
         trace,
+        signal,
       );
+      throwIfCancelled(signal);
       if (summary) {
         try {
-          await this.memoryStore.addMemory({
+          await writeMemory({
             scope: memoryScope,
             provenance: { source: "summary", sourceId },
             id: `summary:${sourceId}`,
@@ -730,6 +808,7 @@ export class AgentCore {
             ttlMs: this.memorySummaryTtlMs,
           });
         } catch {
+          throwIfCancelled(signal);
           reportWriteFailure();
         }
       }
@@ -744,6 +823,8 @@ export async function runAgentChat(
   mcpServers: MCPServer[] = [],
   mcpEnabled: boolean = false,
   options?: {
+    signal?: AbortSignal;
+    memoryStore?: MemoryStore;
     systemPrompt?: string;
     chatPrompt?: string;
     memorySettings?: MemorySettings;
@@ -760,18 +841,20 @@ export async function runAgentChat(
 ): Promise<void> {
   const { systemPrompt, chatPrompt, memorySettings } = options || {};
   const agent = new AgentCore(
-    memorySettings
+    memorySettings || options?.memoryStore
       ? {
-          memoryEnabled: memorySettings.enabled,
-          memoryAutoSave: memorySettings.autoSave,
-          memoryAutoSummary: memorySettings.autoSummary,
-          memoryLimit: memorySettings.limit,
-          memoryMinImportance: memorySettings.minImportance,
-          memorySummaryTtlMs: memorySettings.summaryTtlMs,
+          memoryStore: options?.memoryStore,
+          memoryEnabled: memorySettings?.enabled,
+          memoryAutoSave: memorySettings?.autoSave,
+          memoryAutoSummary: memorySettings?.autoSummary,
+          memoryLimit: memorySettings?.limit,
+          memoryMinImportance: memorySettings?.minImportance,
+          memorySummaryTtlMs: memorySettings?.summaryTtlMs,
         }
       : undefined,
   );
   await agent.runChat({
+    signal: options?.signal,
     messages,
     endpoint,
     onChunk,

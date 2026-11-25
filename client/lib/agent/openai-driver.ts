@@ -1,3 +1,4 @@
+import { cancellable, throwIfCancelled } from "@/lib/runtime/cancellation";
 import type { BoundaryObserver } from "@/lib/agent/execution-trace";
 import { EndpointConfig } from "@/lib/store";
 import { buildProviderHeaders, resolveBaseUrl } from "@/lib/providers";
@@ -10,6 +11,7 @@ import {
 } from "@/lib/agent/types";
 
 interface StreamChatInput {
+  signal?: AbortSignal;
   endpoint: EndpointConfig;
   messages: ChatCompletionMessage[];
   tools: OpenAIFunction[];
@@ -58,10 +60,12 @@ export class OpenAICompatibleDriver {
     };
     try {
       const result = await this.executeChat(input, boundary);
+      throwIfCancelled(input.signal);
       boundary.finish("completed");
       return result;
     } catch (error) {
       boundary.finish(dispatched ? "unknown" : "failed");
+      throwIfCancelled(input.signal);
       throw error;
     }
   }
@@ -74,6 +78,7 @@ export class OpenAICompatibleDriver {
       onChunk,
       decision,
       beforeDispatch,
+      signal,
     }: StreamChatInput,
     boundary: BoundaryObserver,
   ): Promise<{ fullContent: string; toolCalls: ToolCall[]; usage?: LLMUsage }> {
@@ -93,6 +98,7 @@ export class OpenAICompatibleDriver {
 
     const request = {
       method: "POST",
+      ...(signal ? { signal } : {}),
       headers: {
         "Content-Type": "application/json",
         ...buildProviderHeaders(
@@ -103,13 +109,15 @@ export class OpenAICompatibleDriver {
       },
       body: JSON.stringify(requestBody),
     };
+    throwIfCancelled(signal);
     beforeDispatch?.();
+    throwIfCancelled(signal);
     boundary.dispatched();
-    const response = await fetch(url, request);
+    const response = await cancellable(fetch(url, request), signal);
 
     if (!response.ok) {
       boundary.finish("failed");
-      const errorText = await response.text();
+      const errorText = await cancellable(response.text(), signal);
       let errorMessage = `API Error: ${response.status}`;
       try {
         const errorJson = JSON.parse(errorText);
@@ -131,6 +139,7 @@ export class OpenAICompatibleDriver {
     let finishReason: string | undefined;
 
     const parseEvent = (data: string) => {
+      throwIfCancelled(signal);
       if (streamDone) return;
       if (data === "[DONE]") {
         streamDone = true;
@@ -151,6 +160,7 @@ export class OpenAICompatibleDriver {
       if (delta?.content) {
         fullContent += delta.content;
         onChunk(fullContent);
+        throwIfCancelled(signal);
       }
       for (const fragment of delta?.tool_calls ?? []) {
         const index = fragment.index ?? 0;
@@ -241,17 +251,39 @@ export class OpenAICompatibleDriver {
 
     const reader = response.body?.getReader();
     if (reader) {
-      const decoder = new TextDecoder("utf-8", { fatal: true });
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        parseChunk(chunk);
+      let cancelled = false;
+      const abortReader = () => {
+        if (cancelled) return;
+        cancelled = true;
+        try {
+          void Promise.resolve(reader.cancel?.()).catch(() => {});
+        } catch {
+          /* Cleanup is best effort. */
+        }
+      };
+      signal?.addEventListener("abort", abortReader, { once: true });
+      try {
+        throwIfCancelled(signal);
+        const decoder = new TextDecoder("utf-8", { fatal: true });
+        while (true) {
+          const { done, value } = await cancellable(reader.read(), signal);
+          throwIfCancelled(signal);
+          if (done) break;
+          parseChunk(decoder.decode(value, { stream: true }));
+        }
+        parseChunk(decoder.decode());
+        finishStream();
+      } finally {
+        signal?.removeEventListener("abort", abortReader);
+        if (signal?.aborted) abortReader();
+        try {
+          reader.releaseLock?.();
+        } catch {
+          /* Cleanup is best effort. */
+        }
       }
-      parseChunk(decoder.decode());
-      finishStream();
     } else {
-      const responseText = await response.text();
+      const responseText = await cancellable(response.text(), signal);
       if (/^data(?::|$)/m.test(responseText)) {
         parseChunk(responseText);
         finishStream();
@@ -262,7 +294,9 @@ export class OpenAICompatibleDriver {
           if (!message) boundary.finish("unknown");
           if (message?.content) {
             fullContent = message.content;
+            throwIfCancelled(signal);
             onChunk(fullContent);
+            throwIfCancelled(signal);
           }
           if (message?.tool_calls) {
             toolCalls = message.tool_calls.map((toolCall: any) => ({
@@ -289,6 +323,7 @@ export class OpenAICompatibleDriver {
       }
     }
 
+    throwIfCancelled(signal);
     return { fullContent, toolCalls, usage };
   }
 }

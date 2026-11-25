@@ -1,3 +1,4 @@
+import { throwIfCancelled } from "@/lib/runtime/cancellation";
 import {
   resolveSkillContext,
   type SkillContextOptions,
@@ -23,6 +24,7 @@ import {
 } from "@/lib/agent/execution-trace";
 import {
   MemorySettings,
+  type MemoryStore,
   type MemoryScope,
   validateMemoryScope,
 } from "@/lib/agent/memory";
@@ -61,6 +63,8 @@ export async function sendChatMessage(
   mcpServers: MCPServer[] = [],
   mcpEnabled: boolean = false,
   options?: {
+    signal?: AbortSignal;
+    memoryStore?: MemoryStore;
     skillContext?: SkillContextOptions;
     toolPolicy?: ToolPolicyOptions;
     fallbackEndpoint?: EndpointConfig;
@@ -77,6 +81,7 @@ export async function sendChatMessage(
     onAttachment?: (attachment: MessageAttachment) => void;
   },
 ): Promise<void> {
+  throwIfCancelled(options?.signal);
   const memoryScope =
     options?.memoryScope === undefined
       ? undefined
@@ -92,6 +97,7 @@ export async function sendChatMessage(
   let toolExecutionAttempted = false;
   let outputStarted = false;
   const attemptEndpoint = async (selected: EndpointConfig) => {
+    throwIfCancelled(options?.signal);
     const attempt = trace.attempt();
     try {
       await runAgentChat(
@@ -106,6 +112,8 @@ export async function sendChatMessage(
         mcpServers,
         mcpEnabled,
         {
+          signal: options?.signal,
+          memoryStore: options?.memoryStore,
           skillContext,
           toolPolicy,
           systemPrompt: options?.systemPrompt,
@@ -127,6 +135,7 @@ export async function sendChatMessage(
           ...(options?.onExecutionEvent ? { trace: attempt } : {}),
         },
       );
+      throwIfCancelled(options?.signal);
       attempt.finish("completed");
     } catch (error) {
       attempt.finish("failed");
@@ -137,6 +146,7 @@ export async function sendChatMessage(
     try {
       await attemptEndpoint(endpoint);
     } catch (error) {
+      throwIfCancelled(options?.signal);
       if (
         options?.fallbackEndpoint &&
         !toolExecutionAttempted &&
@@ -151,6 +161,7 @@ export async function sendChatMessage(
     }
     outcome = "completed";
   } catch (error: any) {
+    throwIfCancelled(options?.signal);
     if (toolExecutionAttempted) throw new UnsafeChatReplayError(error);
     if (!skillContext && options?.queueOnFailure && isNetworkError(error)) {
       const payload = {

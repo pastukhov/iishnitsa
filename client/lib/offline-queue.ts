@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { nativeStorage } from "@/lib/runtime/storage";
 import { EndpointConfig, MCPServer, Message } from "@/lib/store";
 import { MemorySettings, type MemoryScope } from "@/lib/agent/memory";
 
@@ -43,7 +43,7 @@ function generateId(): string {
 }
 
 async function loadQueue(): Promise<QueuedChatRequest[]> {
-  const raw = await AsyncStorage.getItem(QUEUE_KEY);
+  const raw = await nativeStorage.getItem(QUEUE_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -54,7 +54,7 @@ async function loadQueue(): Promise<QueuedChatRequest[]> {
 }
 
 async function persistQueue(queue: QueuedChatRequest[]): Promise<void> {
-  await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  await nativeStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
 }
 
 export async function enqueueChatRequest(

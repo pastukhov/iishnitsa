@@ -1,5 +1,4 @@
 import { EndpointConfig, Message, MessageAttachment } from "@/lib/store";
-import { getImageDataUrl } from "@/lib/image-utils";
 import { ChatCompletionMessage, ContentPart } from "@/lib/agent/types";
 import { MemoryEntry, MemoryStore, type MemoryScope } from "@/lib/agent/memory";
 
@@ -31,6 +30,10 @@ async function buildMultimodalContent(
 
   for (const attachment of attachments) {
     if (attachment.type === "image") {
+      const { getImageDataUrl } =
+        // Attachment-only native loading must work in Metro, Node, and Jest.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require("@/lib/image-utils") as typeof import("@/lib/image-utils");
       const dataUrl = await getImageDataUrl(attachment);
       parts.push({
         type: "image_url",
