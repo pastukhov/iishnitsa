@@ -378,3 +378,99 @@ it("pins the capability before the run_started observer", async () => {
   ).resolves.toEqual([{ trust: "untrusted", text: "child reference" }]);
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
+it.each([
+  { endpoint: null },
+  { endpoint: { ...child, apiKey: 12 } },
+  { endpoint: { ...child, model: "" } },
+  { endpoint: { ...child, baseUrl: "x".repeat(4097) } },
+  { endpoint: { ...child, folderId: 12 } },
+  { endpoint: { ...child, folderId: "x".repeat(4097) } },
+  { tasks: null },
+])(
+  "rejects malformed host configuration before any model request: %j",
+  (patch) => {
+    expect(() =>
+      createTextDelegation({
+        endpoint: child,
+        tasks: ["fixture"],
+        ...patch,
+      } as any),
+    ).toThrow("Invalid text delegation");
+    expect(fetchMock).not.toHaveBeenCalled();
+  },
+);
+it("keeps a folder credential in transport only and redacts it from a result", async () => {
+  const endpoint = {
+    ...child,
+    providerId: "yandex" as const,
+    folderId: "private-folder",
+  };
+  fetchMock.mockResolvedValueOnce(response("private-folder reference"));
+  const result = await run(
+    createTextDelegation({ endpoint, tasks: ["fixture"] }),
+  );
+  expect(fetchMock.mock.calls[0][1].headers["x-folder-id"]).toBe(
+    "private-folder",
+  );
+  expect(fetchMock.mock.calls[0][1].body).not.toContain("private-folder");
+  expect(result).toEqual([
+    { trust: "untrusted", text: "[redacted] reference" },
+  ]);
+});
+it("does not start a later child after the overall deadline expires between tasks", async () => {
+  let time = 1000;
+  const now = jest.spyOn(Date, "now").mockImplementation(() => time);
+  const events: ExecutionEvent[] = [];
+  try {
+    await expect(
+      run(
+        createTextDelegation({ endpoint: child, tasks: ["first", "second"] }),
+        {
+          onExecutionEvent: (e: ExecutionEvent) => {
+            events.push(e);
+            if (e.type === "child_finished") time += 30000;
+          },
+        },
+      ),
+    ).rejects.toThrow("Text delegation failed");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(events.filter((e) => e.type === "child_started")).toHaveLength(1);
+    expect(events.at(-1)).toMatchObject({
+      type: "run_finished",
+      outcome: "failed",
+    });
+  } finally {
+    now.mockRestore();
+  }
+});
+it("applies the aggregate budget to expanded redacted results", async () => {
+  fetchMock.mockImplementation(async () => response("zz".repeat(300)));
+  await expect(
+    run(
+      createTextDelegation({
+        endpoint: { ...child, apiKey: "zz" },
+        tasks: ["one", "two", "three"],
+      }),
+    ),
+  ).rejects.toThrow("Text delegation failed");
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+it("records cancellation before child dispatch without calling the model", async () => {
+  const controller = new AbortController();
+  const events: ExecutionEvent[] = [];
+  await expect(
+    run(createTextDelegation({ endpoint: child, tasks: ["fixture"] }), {
+      signal: controller.signal,
+      onExecutionEvent: (event: ExecutionEvent) => {
+        events.push(event);
+        if (event.type === "child_started") controller.abort();
+      },
+    }),
+  ).rejects.toThrow("Run cancelled");
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(events.find((e) => e.type === "child_finished")).toMatchObject({
+    dispatch: "not_dispatched",
+    modelOutcome: "failed",
+    outcome: "cancelled",
+  });
+});

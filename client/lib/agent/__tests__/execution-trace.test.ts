@@ -129,3 +129,40 @@ test("operation finalization observers cannot duplicate or reopen attempt bounda
     events.filter((event) => event.type === "attempt_finished"),
   ).toHaveLength(1);
 });
+
+test("child terminal events remain unique under reentry and late transport evidence", () => {
+  const events: any[] = [];
+  let child: ReturnType<ReturnType<typeof createExecutionTrace>["child"]>;
+  const trace = createExecutionTrace((event) => {
+    events.push(event);
+    if (event.type === "child_finished") {
+      child.finish("completed");
+      child.boundary.dispatched();
+      child.boundary.finish("completed");
+    }
+    throw new Error("private observer failure");
+  });
+  child = trace.child();
+  child.boundary.dispatched();
+  child.boundary.dispatched();
+  child.finish("cancelled");
+  child.finish("completed");
+  trace.finish("failed");
+  expect(events.map((e) => e.type)).toEqual([
+    "run_started",
+    "child_started",
+    "child_dispatched",
+    "child_finished",
+    "run_finished",
+  ]);
+  expect(events[3]).toMatchObject({
+    outcome: "cancelled",
+    dispatch: "attempted",
+    modelOutcome: "unknown",
+    depth: 1,
+  });
+  expect(events.every(Object.isFrozen)).toBe(true);
+  expect(new Set(events.map((e) => e.runId)).size).toBe(1);
+  expect(events[1].childId).toBe(events[3].childId);
+  expect(JSON.stringify(events)).not.toContain("private");
+});
