@@ -20,7 +20,8 @@
     "test:coverage": "jest --coverage",
     "prepare": "husky",
     "android": "expo run:android",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "eval:harness": "node scripts/eval-harness.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
