@@ -1,3 +1,4 @@
+import { LocalSuggestionsPanel } from "@/components/LocalSuggestionsPanel";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -1438,6 +1439,7 @@ export default function SettingsScreen() {
             </Pressable>
           </View>
 
+          <LocalSuggestionsPanel />
           <SectionHeader title="Memory & Context" />
           <View
             style={[styles.card, { backgroundColor: theme.backgroundDefault }]}
